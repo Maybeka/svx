@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "svx"
+version = "0.1.0"
+description = "Simulator-hosted Python verification services for SystemVerilog"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+  "svtypes>=0.1.0,<0.2.0",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+svx = "svx.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2",
+  "pytest>=8",
+]
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+packages = ["svx"]
+
+[tool.setuptools.data-files]
+"share/svx/sv" = [
+  "sv/svx_channel.sv",
+  "sv/svx_defs.svh",
+  "sv/svx_error.sv",
+  "sv/svx_fork.sv",
+  "sv/svx_inheritance.sv",
+  "sv/svx_init.sv",
+  "sv/svx_pkg.sv",
+  "sv/svx_process.sv",
+  "sv/svx_signal.sv",
+  "sv/svx_timing.sv",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["python", "../svtypes/python", "."]
+testpaths = ["tests"]
+norecursedirs = ["integration"]

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760">
+  <defs>
+    <style>
+      .bg { fill: #f7f8fb; }
+      .title { font: 700 30px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 16px Arial, sans-serif; fill: #475166; }
+      .box { fill: #ffffff; stroke: #26364f; stroke-width: 2; rx: 8; }
+      .sv { fill: #e8f2ff; stroke: #2563a8; }
+      .py { fill: #eef8ee; stroke: #2f7d32; }
+      .rt { fill: #fff4df; stroke: #a86513; }
+      .data { fill: #f4ecff; stroke: #6f43b4; }
+      .label { font: 700 18px Arial, sans-serif; fill: #172033; }
+      .text { font: 14px Arial, sans-serif; fill: #2f3a4f; }
+      .small { font: 12px Arial, sans-serif; fill: #475166; }
+      .arrow { stroke: #253247; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 7 6; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#253247"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="760"/>
+  <text class="title" x="52" y="58">SVX: SystemVerilog eXtension</text>
+  <text class="subtitle" x="52" y="86">Simulator-hosted Python verification, with SystemVerilog owning timing and scheduling.</text>
+
+  <rect class="box sv" x="60" y="150" width="300" height="360"/>
+  <text class="label" x="88" y="188">SystemVerilog Testbench</text>
+  <text class="text" x="88" y="226">Interfaces / clocking / reset</text>
+  <text class="text" x="88" y="252">Drivers / monitors / agents</text>
+  <text class="text" x="88" y="278">DUT binding and timing controls</text>
+  <text class="text" x="88" y="318">SVX SV package</text>
+  <text class="small" x="108" y="346">svx_init, svx_load, svx_start</text>
+  <text class="small" x="108" y="368">delay, fork/join, channels</text>
+  <text class="small" x="108" y="390">DPI exported simulator services</text>
+
+  <rect class="box rt" x="490" y="150" width="300" height="360"/>
+  <text class="label" x="520" y="188">SVX Runtime</text>
+  <text class="text" x="520" y="226">C++ DPI/VPI bridge</text>
+  <text class="text" x="520" y="252">Embedded CPython interpreter</text>
+  <text class="text" x="520" y="278">Export registry lookup</text>
+  <text class="text" x="520" y="304">Execution-context tracking</text>
+  <text class="text" x="520" y="330">GIL management</text>
+  <text class="text" x="520" y="356">Payload/channel handles</text>
+  <text class="text" x="520" y="382">Exception capture and policy</text>
+
+  <rect class="box py" x="920" y="150" width="300" height="360"/>
+  <text class="label" x="950" y="188">Python Verification API</text>
+  <text class="text" x="950" y="226">@svx.export functions</text>
+  <text class="text" x="950" y="252">Tests / sequences / scenarios</text>
+  <text class="text" x="950" y="278">Transactions / configuration</text>
+  <text class="text" x="950" y="304">Checking policy</text>
+  <text class="text" x="950" y="344">No async/await simulator model</text>
+  <text class="text" x="950" y="370">No SVX primitives from host threads</text>
+
+  <rect class="box data" x="240" y="575" width="800" height="115"/>
+  <text class="label" x="270" y="612">SvTypes Data Contract Layer</text>
+  <text class="text" x="270" y="642">Independent Python DSL for SV-like data models, code generation, and cross-language binary parity.</text>
+  <text class="small" x="270" y="668">Python classes ⇄ generated SystemVerilog classes ⇄ generated C++ structs ⇄ SVX typed payload channels</text>
+
+  <path class="arrow" d="M 360 275 C 410 275, 438 275, 490 275"/>
+  <text class="small" x="384" y="258">DPI imports</text>
+  <path class="arrow" d="M 490 350 C 438 350, 410 350, 360 350"/>
+  <text class="small" x="385" y="374">exported SV services</text>
+
+  <path class="arrow" d="M 790 275 C 840 275, 868 275, 920 275"/>
+  <text class="small" x="823" y="258">Python callback entry</text>
+  <path class="arrow" d="M 920 350 C 868 350, 840 350, 790 350"/>
+  <text class="small" x="826" y="374">primitive calls</text>
+
+  <path class="arrow dash" d="M 210 510 C 280 560, 420 575, 520 575"/>
+  <path class="arrow dash" d="M 1070 510 C 1000 560, 860 575, 760 575"/>
+  <text class="small" x="545" y="548">typed transaction bytes</text>
+</svg>

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <style>
+      .bg { fill: #fbfbfd; }
+      .title { font: 700 28px Arial, sans-serif; fill: #172033; }
+      .lane { fill: #ffffff; stroke: #29374f; stroke-width: 2; rx: 8; }
+      .laneTitle { font: 700 18px Arial, sans-serif; fill: #172033; }
+      .box { fill: #eef5ff; stroke: #2f65a7; stroke-width: 2; rx: 6; }
+      .py { fill: #eef8ee; stroke: #2f7d32; }
+      .rt { fill: #fff4df; stroke: #a86513; }
+      .bad { fill: #ffecec; stroke: #b33b3b; }
+      .text { font: 14px Arial, sans-serif; fill: #29374f; }
+      .small { font: 12px Arial, sans-serif; fill: #536072; }
+      .arrow { stroke: #253247; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 7 6; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#253247"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1280" height="720"/>
+  <text class="title" x="48" y="54">SVX Execution Context and Concurrency Boundary</text>
+
+  <rect class="lane" x="60" y="105" width="320" height="500"/>
+  <text class="laneTitle" x="90" y="142">SystemVerilog Simulator</text>
+  <rect class="box" x="95" y="180" width="250" height="70"/>
+  <text class="text" x="120" y="210">initial block</text>
+  <text class="small" x="120" y="232">svx_init / svx_load / svx_start</text>
+  <rect class="box" x="95" y="335" width="250" height="95"/>
+  <text class="text" x="120" y="365">fork_svx task</text>
+  <text class="small" x="120" y="388">SV fork/join creates processes</text>
+  <text class="small" x="120" y="410">SV kernel owns scheduling</text>
+  <rect class="box" x="95" y="500" width="250" height="65"/>
+  <text class="text" x="120" y="530">delay_svx / channels</text>
+  <text class="small" x="120" y="552">timing and blocking happen in SV</text>
+
+  <rect class="lane" x="480" y="105" width="320" height="500"/>
+  <text class="laneTitle" x="510" y="142">SVX Runtime</text>
+  <rect class="box rt" x="515" y="180" width="250" height="90"/>
+  <text class="text" x="540" y="210">Enter Python</text>
+  <text class="small" x="540" y="232">create execution context</text>
+  <text class="small" x="540" y="252">acquire GIL</text>
+  <rect class="box rt" x="515" y="335" width="250" height="95"/>
+  <text class="text" x="540" y="365">Process handles</text>
+  <text class="small" x="540" y="388">map callable to SV process</text>
+  <text class="small" x="540" y="410">restore context on callback</text>
+  <rect class="box rt" x="515" y="500" width="250" height="65"/>
+  <text class="text" x="540" y="530">Validate context</text>
+  <text class="small" x="540" y="552">primitive APIs fail outside context</text>
+
+  <rect class="lane" x="900" y="105" width="320" height="500"/>
+  <text class="laneTitle" x="930" y="142">Python Code</text>
+  <rect class="box py" x="935" y="180" width="250" height="80"/>
+  <text class="text" x="960" y="210">@svx.export function</text>
+  <text class="small" x="960" y="234">valid SVX context</text>
+  <rect class="box py" x="935" y="335" width="250" height="95"/>
+  <text class="text" x="960" y="365">svx.fork_join*</text>
+  <text class="small" x="960" y="388">describes concurrency</text>
+  <text class="small" x="960" y="410">does not create Python threads</text>
+  <rect class="box bad" x="935" y="500" width="250" height="80"/>
+  <text class="text" x="960" y="530">Host concurrency</text>
+  <text class="small" x="960" y="552">threads / asyncio / subprocess</text>
+  <text class="small" x="960" y="570">must not call SVX primitives</text>
+
+  <path class="arrow" d="M 345 215 C 410 215, 450 215, 515 215"/>
+  <path class="arrow" d="M 765 215 C 830 215, 870 215, 935 215"/>
+  <path class="arrow" d="M 935 385 C 870 385, 830 385, 765 385"/>
+  <path class="arrow" d="M 515 385 C 450 385, 410 385, 345 385"/>
+  <path class="arrow" d="M 935 535 C 855 535, 835 535, 765 535"/>
+  <path class="arrow dash" d="M 765 535 C 820 615, 1030 640, 1060 585"/>
+  <text class="small" x="785" y="620">context error if primitive is called outside simulator entry</text>
+</svg>

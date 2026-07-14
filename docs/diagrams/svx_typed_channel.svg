@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 28px Arial, sans-serif; fill: #162033; }
+      .box { fill: #ffffff; stroke: #26364f; stroke-width: 2; rx: 8; }
+      .py { fill: #eef8ee; stroke: #2f7d32; }
+      .sv { fill: #e8f2ff; stroke: #2563a8; }
+      .rt { fill: #fff4df; stroke: #a86513; }
+      .data { fill: #f4ecff; stroke: #6f43b4; }
+      .label { font: 700 17px Arial, sans-serif; fill: #172033; }
+      .text { font: 14px Arial, sans-serif; fill: #2f3a4f; }
+      .small { font: 12px Arial, sans-serif; fill: #536072; }
+      .arrow { stroke: #253247; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#253247"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1280" height="720"/>
+  <text class="title" x="48" y="54">Typed Payload Channel: Python ⇄ SystemVerilog</text>
+
+  <rect class="box py" x="70" y="130" width="270" height="170"/>
+  <text class="label" x="100" y="165">Python SvTypes Object</text>
+  <text class="text" x="100" y="198">tx = M3Tx()</text>
+  <text class="text" x="100" y="224">tx.to_bytes()</text>
+  <text class="small" x="100" y="252">object envelope + field bytes</text>
+
+  <rect class="box rt" x="430" y="130" width="270" height="170"/>
+  <text class="label" x="460" y="165">Native Payload Handle</text>
+  <text class="text" x="460" y="198">kind = svtypes</text>
+  <text class="text" x="460" y="224">type_name = M3Tx</text>
+  <text class="text" x="460" y="250">content_type = application/x-svtypes</text>
+
+  <rect class="box sv" x="790" y="130" width="350" height="170"/>
+  <text class="label" x="820" y="165">Generated SystemVerilog Class</text>
+  <text class="text" x="820" y="198">svx_channel_get_payload()</text>
+  <text class="text" x="820" y="224">svx_payload_to_byte_queue()</text>
+  <text class="text" x="820" y="250">tx.unpack(bytes, offset)</text>
+
+  <path class="arrow" d="M 340 215 C 370 215, 400 215, 430 215"/>
+  <path class="arrow" d="M 700 215 C 730 215, 760 215, 790 215"/>
+
+  <rect class="box sv" x="70" y="430" width="350" height="170"/>
+  <text class="label" x="100" y="465">SystemVerilog → Python</text>
+  <text class="text" x="100" y="498">tx.pack(bytes)</text>
+  <text class="text" x="100" y="524">svx_channel_put_byte_queue()</text>
+  <text class="small" x="100" y="552">same byte contract, reverse direction</text>
+
+  <rect class="box data" x="500" y="430" width="280" height="170"/>
+  <text class="label" x="530" y="465">Named Channel</text>
+  <text class="text" x="530" y="498">blocking get / peek</text>
+  <text class="text" x="530" y="524">try_get / try_put</text>
+  <text class="small" x="530" y="552">opaque chandle owns binary buffer</text>
+
+  <rect class="box py" x="860" y="430" width="310" height="170"/>
+  <text class="label" x="890" y="465">Python Receiver</text>
+  <text class="text" x="890" y="498">svx.channel(name).get(M3Tx)</text>
+  <text class="text" x="890" y="524">M3Tx.from_bytes()</text>
+  <text class="small" x="890" y="552">metadata checked before unpack</text>
+
+  <path class="arrow" d="M 420 515 C 450 515, 470 515, 500 515"/>
+  <path class="arrow" d="M 780 515 C 810 515, 830 515, 860 515"/>
+
+  <rect class="box data" x="255" y="335" width="770" height="50"/>
+  <text class="text" x="285" y="366">No hex/base64 transport: payload bytes stay binary inside native buffers.</text>
+</svg>

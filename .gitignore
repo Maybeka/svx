@@ -1,0 +1,69 @@
+# Local holding area for scratch files and generated artifacts.
+.tmp/
+.sisyphus/
+.codex/
+.agents/
+AGENTS.md
+docs/SVX_MILESTONE*.md
+docs/review_SVX_MILESTONE*.md
+/.local-sim/
+
+# OS and editor noise
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Python caches and test output
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# CMake and native build output
+build/
+build_*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+_svx_native*.so
+_svx_native*.dylib
+
+# SystemVerilog simulator output
+csrc/
+simv
+simv*
+*.daidir/
+ucli.key
+vc_hdrs.h
+*.vcd
+*.vpd
+*.fsdb
+*.wlf
+transcript
+*.log
+
+# Local scratch payloads and binaries used during interop experiments
+input.bin
+output.bin
+interop_test

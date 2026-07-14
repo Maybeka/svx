@@ -1,0 +1,19 @@
+{
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v1",
+  "schema_version": "1.0.0",
+  "classes": [{
+    "canonical_id": "sv://tb_pkg/BaseDriver",
+    "language": "sv",
+    "symbol": "tb_pkg::BaseDriver",
+    "constructor": {"initiator": "sv", "parameters": [{"name": "seed", "type": {"svtypes": "svtypes.Int()", "sv": "int", "sv_packer": "int_packer"}}]},
+    "methods": [{
+      "canonical_id": "sv://tb_pkg/BaseDriver#drive",
+      "name": "drive",
+      "parameters": [{"name": "address", "type": {"svtypes": "svtypes.Int()", "sv": "int", "sv_packer": "int_packer"}}, {"name": "label", "type": {"svtypes": "svtypes.String()", "sv": "string", "sv_packer": "string_packer"}}, {"name": "packet", "type": {"svtypes": "tests.integration.m10_object_types:Packet()", "sv": "m10_object_types_pkg::Packet", "sv_packer": "svtypes_pkg::object_packer#(m10_object_types_pkg::Packet)"}}],
+      "return_type": "void",
+      "timing": "task",
+      "virtual": true,
+      "pure_virtual": false
+    }]
+  }]
+}
