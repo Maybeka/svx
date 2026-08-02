@@ -11,6 +11,10 @@ and simulator-visible concurrency.
 - SvTypes: `>=0.1.0,<0.2.0`.
 - Simulator: a SystemVerilog simulator with the DPI and VPI C interfaces used
   by SVX.
+- Verilator: unsupported. SVX requires resumable timing and blocking behavior
+  across its DPI callback boundary, which stock Verilator does not provide.
+- Icarus Verilog: unsupported. Its VPI extension model cannot provide SVX's
+  SystemVerilog DPI and cross-language class runtime.
 - Runtime model: SystemVerilog owns clocks, resets, drivers, monitors, UVM
   phases, timing, and process scheduling. Python owns test intent, typed data,
   checking policy, and high-level orchestration.

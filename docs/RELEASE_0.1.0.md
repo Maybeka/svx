@@ -18,6 +18,8 @@ may occur before SVX reaches a future `1.0.0` release.
 | Python | 3.11 or newer |
 | SvTypes | `>=0.1.0,<0.2.0` |
 | Simulator | A SystemVerilog simulator with the DPI and VPI C interfaces used by SVX |
+| Verilator | Unsupported until upstream provides resumable timing and blocking behavior across DPI-exported tasks |
+| Icarus Verilog | Unsupported; its VPI extension model cannot provide the SVX DPI and cross-language class runtime |
 | Native toolchain | CMake 3.20+, C++20 compiler, and Python development headers for the simulator Python ABI |
 
 Validate each target toolchain with its local build and regression configuration
