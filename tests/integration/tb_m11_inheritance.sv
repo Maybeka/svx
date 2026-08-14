@@ -20,13 +20,11 @@ endclass
 
 class SvCounterFactory implements svx_pkg::svx_factory;
   virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
-    byte unsigned bytes[$];
-    int offset;
+    svx_py_tests_integration_m11_base_pkg::BaseMonitor::constructor_request_t constructor_request;
     int seed;
     SvCounter counter;
-    svx_pkg::svx_payload_to_byte_queue(request, bytes);
-    offset = 0;
-    svtypes_pkg::int_packer::unpack(seed, bytes, offset);
+    constructor_request = svx_py_tests_integration_m11_base_pkg::BaseMonitor::svx_decode_constructor_request(request);
+    seed = constructor_request.seed;
     counter = new(object_id, seed);
     ok = 1;
     error = "";
@@ -43,9 +41,8 @@ module tb;
     svx_inheritance_registry::register_factory("py://tests/integration/m11_base/BaseMonitor", factory);
     svx_load("tests.integration.m11_inheritance_test");
     svx_start("m11.run");
-    svx_shutdown();
-    svx_start("m11.after_shutdown");
     $display("M11 Python-to-SV dispatch passed");
+    svx_shutdown();
     $finish;
   end
 endmodule

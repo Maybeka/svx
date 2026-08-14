@@ -1,5 +1,8 @@
 # SVX Project Specification
 
+Status: architectural baseline. The normative proposed `1.0.0` feature and
+release contract is [SVX_1_0_REQUIRED_FEATURES.md](SVX_1_0_REQUIRED_FEATURES.md).
+
 ## 1. Purpose
 
 SVX, short for SystemVerilog eXtension, is a simulator-hosted Python
@@ -127,29 +130,17 @@ SvTypes is responsible for:
 - Cross-language serialization parity.
 - Type-safe transaction and configuration modeling.
 
-SvTypes objects carry a reserved logical object identifier named
-`__svx_obj_id`. This identifier is managed by SvTypes/SVX, not by user data
-models. It is serialized in object envelopes and is used to decide whether a
-target object should be updated in place, rebound to an existing registered
-object, or newly allocated during cross-language synchronization.
-
-The object identifier is globally unique by construction: a 64-bit value split
-into a 16-bit origin id and a 48-bit local counter. Origin id `0` and object id
-`0` are reserved. The default registry lifecycle for legacy simulator support
-is explicit session/shadow ownership with manual cleanup. Weak-reference-backed
-registries are an optional backend capability, not a requirement for current
-SVX support.
-
-Recursive graph synchronization uses object presence marker `2` as a reference
-record carrying the target `__svx_obj_id`. A receiver updates an existing
-compatible registered object in place, allocates a new compatible object when
-the id is unknown and an inline envelope is present, and fails on unresolved
-references or incompatible registered types. Registry clear is therefore a
-session/lifecycle boundary: references to cleared ids are invalid until an
-inline definition registers them again.
-
 SVX depends on a versioned SvTypes package and consumes only public SvTypes
-Python APIs and installed SvTypes SV/C++ support files.
+Python APIs and installed SvTypes SV/C++ support files. SvTypes owns its
+by-value and object-graph identity, schema, codec-session, wire-descriptor, and
+binary-format contracts. SVX owns a separate simulation-scoped foreign-object
+registry used for cross-language inheritance.
+
+When a foreign class instance is carried as a typed argument or result, SvTypes
+encodes only an opaque `RemoteRef(target_type_name)` value. SVX resolves and
+type-checks that reference against its own manifest and registry. A SvTypes
+object-graph ID and an SVX foreign-object ID are distinct identities with
+distinct lifecycle and ownership rules.
 
 ### 5.2 SVX Runtime
 
@@ -180,7 +171,7 @@ It is responsible for:
 - Process creation and process management services.
 - Timing primitives.
 - Named channel registry and payload synchronization services.
-- VPI/DPI service declarations.
+- DPI service declarations and startup/shutdown integration.
 
 ### 5.4 Python Verification API
 
@@ -252,8 +243,14 @@ Initial primitive categories include:
 - Named payload channels.
 - VPI-backed simulator object access.
 
-Generic calling of arbitrary SystemVerilog tasks by hierarchical name is a
-future feature and requires a separate type conversion and registration design.
+Manifest-declared foreign object methods are callable through generated
+cross-language inheritance adapters. Their arguments and results use SvTypes
+request/response types, and dispatch uses canonical class/method IDs rather
+than simulator reflection.
+
+Generic calling of an undeclared SystemVerilog task by hierarchical name is not
+part of the core contract. It would require a separate declaration, scheduling,
+and type-conversion design.
 
 ## 8. Process Model
 
@@ -317,8 +314,9 @@ SVX does not expose Python `async`/`await` as the user timing model.
 SVX does not treat Python threads, multiprocessing workers, subprocesses, or
 `asyncio` tasks as simulator-visible processes.
 
-SVX does not initially provide generic arbitrary SystemVerilog task invocation
-by hierarchical name.
+SVX does not provide reflective invocation of undeclared SystemVerilog tasks by
+hierarchical name. Manifest-declared class method dispatch is the supported
+generic object-call mechanism.
 
 SVX does not initially target post-silicon execution, although APIs should avoid
 unnecessary simulator-only coupling where practical.

@@ -1,6 +1,6 @@
 # SVX
 
-SVX 0.1.0 is a simulator-hosted Python verification runtime for
+SVX 1.0.0 is a simulator-hosted Python verification runtime for
 SystemVerilog. It lets SystemVerilog testbenches run explicit Python tests and
 services while preserving the simulator as the owner of time, event scheduling,
 and simulator-visible concurrency.
@@ -8,13 +8,9 @@ and simulator-visible concurrency.
 ## Supported Contract
 
 - Python: 3.11 or newer.
-- SvTypes: `>=0.1.0,<0.2.0`.
+- SvTypes: `>=1.0.0,<2.0.0`.
 - Simulator: a SystemVerilog simulator with the DPI and VPI C interfaces used
-  by SVX.
-- Verilator: unsupported. SVX requires resumable timing and blocking behavior
-  across its DPI callback boundary, which stock Verilator does not provide.
-- Icarus Verilog: unsupported. Its VPI extension model cannot provide SVX's
-  SystemVerilog DPI and cross-language class runtime.
+  by SVX, including resumable calls through exported DPI tasks.
 - Runtime model: SystemVerilog owns clocks, resets, drivers, monitors, UVM
   phases, timing, and process scheduling. Python owns test intent, typed data,
   checking policy, and high-level orchestration.
@@ -56,9 +52,15 @@ PYTHONPATH=../svtypes/python python -m pip install -e .
 Build the simulator-loadable runtime:
 
 ```sh
-cmake -S . -B build
+cmake -S . -B build \
+  -DSVX_SIMULATOR_INCLUDE_DIR=/path/to/simulator/include \
+  -DSVX_REQUIRE_DIRECT_VPI=ON
 cmake --build build -j2
 ```
+
+After installing a wheel, locate its CMake and native source tree with
+`svx native-source`, then use that directory as the CMake `-S` argument. The
+wheel ships portable build sources rather than a prebuilt simulator library.
 
 Run the Python and native build checks:
 
@@ -67,10 +69,7 @@ PYTHONPATH=python:../svtypes/python:. .venv/bin/python -m pytest -q
 cmake --build build -j2
 ```
 
-The simulator-neutral SV and Python integration sources are in
-`tests/integration/`. Their environment-specific execution harnesses are
-maintained locally because they depend on licensed simulator installations and
-internal execution environments.
+The SV and Python integration regression sources are in `tests/integration/`.
 
 For a non-default CMake build location, expose the simulator library to the
 CLI with `SVX_LIB_DIR=/path/to/build`. For an installed SV support directory,
@@ -83,18 +82,20 @@ The CLI prints the SV files and simulator flags needed by a build script:
 
 ```sh
 svx share
+svx native-source
 svx sv-files
 SVX_LIB_DIR="$PWD/build" svx libs
 svx compile-flags
 ```
 
-The M14 direct-VPI C source is compiled directly into the simulator invocation
-for designs that enable hierarchical signal access. It does not use a VPI
-system task or a `-load` plugin.
+The direct VPI service is compiled into `libsvx` for designs that enable
+hierarchical signal access. It does not use a VPI system task or a separately
+loaded plugin.
 
 ## Documentation
 
 - [User manual](docs/SVX_USER_MANUAL.md)
-- [0.1.0 release contract and gates](docs/RELEASE_0.1.0.md)
+- [API reference](docs/SVX_API_REFERENCE.md)
+- [1.0.0 release contract and gates](docs/RELEASE_1.0.0.md)
 - [Project specification](docs/SVX_SPEC.md)
 - [SvTypes dependency decision](docs/decisions/0001-svtypes-as-versioned-external-dependency.md)

@@ -1,4 +1,5 @@
 from io import StringIO
+from pathlib import Path
 
 import svx
 from svx.cli import main
@@ -16,6 +17,10 @@ def test_cli_discovery_commands_source_tree():
     share = run_cli("share")
     assert share.rstrip().endswith("/sv")
 
+    native_source = run_cli("native-source")
+    assert native_source.rstrip().endswith("/svx")
+    assert (Path(native_source.strip()) / "CMakeLists.txt").is_file()
+
     sv_files = run_cli("sv-files")
     assert "svtypes_runtime/sv/svtypes_pkg.sv" in sv_files
     assert "sv/svx_pkg.sv" in sv_files
@@ -30,7 +35,7 @@ def test_cli_discovery_commands_source_tree():
 
 def test_svtypes_gen_module_and_explicit_types():
     generated = run_cli("svtypes-gen", "--module", "examples.milestone_6_cli_workflow.tests.types")
-    assert "typedef enum int" in generated
+    assert "typedef enum bit [7:0]" in generated
     assert "typedef class M6BusReq;" in generated
     assert "class M6BusRsp extends svtypes_pkg::sv_object;" in generated
 
@@ -43,6 +48,50 @@ def test_svtypes_gen_module_and_explicit_types():
     )
     assert "typedef class M6BusReq;" in explicit
     assert "class M6BusRsp" not in explicit
+
+
+def test_committed_typed_example_outputs_are_reproducible():
+    m2 = run_cli(
+        "svtypes-gen",
+        "--module",
+        "examples.milestone_2_typed_channel.tests.typed_test",
+        "--package",
+        "m2_typed_pkg",
+        "--channel-helpers",
+    )
+    assert m2 == Path(
+        "examples/milestone_2_typed_channel/generated_types.sv"
+    ).read_text()
+
+    m6 = run_cli(
+        "svtypes-gen",
+        "--module",
+        "examples.milestone_6_cli_workflow.tests.types",
+        "--channel-helpers",
+    )
+    assert m6 == Path(
+        "examples/milestone_6_cli_workflow/generated/types.sv"
+    ).read_text()
+
+    m5 = run_cli(
+        "svtypes-gen",
+        "--module",
+        "examples.milestone_5_existing_env.tests.types",
+        "--channel-helpers",
+    )
+    assert m5 == Path(
+        "examples/milestone_5_existing_env/generated_types.sv"
+    ).read_text()
+
+    m7 = run_cli(
+        "svtypes-gen",
+        "--module",
+        "examples.milestone_7_sv_typed_helpers.tests.types",
+        "--channel-helpers",
+    )
+    assert m7 == Path(
+        "examples/milestone_7_sv_typed_helpers/generated/types_and_channels.sv"
+    ).read_text()
 
 
 def test_role_helper_names_and_types():

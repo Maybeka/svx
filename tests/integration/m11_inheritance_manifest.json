@@ -1,1 +1,77 @@
-{"schema_uri":"https://svx.dev/schema/inheritance-manifest/v1","schema_version":"1.0.0","classes":[{"canonical_id":"py://tests/integration/m11_base/BaseMonitor","language":"python","symbol":"tests.integration.m11_base.BaseMonitor","constructor":{"initiator":"python","parameters":[{"name":"seed","type":{"svtypes":"svtypes.Int()","sv":"int","sv_packer":"int_packer"}}]},"methods":[{"canonical_id":"py://tests/integration/m11_base/BaseMonitor#sample","name":"sample","parameters":[],"return_type":{"svtypes":"svtypes.Int()","sv":"int","sv_packer":"int_packer"},"timing":"function","virtual":true,"pure_virtual":false},{"canonical_id":"py://tests/integration/m11_base/BaseMonitor#notify","name":"notify","parameters":[],"return_type":"void","timing":"task","virtual":true,"pure_virtual":false}]}]}
+{
+  "classes": [
+    {
+      "canonical_id": "py://tests/integration/m11_base/BaseMonitor",
+      "constructor": {
+        "initiator": "python",
+        "parameters": [
+          {
+            "name": "seed",
+            "type": {
+              "unified_type_name": "svtypes.Int",
+              "python": {
+                "args": [],
+                "kwargs": {},
+                "module": "svtypes",
+                "symbol": "Int"
+              },
+              "sv": "int",
+              "sv_packer": "int_packer",
+              "encoding_descriptor": {
+                "binary_format_version": 1,
+                "unified_type_name": "svtypes.Int",
+                "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+              }
+            }
+          }
+        ]
+      },
+      "language": "python",
+      "methods": [
+        {
+          "canonical_id": "py://tests/integration/m11_base/BaseMonitor#sample",
+          "name": "sample",
+          "parameters": [],
+          "pure_virtual": false,
+          "return_type": {
+            "unified_type_name": "svtypes.Int",
+            "python": {
+              "args": [],
+              "kwargs": {},
+              "module": "svtypes",
+              "symbol": "Int"
+            },
+            "sv": "int",
+            "sv_packer": "int_packer",
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "unified_type_name": "svtypes.Int",
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+            }
+          },
+          "timing": "function",
+          "virtual": true
+        },
+        {
+          "canonical_id": "py://tests/integration/m11_base/BaseMonitor#notify",
+          "name": "notify",
+          "parameters": [],
+          "pure_virtual": false,
+          "return_type": "void",
+          "timing": "task",
+          "virtual": true
+        }
+      ],
+      "symbol": "tests.integration.m11_base.BaseMonitor"
+    }
+  ],
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0"
+}

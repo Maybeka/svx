@@ -195,10 +195,8 @@ command once those commands are stable.
 
 Automated project tests.
 
-The public repository contains portable Python tests, fixtures, and
-simulator-neutral SV/Python integration sources. Environment-specific execution
-harnesses are maintained locally because they depend on licensed tools and
-execution infrastructure.
+The repository contains Python tests, fixtures, and SV/Python integration
+sources.
 
 ### 3.8 `docs`
 

@@ -4,7 +4,7 @@ from svtypes import Bits, Enum, Int, SvObject, get_package, svobj
 m5_pkg = get_package("milestone_5_existing_env")
 
 
-class M5BusOp(Enum):
+class M5BusOp(Enum, width=8, signed=False):
     M5_OP_READ = 0
     M5_OP_WRITE = 1
 

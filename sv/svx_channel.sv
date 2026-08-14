@@ -12,12 +12,62 @@ import "DPI-C" context function byte unsigned svx_payload_get_byte(chandle paylo
 import "DPI-C" context function string svx_payload_kind(chandle payload);
 import "DPI-C" context function string svx_payload_type_name(chandle payload);
 import "DPI-C" context function string svx_payload_content_type(chandle payload);
+import "DPI-C" context function string svx_payload_unified_type_name(chandle payload);
+import "DPI-C" context function string svx_payload_encoding_fingerprint(chandle payload);
+import "DPI-C" context function int unsigned svx_payload_binary_format_version(chandle payload);
+import "DPI-C" context function void svx_payload_set_encoding_descriptor(
+  chandle payload,
+  string unified_type_name,
+  string encoding_fingerprint,
+  int unsigned binary_format_version
+);
 import "DPI-C" context function void svx_payload_destroy(chandle payload);
 
 class svx_channel;
-  mailbox #(chandle) fifo = new();
+  mailbox #(chandle) fifo = new(SVX_CHANNEL_CAPACITY);
+  bit binding_set = 0;
+  string bound_kind;
+  string bound_content_type;
+  string bound_unified_type_name;
+  string bound_encoding_fingerprint;
+  int unsigned bound_binary_format_version;
 
-  task put(chandle payload);
+  function void require_compatible(string name, chandle payload);
+    string kind;
+    string content_type;
+    string unified_type_name;
+    string encoding_fingerprint;
+    int unsigned binary_format_version;
+    if (payload == null) begin
+      $fatal(2, "SVX channel %s cannot accept a null payload", name);
+    end
+    kind = svx_payload_kind(payload);
+    content_type = svx_payload_content_type(payload);
+    unified_type_name = svx_payload_unified_type_name(payload);
+    encoding_fingerprint = svx_payload_encoding_fingerprint(payload);
+    binary_format_version = svx_payload_binary_format_version(payload);
+    if (!binding_set) begin
+      binding_set = 1;
+      bound_kind = kind;
+      bound_content_type = content_type;
+      bound_unified_type_name = unified_type_name;
+      bound_encoding_fingerprint = encoding_fingerprint;
+      bound_binary_format_version = binary_format_version;
+      return;
+    end
+    if (kind != bound_kind || content_type != bound_content_type ||
+        unified_type_name != bound_unified_type_name ||
+        encoding_fingerprint != bound_encoding_fingerprint ||
+        binary_format_version != bound_binary_format_version) begin
+      $fatal(2,
+        "SVX channel %s payload type conflicts with its first-use binding (%s, %s, %s, %s, %0d)",
+        name, bound_kind, bound_content_type, bound_unified_type_name,
+        bound_encoding_fingerprint, bound_binary_format_version);
+    end
+  endfunction
+
+  task put(string name, chandle payload);
+    require_compatible(name, payload);
     fifo.put(payload);
   endtask
 
@@ -29,12 +79,28 @@ class svx_channel;
     fifo.peek(payload);
   endtask
 
-  function bit try_put(chandle payload);
+  function bit try_put(string name, chandle payload);
+    require_compatible(name, payload);
     return fifo.try_put(payload);
   endfunction
 
   function bit try_get(output chandle payload);
     return fifo.try_get(payload);
+  endfunction
+
+  function void clear();
+    chandle payload;
+    while (fifo.try_get(payload)) begin
+      if (payload != null) begin
+        svx_payload_destroy(payload);
+      end
+    end
+    binding_set = 0;
+    bound_kind = "";
+    bound_content_type = "";
+    bound_unified_type_name = "";
+    bound_encoding_fingerprint = "";
+    bound_binary_format_version = 0;
   endfunction
 endclass
 
@@ -47,10 +113,18 @@ class svx_channel_registry;
     end
     return channels[name];
   endfunction
+
+
+  static function void clear();
+    foreach (channels[name]) begin
+      channels[name].clear();
+    end
+    channels.delete();
+  endfunction
 endclass
 
 task automatic svx_channel_put_payload(string name, chandle payload);
-  svx_channel_registry::get(name).put(payload);
+  svx_channel_registry::get(name).put(name, payload);
 endtask
 
 task automatic svx_channel_get_payload(string name, output chandle payload);
@@ -62,7 +136,7 @@ task automatic svx_channel_peek_payload(string name, output chandle payload);
 endtask
 
 function automatic bit svx_channel_try_put_payload(string name, chandle payload);
-  return svx_channel_registry::get(name).try_put(payload);
+  return svx_channel_registry::get(name).try_put(name, payload);
 endfunction
 
 function automatic chandle svx_channel_try_get_payload(string name);
@@ -79,7 +153,12 @@ function automatic chandle svx_payload_from_bytes(
   string type_name = "",
   string content_type = "application/octet-stream"
 );
-  chandle payload = svx_payload_create(kind, type_name, content_type);
+  chandle payload;
+  if (data.size() > SVX_MAX_PAYLOAD_BYTES) begin
+    $fatal(2, "SVX payload has %0d bytes; limit is %0d",
+      data.size(), SVX_MAX_PAYLOAD_BYTES);
+  end
+  payload = svx_payload_create(kind, type_name, content_type);
   foreach (data[i]) begin
     svx_payload_push_byte(payload, data[i]);
   end
@@ -92,7 +171,12 @@ function automatic chandle svx_payload_from_byte_queue(
   string type_name = "",
   string content_type = "application/octet-stream"
 );
-  chandle payload = svx_payload_create(kind, type_name, content_type);
+  chandle payload;
+  if (data.size() > SVX_MAX_PAYLOAD_BYTES) begin
+    $fatal(2, "SVX payload has %0d bytes; limit is %0d",
+      data.size(), SVX_MAX_PAYLOAD_BYTES);
+  end
+  payload = svx_payload_create(kind, type_name, content_type);
   foreach (data[i]) begin
     svx_payload_push_byte(payload, data[i]);
   end
@@ -142,14 +226,46 @@ function automatic void svx_require_svtypes_payload(
   end
 endfunction
 
+function automatic void svx_require_svtypes_wire_payload(
+  chandle payload,
+  string channel_name,
+  string expected_type,
+  string expected_unified_type_name,
+  string expected_encoding_fingerprint,
+  int unsigned expected_binary_format_version,
+  string helper_name = "svx_require_svtypes_payload"
+);
+  svx_require_svtypes_payload(payload, channel_name, expected_type, helper_name);
+  if (svx_payload_unified_type_name(payload) != expected_unified_type_name) begin
+    $fatal(2, "%s(%s): expected SvTypes unified type name %s, got %s",
+      helper_name, channel_name, expected_unified_type_name,
+      svx_payload_unified_type_name(payload));
+  end
+  if (svx_payload_encoding_fingerprint(payload) != expected_encoding_fingerprint) begin
+    $fatal(2, "%s(%s): SvTypes encoding fingerprint mismatch for %s",
+      helper_name, channel_name, expected_unified_type_name);
+  end
+  if (svx_payload_binary_format_version(payload) != expected_binary_format_version) begin
+    $fatal(2, "%s(%s): expected SvTypes binary format %0d, got %0d",
+      helper_name, channel_name, expected_binary_format_version,
+      svx_payload_binary_format_version(payload));
+  end
+endfunction
+
 function automatic void svx_payload_to_checked_byte_queue(
   chandle payload,
   string channel_name,
   string expected_type,
+  string expected_unified_type_name,
+  string expected_encoding_fingerprint,
+  int unsigned expected_binary_format_version,
   string helper_name,
   ref byte unsigned data[$]
 );
-  svx_require_svtypes_payload(payload, channel_name, expected_type, helper_name);
+  svx_require_svtypes_wire_payload(
+    payload, channel_name, expected_type, expected_unified_type_name,
+    expected_encoding_fingerprint, expected_binary_format_version, helper_name
+  );
   svx_payload_to_byte_queue(payload, data);
 endfunction
 
@@ -182,9 +298,17 @@ task automatic svx_channel_put_byte_queue(
   byte unsigned data[$],
   string kind = "bytes",
   string type_name = "",
-  string content_type = "application/octet-stream"
+  string content_type = "application/octet-stream",
+  string unified_type_name = "",
+  string encoding_fingerprint = "",
+  int unsigned binary_format_version = 0
 );
   chandle payload = svx_payload_from_byte_queue(data, kind, type_name, content_type);
+  if (unified_type_name != "") begin
+    svx_payload_set_encoding_descriptor(
+      payload, unified_type_name, encoding_fingerprint, binary_format_version
+    );
+  end
   svx_channel_put_payload(name, payload);
 endtask
 
@@ -208,9 +332,17 @@ function automatic bit svx_channel_try_put_byte_queue(
   byte unsigned data[$],
   string kind = "bytes",
   string type_name = "",
-  string content_type = "application/octet-stream"
+  string content_type = "application/octet-stream",
+  string unified_type_name = "",
+  string encoding_fingerprint = "",
+  int unsigned binary_format_version = 0
 );
   chandle payload = svx_payload_from_byte_queue(data, kind, type_name, content_type);
+  if (unified_type_name != "") begin
+    svx_payload_set_encoding_descriptor(
+      payload, unified_type_name, encoding_fingerprint, binary_format_version
+    );
+  end
   if (!svx_channel_try_put_payload(name, payload)) begin
     svx_payload_destroy(payload);
     return 0;

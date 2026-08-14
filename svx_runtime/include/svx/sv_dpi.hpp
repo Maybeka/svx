@@ -8,6 +8,8 @@
 
 namespace svx::dpi {
 
+inline constexpr std::size_t SVX_MAX_PAYLOAD_BYTES = 16U * 1024U * 1024U;
+
 void delay_svx(double duration, int unit_code);
 void fork_svx(void *group, void *procs[SVX_MAX_FORK_NUM],
               e_svx_fork_join_type fork_type);
@@ -22,6 +24,12 @@ void payload_destroy(void *payload);
 const char *payload_kind(void *payload);
 const char *payload_type_name(void *payload);
 const char *payload_content_type(void *payload);
+const char *payload_unified_type_name(void *payload);
+const char *payload_encoding_fingerprint(void *payload);
+std::uint32_t payload_binary_format_version(void *payload);
+void payload_set_encoding_descriptor(void *payload, const char *unified_type_name,
+                                 const char *encoding_fingerprint,
+                                 std::uint32_t binary_format_version);
 const std::uint8_t *payload_data(void *payload);
 std::size_t payload_size(void *payload);
 
@@ -36,10 +44,5 @@ bool svx_invoke_object(std::uint64_t object_id, const char *method_id,
 void svx_release_object(std::uint64_t object_id);
 bool svx_create_object(const char *class_id, void *request,
                        std::uint64_t *object_id, std::string *error);
-int svx_signal_validate(const char *path, int width);
-bool svx_signal_apply(const char *path, int width, void *data,
-                      std::size_t size, int operation);
-bool svx_signal_read(const char *path, int width, void *data,
-                     std::size_t size);
 
 } // namespace svx::dpi

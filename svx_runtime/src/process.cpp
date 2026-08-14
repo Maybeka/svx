@@ -3,12 +3,16 @@
 #include <algorithm>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 #include "svx/context.hpp"
 #include "svx/python_runtime.hpp"
 #include "svx/sv_dpi.hpp"
 
 namespace svx {
+namespace {
+std::unordered_set<ProcessGroup *> g_process_groups;
+}
 
 PythonProcess::PythonProcess(PyObject *callable)
     : m_callable(callable),
@@ -29,6 +33,7 @@ int PythonProcess::exec() {
   ExecutionContext ctx("svx_process");
   PyObject *result = PyObject_CallNoArgs(m_callable);
   if (result == nullptr) {
+    m_failed = true;
     handle_python_exception(ctx.source());
     PyThreadState_Swap(prev);
     return 1;
@@ -42,10 +47,15 @@ void PythonProcess::set_sv_index(int index) { m_sv_index = index; }
 
 int PythonProcess::sv_index() const { return m_sv_index; }
 
+bool PythonProcess::failed() const { return m_failed; }
+
 ProcessGroup::ProcessGroup(std::vector<PythonProcess *> children)
-    : m_children(std::move(children)) {}
+    : m_children(std::move(children)) {
+  g_process_groups.insert(this);
+}
 
 ProcessGroup::~ProcessGroup() {
+  g_process_groups.erase(this);
   for (PythonProcess *child : m_children) {
     delete child;
   }
@@ -56,6 +66,7 @@ const std::vector<PythonProcess *> &ProcessGroup::children() const {
 }
 
 const char *ProcessGroup::status() const {
+  if (m_stale) throw std::runtime_error("SVX process group belongs to a stopped session");
   bool any_running = false;
   bool any_killed = false;
   bool all_finished = true;
@@ -96,14 +107,27 @@ const char *ProcessGroup::status() const {
 }
 
 void ProcessGroup::await_all() const {
+  if (m_stale) throw std::runtime_error("SVX process group belongs to a stopped session");
   for (const PythonProcess *child : m_children) {
     if (child->sv_index() >= 0) {
       dpi::await_proc_svx(child->sv_index());
     }
   }
+  throw_if_failed();
+}
+
+void ProcessGroup::throw_if_failed() const {
+  const auto count = std::count_if(
+      m_children.begin(), m_children.end(),
+      [](const PythonProcess *child) { return child->failed(); });
+  if (count != 0) {
+    throw std::runtime_error("SVX process group completed with " +
+                             std::to_string(count) + " failed child process(es)");
+  }
 }
 
 void ProcessGroup::kill_all() {
+  if (m_stale) throw std::runtime_error("SVX process group belongs to a stopped session");
   for (const PythonProcess *child : m_children) {
     if (child->sv_index() >= 0) {
       dpi::kill_proc_svx(child->sv_index());
@@ -111,6 +135,14 @@ void ProcessGroup::kill_all() {
   }
   m_killed = true;
 }
+
+void ProcessGroup::invalidate() {
+  if (m_stale) return;
+  kill_all();
+  m_stale = true;
+}
+
+bool ProcessGroup::stale() const { return m_stale; }
 
 ProcessGroup *create_process_group(PyObject *callables) {
   if (!PyTuple_Check(callables)) {
@@ -147,6 +179,12 @@ void start_process_group(ProcessGroup *group, e_svx_fork_join_type fork_type) {
     procs[i] = children[i];
   }
   dpi::fork_svx(group, procs, fork_type);
+}
+
+void shutdown_process_groups() {
+  for (ProcessGroup *group : g_process_groups) {
+    group->invalidate();
+  }
 }
 
 } // namespace svx

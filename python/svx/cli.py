@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import inspect
+import json
 import os
 import sys
 import sysconfig
@@ -10,11 +11,26 @@ from pathlib import Path
 from types import ModuleType
 from typing import Iterable, TextIO
 
-from .inheritance import emit_sv_mirrors, load_manifest, write_python_mirrors
+from .inheritance import (
+    artifact_manifest,
+    emit_python_mirrors,
+    emit_sv_mirrors,
+    load_manifest,
+    migrate_manifest,
+    write_text_atomic,
+    write_python_mirrors,
+)
+from .declarations import manifest_dict, manifest_from_declarations
 
 
 def repo_root() -> Path:
-    return sv_dir().parent
+    source_root = sv_dir().parent
+    if (source_root / "CMakeLists.txt").is_file():
+        return source_root
+    installed = Path(sysconfig.get_path("data")) / "share" / "svx"
+    if (installed / "CMakeLists.txt").is_file():
+        return installed
+    return source_root
 
 
 def sv_dir() -> Path:
@@ -25,14 +41,13 @@ def sv_dir() -> Path:
             return path
         raise RuntimeError(f"SVX_SHARE_DIR does not contain svx_pkg.sv: {path}")
 
+    candidate = Path(sysconfig.get_path("data")) / "share" / "svx" / "sv"
+    if (candidate / "svx_pkg.sv").is_file():
+        return candidate
     for parent in Path(__file__).resolve().parents:
         candidate = parent / "sv"
         if (candidate / "svx_pkg.sv").is_file():
             return candidate
-
-    candidate = Path(sysconfig.get_path("data")) / "share" / "svx" / "sv"
-    if (candidate / "svx_pkg.sv").is_file():
-        return candidate
     raise RuntimeError(
         "SVX SystemVerilog support files are unavailable; install the SVX package "
         "or set SVX_SHARE_DIR to its sv directory"
@@ -52,7 +67,18 @@ def build_dir() -> Path:
     root = repo_root()
     if (root / "CMakeLists.txt").is_file():
         return root / "build"
-    return Path(sysconfig.get_path("platlib"))
+    candidates = [
+        Path(sysconfig.get_path("platlib")),
+        Path(sys.prefix) / "lib",
+        Path(sys.prefix) / "lib64",
+    ]
+    for candidate in candidates:
+        if any(candidate.glob("libsvx.*")):
+            return candidate
+    raise RuntimeError(
+        "the installed SVX native runtime was not found; set SVX_LIB_DIR to "
+        "the CMake install library directory"
+    )
 
 
 def sv_files() -> list[Path]:
@@ -66,6 +92,16 @@ def _print_lines(lines: Iterable[str], out: TextIO) -> None:
 
 def _cmd_share(_args: argparse.Namespace, out: TextIO) -> int:
     print(sv_dir(), file=out)
+    return 0
+
+
+def _cmd_native_source(_args: argparse.Namespace, out: TextIO) -> int:
+    root = repo_root()
+    if not (root / "CMakeLists.txt").is_file() or not (
+        root / "svx_runtime" / "src" / "svx.cpp"
+    ).is_file():
+        raise RuntimeError("installed SVX native build sources are unavailable")
+    print(root, file=out)
     return 0
 
 
@@ -152,6 +188,20 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
     ind = "  " * level
     ind1 = "  " * (level + 1)
     type_name = obj_cls.__name__
+    import svtypes
+
+    descriptor = svtypes.encoding_descriptor(obj_cls)
+    type_id = descriptor.unified_type_name
+    fingerprint = descriptor.encoding_fingerprint_hex
+    format_version = descriptor.binary_format_version
+    checked_args = (
+        f'"{type_name}", "{type_id}", "{fingerprint}", '
+        f'{format_version}'
+    )
+    put_metadata = (
+        f'"svtypes", "{type_name}", "application/x-svtypes", '
+        f'"{type_id}", "{fingerprint}", {format_version}'
+    )
     return "\n".join(
         [
             f"{ind}task automatic svx_get_{type_name}(string channel_name, output {type_name} item);",
@@ -159,7 +209,7 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
             f"{ind1}byte unsigned bytes[$];",
             f"{ind1}int offset;",
             f"{ind1}svx_pkg::svx_channel_get_payload(channel_name, payload);",
-            f'{ind1}svx_pkg::svx_payload_to_checked_byte_queue(payload, channel_name, "{type_name}", "svx_get_{type_name}", bytes);',
+            f'{ind1}svx_pkg::svx_payload_to_checked_byte_queue(payload, channel_name, {checked_args}, "svx_get_{type_name}", bytes);',
             f"{ind1}svx_pkg::svx_payload_destroy(payload);",
             f"{ind1}item = new();",
             f"{ind1}offset = 0;",
@@ -172,7 +222,7 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
             f"{ind1}byte unsigned bytes[$];",
             f"{ind1}int offset;",
             f"{ind1}svx_pkg::svx_channel_peek_payload(channel_name, payload);",
-            f'{ind1}svx_pkg::svx_payload_to_checked_byte_queue(payload, channel_name, "{type_name}", "svx_peek_{type_name}", bytes);',
+            f'{ind1}svx_pkg::svx_payload_to_checked_byte_queue(payload, channel_name, {checked_args}, "svx_peek_{type_name}", bytes);',
             f"{ind1}item = new();",
             f"{ind1}offset = 0;",
             f"{ind1}item.unpack(bytes, offset);",
@@ -185,7 +235,7 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
             f'{ind1}  $fatal(2, "svx_put_{type_name}(%s): cannot put null SvTypes object type {type_name}", channel_name);',
             f"{ind1}end",
             f"{ind1}item.pack(bytes);",
-            f'{ind1}svx_pkg::svx_channel_put_byte_queue(channel_name, bytes, "svtypes", "{type_name}", "application/x-svtypes");',
+            f'{ind1}svx_pkg::svx_channel_put_byte_queue(channel_name, bytes, {put_metadata});',
             f"{ind}endtask",
             "",
             f"{ind}task automatic svx_try_get_{type_name}(string channel_name, output bit ok, output {type_name} item);",
@@ -198,7 +248,7 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
             f"{ind1}  item = null;",
             f"{ind1}  return;",
             f"{ind1}end",
-            f'{ind1}svx_pkg::svx_payload_to_checked_byte_queue(payload, channel_name, "{type_name}", "svx_try_get_{type_name}", bytes);',
+            f'{ind1}svx_pkg::svx_payload_to_checked_byte_queue(payload, channel_name, {checked_args}, "svx_try_get_{type_name}", bytes);',
             f"{ind1}svx_pkg::svx_payload_destroy(payload);",
             f"{ind1}item = new();",
             f"{ind1}offset = 0;",
@@ -213,7 +263,7 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
             f'{ind1}  $fatal(2, "svx_try_put_{type_name}(%s): cannot put null SvTypes object type {type_name}", channel_name);',
             f"{ind1}end",
             f"{ind1}item.pack(bytes);",
-            f'{ind1}return svx_pkg::svx_channel_try_put_byte_queue(channel_name, bytes, "svtypes", "{type_name}", "application/x-svtypes");',
+            f'{ind1}return svx_pkg::svx_channel_try_put_byte_queue(channel_name, bytes, {put_metadata});',
             f"{ind}endfunction",
         ]
     )
@@ -284,15 +334,117 @@ def _cmd_svtypes_gen(args: argparse.Namespace, out: TextIO) -> int:
 
 def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
     manifest = load_manifest(Path(args.manifest))
+    python_sources = emit_python_mirrors(manifest)
+    sv_text = emit_sv_mirrors(manifest)
+    if args.check:
+        if not args.python_out or not args.sv_out or not args.artifact_manifest:
+            raise SystemExit(
+                "inheritance-gen --check requires --python-out, --sv-out, and --artifact-manifest"
+            )
+        mismatches: list[Path] = []
+        python_targets = [Path(args.python_out) / path for path in python_sources]
+        for target, source in zip(python_targets, python_sources.values()):
+            if not target.is_file() or target.read_text(encoding="utf-8") != source:
+                mismatches.append(target)
+        sv_target = Path(args.sv_out)
+        if not sv_target.is_file() or sv_target.read_text(encoding="utf-8") != sv_text:
+            mismatches.append(sv_target)
+        artifact_target = Path(args.artifact_manifest)
+        artifact_text = _generated_artifact_text(
+            manifest, python_sources, sv_text, args, artifact_target
+        )
+        if (
+            not artifact_target.is_file()
+            or artifact_target.read_text(encoding="utf-8") != artifact_text
+        ):
+            mismatches.append(artifact_target)
+        if mismatches:
+            raise SystemExit(
+                "generated inheritance artifacts are stale: "
+                + ", ".join(str(path) for path in mismatches)
+            )
+        for path in [*python_targets, sv_target, artifact_target]:
+            print(path, file=out)
+        return 0
     if args.python_out:
         written = write_python_mirrors(manifest, Path(args.python_out))
         for path in written:
             print(path, file=out)
-    sv_text = emit_sv_mirrors(manifest)
     if args.sv_out:
-        Path(args.sv_out).write_text(sv_text)
+        write_text_atomic(Path(args.sv_out), sv_text)
     elif sv_text.strip() != "// Generated by svx inheritance-gen. Do not edit.":
         print(sv_text, end="", file=out)
+    if args.artifact_manifest:
+        artifact_path = Path(args.artifact_manifest)
+        write_text_atomic(
+            artifact_path,
+            _generated_artifact_text(
+                manifest, python_sources, sv_text, args, artifact_path
+            ),
+        )
+        print(artifact_path, file=out)
+    return 0
+
+
+def _generated_artifact_text(
+    manifest,
+    python_sources,
+    sv_text: str,
+    args: argparse.Namespace,
+    artifact_path: Path,
+) -> str:
+    artifact_root = artifact_path.parent.resolve()
+    python_prefix = ""
+    if args.python_out:
+        python_prefix = os.path.relpath(Path(args.python_out).resolve(), artifact_root)
+    sv_path = "mirrors.sv"
+    if args.sv_out:
+        sv_path = os.path.relpath(Path(args.sv_out).resolve(), artifact_root)
+    return (
+        json.dumps(
+            artifact_manifest(
+                manifest,
+                python_sources,
+                sv_text,
+                python_path_prefix=python_prefix,
+                sv_path=sv_path,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+
+
+def _cmd_inheritance_migrate(args: argparse.Namespace, out: TextIO) -> int:
+    source = Path(args.manifest)
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"cannot read inheritance manifest {source}: {error}") from error
+    migrated = migrate_manifest(data)
+    text = json.dumps(migrated, indent=2, sort_keys=True) + "\n"
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+    else:
+        print(text, end="", file=out)
+    return 0
+
+
+def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
+    modules = [importlib.import_module(name) for name in args.python_module]
+    manifest = manifest_from_declarations(
+        python_modules=modules,
+        sv_declaration_files=[Path(item) for item in args.sv_declarations],
+    )
+    text = json.dumps(manifest_dict(manifest), indent=2, sort_keys=True) + "\n"
+    target = Path(args.out)
+    if args.check:
+        if not target.is_file() or target.read_text(encoding="utf-8") != text:
+            raise SystemExit(f"generated inheritance manifest is stale: {target}")
+    else:
+        write_text_atomic(target, text)
+    print(target, file=out)
     return 0
 
 
@@ -302,6 +454,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("share", help="print the SVX SystemVerilog support directory")
     p.set_defaults(func=_cmd_share)
+
+    p = sub.add_parser("native-source", help="print the installed native build source directory")
+    p.set_defaults(func=_cmd_native_source)
 
     p = sub.add_parser("sv-files", help="print required core SystemVerilog files")
     p.set_defaults(func=_cmd_sv_files)
@@ -320,11 +475,38 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", help="output file; stdout if omitted")
     p.set_defaults(func=_cmd_svtypes_gen)
 
-    p = sub.add_parser("inheritance-gen", help="generate M8 cross-language inheritance mirrors")
+    p = sub.add_parser("inheritance-gen", help="generate cross-language inheritance mirrors")
     p.add_argument("--manifest", required=True, help="versioned JSON inheritance manifest")
     p.add_argument("--python-out", help="directory for generated Python SV mirrors")
     p.add_argument("--sv-out", help="output file for generated SystemVerilog Python mirrors")
+    p.add_argument(
+        "--artifact-manifest",
+        help="output compatibility manifest for all generated artifacts",
+    )
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="verify generated outputs are current without modifying them",
+    )
     p.set_defaults(func=_cmd_inheritance_gen)
+
+    p = sub.add_parser(
+        "inheritance-migrate",
+        help="migrate an inheritance manifest to the current declarative schema",
+    )
+    p.add_argument("--manifest", required=True, help="input inheritance manifest")
+    p.add_argument("--out", help="output file; stdout if omitted")
+    p.set_defaults(func=_cmd_inheritance_migrate)
+
+    p = sub.add_parser(
+        "inheritance-manifest",
+        help="normalize Python and SV declarations to an inheritance manifest",
+    )
+    p.add_argument("--python-module", action="append", default=[], help="module containing decorated Python-owned classes")
+    p.add_argument("--sv-declarations", action="append", default=[], help="versioned SV declaration metadata JSON")
+    p.add_argument("--out", required=True, help="output inheritance manifest")
+    p.add_argument("--check", action="store_true", help="verify the output is current")
+    p.set_defaults(func=_cmd_inheritance_manifest)
 
     return parser
 

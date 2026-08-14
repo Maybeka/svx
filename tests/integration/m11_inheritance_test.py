@@ -12,13 +12,3 @@ def run():
     assert monitor.sample() == 42
     monitor.notify()
     assert monitor.notified
-
-
-@svx.export(name="m11.after_shutdown")
-def after_shutdown():
-    try:
-        monitor.sample()
-    except RuntimeError as error:
-        assert "unknown SVX inheritance object id" in str(error)
-    else:
-        raise AssertionError("shutdown SVX inheritance object remained dispatchable")

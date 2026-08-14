@@ -1,25 +1,24 @@
-# SVX 0.1.0 Release Contract
+# SVX 1.0.0 Release Contract
 
 ## Scope
 
-SVX 0.1.0 is the first source/runtime release of the split SVX repository. It
+SVX 1.0.0 is the stable source/runtime release of the split SVX repository. It
 covers the public Python API in `svx`, the `svx_pkg` SystemVerilog services,
 the simulator-loadable C++ runtime, the documented CLI, manifest-driven
 cross-language inheritance, and the narrow hierarchical signal access API.
 
 The version applies to SVX only. SvTypes is an external, independently
-versioned dependency. The `0.1` version indicates that compatibility changes
-may occur before SVX reaches a future `1.0.0` release.
+versioned dependency. SVX 1.x preserves its documented stable Python,
+SystemVerilog, manifest, generated-artifact, and runtime contracts.
 
 ## Compatibility
 
-| Component | 0.1.0 contract |
+| Component | 1.0.0 contract |
 |---|---|
 | Python | 3.11 or newer |
-| SvTypes | `>=0.1.0,<0.2.0` |
+| SvTypes | `>=1.0.0,<2.0.0` |
 | Simulator | A SystemVerilog simulator with the DPI and VPI C interfaces used by SVX |
-| Verilator | Unsupported until upstream provides resumable timing and blocking behavior across DPI-exported tasks |
-| Icarus Verilog | Unsupported; its VPI extension model cannot provide the SVX DPI and cross-language class runtime |
+| Required simulator behavior | SystemVerilog classes, DPI import/export, resumable calls through exported DPI tasks, and direct VPI object access |
 | Native toolchain | CMake 3.20+, C++20 compiler, and Python development headers for the simulator Python ABI |
 
 Validate each target toolchain with its local build and regression configuration
@@ -32,8 +31,8 @@ The simulator-loadable native runtime is built with CMake because it must match
 the Python ABI used by the simulator process.
 
 ```sh
-python -m pip install 'svtypes>=0.1.0,<0.2.0'
-python -m pip install svx==0.1.0
+python -m pip install 'svtypes>=1.0.0,<2.0.0'
+python -m pip install svx==1.0.0
 cmake -S . -B build
 cmake --build build -j2
 ```
@@ -62,24 +61,27 @@ outside the normal Python data scheme.
 
 ## Release Gates
 
-Before tagging `v0.1.0`, all of the following must pass from the release
+Before tagging `v1.0.0`, all of the following must pass from the release
 candidate commit:
 
 ```sh
 PYTHONPATH=python:../svtypes/python:. python -m pytest -q
 cmake -S . -B .tmp/release-build
 cmake --build .tmp/release-build -j2
+cmake -S . -B .tmp/release-sanitizer -DSVX_ENABLE_SANITIZERS=ON
+cmake --build .tmp/release-sanitizer -j2
 python -m build
 ```
 
 Run the maintained local simulator validation before a release. The package
 build must be inspected to ensure it contains the Python package and SV support
-files, but no generated simulator artifacts.
+files, but no generated simulator artifacts. Run the sanitizer-built runtime
+through the qualified simulator regression where the toolchain supports it.
 
 ## Release Inputs
 
-- A committed `CHANGELOG.md` entry for `0.1.0`.
+- A committed `CHANGELOG.md` entry for `1.0.0`.
 - Apache-2.0 `LICENSE` file.
 - Reviewed dependency range and SvTypes release availability.
 - A clean worktree after the release verification commands.
-- Annotated tag `v0.1.0` created from the verified commit.
+- Annotated tag `v1.0.0` created from the verified commit.

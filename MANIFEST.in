@@ -1,0 +1,13 @@
+include CMakeLists.txt
+include CHANGELOG.md
+include LICENSE
+include README.md
+recursive-include sv *.sv *.svh
+recursive-include svx_runtime *.cpp *.hpp
+recursive-include docs *.md
+exclude docs/SVX_MILESTONE*.md
+exclude docs/review_*.md
+recursive-include examples *.py *.sv *.md
+recursive-include tests *.py *.sv *.json
+prune .local-sim
+prune .tmp

@@ -25,7 +25,11 @@ private:
 };
 
 void begin_declarations();
-void declare_signal(const std::string &path, int width, bool signed_value);
+void declare_signal(const std::string &path, int width, bool signed_value,
+                    const std::string &state_domain,
+                    const std::string &unified_type_name,
+                    const std::string &encoding_fingerprint,
+                    std::uint32_t binary_format_version);
 void validate_and_seal();
 std::vector<std::uint8_t> read(const std::string &path);
 void write(const std::string &path, const std::uint8_t *data, std::size_t size);

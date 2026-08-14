@@ -1,6 +1,7 @@
 import svx
+from svtypes import LogicValue
 
-from .m14_signal_declarations import data, flag
+from .m14_signal_declarations import data, flag, logic_data
 
 
 @svx.test
@@ -20,4 +21,8 @@ def test_signal_access():
     data.write(0x3C)
     svx.delay(1, "ns")
     assert data.read() == 0x3C
+    assert logic_data.read() == LogicValue.from_string("10xz01z0")
+    logic_data.write(LogicValue.from_string("zx10xz01"))
+    svx.delay(1, "ns")
+    assert logic_data.read() == LogicValue.from_string("zx10xz01")
     svx.display("M14_SIGNAL_PASS")

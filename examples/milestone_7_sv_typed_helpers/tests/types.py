@@ -4,7 +4,7 @@ from svtypes import Bits, Enum, Int, SvObject, get_package, svobj
 m7_pkg = get_package("milestone_7_sv_typed_helpers")
 
 
-class M7BusOp(Enum):
+class M7BusOp(Enum, width=8, signed=False):
     M7_OP_READ = 0
     M7_OP_WRITE = 1
 

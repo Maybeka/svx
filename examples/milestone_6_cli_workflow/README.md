@@ -12,6 +12,7 @@ Generate the SystemVerilog model:
 ```sh
 PYTHONPATH=python:. python3 -m svx svtypes-gen \
   --module examples.milestone_6_cli_workflow.tests.types \
+  --channel-helpers \
   --out examples/milestone_6_cli_workflow/generated/types.sv
 ```
 

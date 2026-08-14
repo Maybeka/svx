@@ -80,6 +80,10 @@ task automatic svx_create_object(
   end
   object_id = svx_inheritance_registry::allocate_object_id();
   svx_inheritance_registry::factories[class_id].svx_create(object_id, request, ok, error);
+  if (!ok) begin
+    svx_inheritance_registry::unbind(object_id);
+    object_id = 0;
+  end
 endtask
 
 task automatic svx_invoke_object(
@@ -140,6 +144,8 @@ import "DPI-C" context task svx_inheritance_create_python(
 task automatic svx_shutdown();
   svx_inheritance_registry::clear();
   svx_inheritance_shutdown();
+  svx_channel_registry::clear();
+  svx_runtime_shutdown();
 endtask
 
 export "DPI-C" task svx_invoke_object;

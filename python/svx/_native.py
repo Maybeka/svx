@@ -73,8 +73,24 @@ def inheritance_stats_reset() -> None:
     _native().inheritance_stats_reset()
 
 
-def signal_declare(path: str, width: int, signed: bool) -> None:
-    _native().signal_declare(path, int(width), bool(signed))
+def signal_declare(
+    path: str,
+    width: int,
+    signed: bool,
+    state_domain: str,
+    unified_type_name: str,
+    encoding_fingerprint: str,
+    binary_format_version: int,
+) -> None:
+    _native().signal_declare(
+        path,
+        int(width),
+        bool(signed),
+        state_domain,
+        unified_type_name,
+        encoding_fingerprint,
+        int(binary_format_version),
+    )
 
 
 def signal_read(path: str) -> bytes:
@@ -98,9 +114,21 @@ def channel_put_payload(
     kind: str,
     type_name: str,
     content_type: str,
+    unified_type_name: str,
+    encoding_fingerprint: str,
+    binary_format_version: int,
     data: bytes,
 ) -> None:
-    _native().channel_put_payload(name, kind, type_name, content_type, data)
+    _native().channel_put_payload(
+        name,
+        kind,
+        type_name,
+        content_type,
+        unified_type_name,
+        encoding_fingerprint,
+        binary_format_version,
+        data,
+    )
 
 
 def channel_get_payload(name: str):
@@ -116,11 +144,21 @@ def channel_try_put_payload(
     kind: str,
     type_name: str,
     content_type: str,
+    unified_type_name: str,
+    encoding_fingerprint: str,
+    binary_format_version: int,
     data: bytes,
 ) -> bool:
     return bool(
         _native().channel_try_put_payload(
-            name, kind, type_name, content_type, data
+            name,
+            kind,
+            type_name,
+            content_type,
+            unified_type_name,
+            encoding_fingerprint,
+            binary_format_version,
+            data,
         )
     )
 

@@ -1,3 +1,4 @@
+from ._version import __version__
 from .errors import (
     FATAL,
     REPORT,
@@ -27,10 +28,16 @@ from .roles import (
 )
 from .primitives import delay, display, fork_join, fork_join_any, fork_join_none
 from .test_runner import test
-from .inheritance import bind_instance, call_sv, close_instance, unbind_instance
+from .inheritance import close_instance
+from .declarations import (
+    inheritance_class,
+    inheritance_method,
+    inheritance_parameter,
+    inheritance_type,
+    manifest_from_declarations,
+)
 from .signal import Signal, declare_signal
-
-__version__ = "0.1.0"
+from .runtime import RuntimeState, state as runtime_state
 
 __all__ = [
     "FATAL",
@@ -44,6 +51,7 @@ __all__ = [
     "SVXSignalError",
     "__version__",
     "Signal",
+    "RuntimeState",
     "Channel",
     "ConfigChannel",
     "MonChannel",
@@ -52,8 +60,6 @@ __all__ = [
     "ReqRspChannel",
     "RspChannel",
     "channel",
-    "bind_instance",
-    "call_sv",
     "close_instance",
     "config_channel",
     "delay",
@@ -65,11 +71,16 @@ __all__ = [
     "fork_join_none",
     "get_exception_policy",
     "list_exports",
+    "inheritance_class",
+    "inheritance_method",
+    "inheritance_parameter",
+    "inheritance_type",
+    "manifest_from_declarations",
     "mon_channel",
     "req_channel",
     "reqrsp_channel",
     "rsp_channel",
+    "runtime_state",
     "set_exception_policy",
     "test",
-    "unbind_instance",
 ]

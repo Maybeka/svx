@@ -14,6 +14,15 @@ _UNIT_TO_CODE: dict[str, int] = {
     "ps": 4,
     "fs": 5,
 }
+_UNIT_TO_PS: dict[str, float] = {
+    "s": 10**12,
+    "ms": 10**9,
+    "us": 10**6,
+    "ns": 10**3,
+    "ps": 1,
+    "fs": 0.001,
+}
+_MAX_DELAY_TICKS = (1 << 63) - 1
 
 
 def _to_delay_args(value: int | float, unit: str) -> tuple[float, int]:
@@ -26,6 +35,10 @@ def _to_delay_args(value: int | float, unit: str) -> tuple[float, int]:
         unit_code = _UNIT_TO_CODE[unit]
     except KeyError:
         raise ValueError(f"unsupported svx.delay() unit: {unit!r}") from None
+    if duration > _MAX_DELAY_TICKS / _UNIT_TO_PS[unit]:
+        raise OverflowError(
+            f"svx.delay() value exceeds the signed 64-bit simulator tick range: {value!r} {unit}"
+        )
     return duration, unit_code
 
 

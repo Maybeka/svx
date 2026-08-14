@@ -12,6 +12,8 @@ typedef enum int {
 } e_proc_state;
 
 parameter int SVX_MAX_FORK_NUM = 32;
+parameter int SVX_CHANNEL_CAPACITY = 1024;
+parameter int SVX_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
 
 typedef enum int {
   FORK_JOIN,

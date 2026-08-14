@@ -23,7 +23,10 @@ The example uses current M1-M4 primitives only:
 Generate the SystemVerilog model:
 
 ```sh
-PYTHONPATH=python:. python3 examples/milestone_5_existing_env/generate_sv.py > examples/milestone_5_existing_env/generated_types.sv
+PYTHONPATH=python:. python3 -m svx svtypes-gen \
+  --module examples.milestone_5_existing_env.tests.types \
+  --channel-helpers \
+  --out examples/milestone_5_existing_env/generated_types.sv
 ```
 
 Integrate `tb.sv` and `tests/integration_test.py` with the target simulator's

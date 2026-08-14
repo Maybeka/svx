@@ -24,7 +24,7 @@ class TypedRoleChannel(Generic[T]):
         return self._channel
 
     def put(self, item: T) -> None:
-        self._channel.put(item)
+        self._channel.put(item, self.item_type)
 
     def get(self) -> T:
         return self._channel.get(self.item_type)
@@ -33,7 +33,7 @@ class TypedRoleChannel(Generic[T]):
         return self._channel.peek(self.item_type)
 
     def try_put(self, item: T) -> bool:
-        return self._channel.try_put(item)
+        return self._channel.try_put(item, self.item_type)
 
     def try_get(self) -> T | None:
         return self._channel.try_get(self.item_type)

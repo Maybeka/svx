@@ -1,9 +1,9 @@
 # SVX User Manual
 
-Status: active user guide for SVX 0.1.0.
+Status: active user guide for SVX 1.0.0.
 
-This manual explains how to use the current SVX milestone implementation in an
-existing SystemVerilog verification environment.
+This manual explains how to use SVX in an existing SystemVerilog verification
+environment.
 
 SVX is not a replacement simulator scheduler and it is not a new component
 framework. The intended user is a SystemVerilog verification engineer who wants
@@ -343,17 +343,18 @@ Recommended first adoption points:
   that avoids broad testbench churn
 
 Keep `raise_objection`, `drop_objection`, interface timing, sequencer policy,
-and monitor sampling in SV until a dedicated adapter milestone defines a
-stronger UVM integration layer.
+and monitor sampling in SV. A separate integration layer may build stronger
+UVM abstractions on these SVX boundaries without changing their ownership.
 
 ## 14. Object Lifecycle Rules
 
 At independent test boundaries:
 
-- clear the Python SvTypes object registry
-- clear the SV object registry when possible
+- close the active SvTypes codec session and its object-graph registries
+- clear the matching generated SV object-graph registry
 - drain channels or use unique named channels
-- do not persist `__svx_obj_id` across simulation runs
+- do not persist SvTypes graph IDs or SVX foreign-object IDs across simulation
+  runs
 - document any intentional object sharing scope
 
 For object graphs, use the current default policy:
@@ -378,8 +379,10 @@ paths.
 Prepare the M5 existing-environment example:
 
 ```sh
-PYTHONPATH=python:. python3 examples/milestone_5_existing_env/generate_sv.py \
-  > examples/milestone_5_existing_env/generated_types.sv
+PYTHONPATH=python:. python3 -m svx svtypes-gen \
+  --module examples.milestone_5_existing_env.tests.types \
+  --channel-helpers \
+  --out examples/milestone_5_existing_env/generated_types.sv
 
 ```
 
@@ -388,6 +391,7 @@ Prepare the M6 CLI workflow example:
 ```sh
 PYTHONPATH=python:. python3 -m svx svtypes-gen \
   --module examples.milestone_6_cli_workflow.tests.types \
+  --channel-helpers \
   --out examples/milestone_6_cli_workflow/generated/types.sv
 
 ```
@@ -412,11 +416,53 @@ manifest is the only runtime input. Every value binding names an SvTypes Python
 codec, its SV declaration, and its generated SV packer; SVX transports only
 object/method metadata and opaque SvTypes bytes.
 
+The manifest may be authored directly or normalized from declaration front
+ends. A Python-owned class uses explicit decorators:
+
+```python
+from svtypes import Int
+from svx import (inheritance_class, inheritance_method,
+                 inheritance_parameter, inheritance_type)
+
+INT = inheritance_type(Int, sv="int", sv_packer="int_packer")
+
+@inheritance_class(canonical_id="py://checks/BaseMonitor")
+class BaseMonitor:
+    @inheritance_method(
+        parameters=(inheritance_parameter("sample_id", INT),),
+        return_type=INT,
+        timing="function",
+    )
+    def sample(self, sample_id):
+        return sample_id
+```
+
+SV-owned declarations use a versioned JSON sidecar with schema URI
+`https://svx.dev/schema/sv-inheritance-declarations/v1`. Its `classes` entries
+use the same class shape as the manifest and must all declare `language: "sv"`.
+Normalize either or both sources before mirror generation:
+
+```sh
+python -m svx inheritance-manifest \
+  --python-module checks.base_monitor \
+  --sv-declarations sv-inheritance-declarations.json \
+  --out inheritance.json
+```
+
+Use `--check` to verify the normalized manifest without rewriting it. Both
+front ends pass through the same strict v2 manifest parser; they are not
+additional runtime contracts.
+
 ```sh
 PYTHONPATH=python:. python -m svx inheritance-gen \
   --manifest inheritance.json --python-out generated/python \
-  --sv-out generated/inheritance_mirrors.sv
+  --sv-out generated/inheritance_mirrors.sv \
+  --artifact-manifest generated/svx-artifacts.json
 ```
+
+Set `SVX_ARTIFACT_MANIFEST` to that compatibility manifest before runtime
+initialization. Use the same command with `--check` in a build verification
+step to reject stale mirrors without rewriting them.
 
 For an SV-owned `tb_pkg::BaseDriver`, derive from `svx_sv.tb_pkg.BaseDriver`.
 The generated SV `BaseDriver_python_proxy` is the base-typed object used by SV.
@@ -439,6 +485,13 @@ sides with the same typed values, binds the pair, then runs the post-bind hook.
 If either construction step fails, it rolls back both partial entries. Foreign
 virtual calls from constructors are invalid until binding completes.
 
+Python mirror signatures contain request values only: `input`, `inout`, and
+`ref`. A pure `output` parameter is not passed by the caller. A method with only
+a function result returns that result directly. When copy-out values exist,
+the method returns the generated `<Class><Method>Response` SvTypes value, with
+fields for `output`, `inout`, and `ref`, followed by `result` when present.
+Scalar fields use the normal SvTypes generated-object `.value` accessor.
+
 For Python-initiated creation, register a concrete `svx_pkg::svx_factory`
 under the manifest class ID before constructing the generated Python proxy.
 This tells the generic runtime which application SV-derived class to create;
@@ -452,18 +505,44 @@ callbacks are nonblocking and cannot consume simulator time. General
 blocking cycles are rejected when an active object/method frame repeats; the
 diagnostic includes the complete repeated-frame path.
 
-Simulator-neutral integration sources, including inheritance regressions, are
-available under `tests/integration/`. Their execution harness is maintained in
-the project's local verification environment. The public Python suite remains
-available through `pytest`.
+Integration sources, including inheritance regressions, are available under
+`tests/integration/`. The Python suite runs through `pytest`.
 
-## 18. Debug Checklist
+## 18. Hierarchical Signal Access
+
+Declare every path in one imported declaration module and initialize SVX with
+that module before loading tests:
+
+```python
+import svx
+from svtypes import Bits, LogicBits
+
+status = svx.declare_signal("tb.status", Bits(8))
+control = svx.declare_signal("tb.control", LogicBits(8))
+```
+
+```systemverilog
+svx_init_with_signal_declarations("project.signal_declarations");
+```
+
+Initialization resolves and validates the complete set before the runtime
+becomes ready. The registry is then sealed; paths cannot be added lazily.
+`read()`, `write()`, `force()`, and `release()` are synchronous operations at
+the current simulation point. A two-state codec rejects an observed X or Z.
+`LogicBits` preserves 0, 1, X, and Z through its public SvTypes value/X/Z
+planes for reads, deposits, and forces.
+
+Use this interface only for small, temporary setup, inspection, and fault
+injection. Keep repeated, signal-intensive behavior in SystemVerilog and move
+summaries or transactions through typed channels.
+
+## 19. Debug Checklist
 
 When integration fails, check:
 
 - `PYTHONPATH` includes the repository and project Python roots
 - `LD_LIBRARY_PATH` includes the SVX shared library directory
-- simulator command includes `-sv_lib <path-to-libsvx>`
+- simulator load configuration includes the `libsvx` runtime
 - generated SV matches the current Python SvTypes declarations
 - channel names match exactly
 - payload kind is `svtypes`
@@ -472,7 +551,7 @@ When integration fails, check:
 - object registries were not cleared too early
 - Python code called SVX primitives only inside an active SVX execution context
 
-## 19. Anti-Patterns
+## 20. Anti-Patterns
 
 Avoid:
 

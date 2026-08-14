@@ -4,7 +4,7 @@ from svtypes import Bits, Enum, Int, SvObject, get_package, svobj
 m6_pkg = get_package("milestone_6_cli_workflow")
 
 
-class M6BusOp(Enum):
+class M6BusOp(Enum, width=8, signed=False):
     M6_OP_READ = 0
     M6_OP_WRITE = 1
 

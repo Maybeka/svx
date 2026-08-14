@@ -120,6 +120,16 @@ PyObject *py_fork(PyObject *args, svx::e_svx_fork_join_type fork_type,
   svx::start_process_group(group, fork_type);
   svx::ExecutionContext::restore(thread_state);
 
+  if (fork_type == svx::FORK_JOIN) {
+    try {
+      group->throw_if_failed();
+    } catch (const std::exception &error) {
+      delete group;
+      PyErr_SetString(PyExc_RuntimeError, error.what());
+      return nullptr;
+    }
+  }
+
   return group_capsule(group);
 }
 
@@ -144,7 +154,15 @@ PyObject *py_group_status(PyObject *, PyObject *args) {
   if (group == nullptr) {
     return nullptr;
   }
-  return PyUnicode_FromString(group->status());
+  if (!require_context("ProcessGroup.status()")) {
+    return nullptr;
+  }
+  try {
+    return PyUnicode_FromString(group->status());
+  } catch (const std::exception &error) {
+    PyErr_SetString(PyExc_RuntimeError, error.what());
+    return nullptr;
+  }
 }
 
 PyObject *py_group_await(PyObject *, PyObject *args) {
@@ -161,7 +179,13 @@ PyObject *py_group_await(PyObject *, PyObject *args) {
   }
   const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
   PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
-  group->await_all();
+  try {
+    group->await_all();
+  } catch (const std::exception &error) {
+    svx::ExecutionContext::restore(thread_state);
+    PyErr_SetString(PyExc_RuntimeError, error.what());
+    return nullptr;
+  }
   svx::ExecutionContext::restore(thread_state);
   Py_RETURN_NONE;
 }
@@ -178,7 +202,12 @@ PyObject *py_group_kill(PyObject *, PyObject *args) {
   if (!require_context("ProcessGroup.kill()")) {
     return nullptr;
   }
-  group->kill_all();
+  try {
+    group->kill_all();
+  } catch (const std::exception &error) {
+    PyErr_SetString(PyExc_RuntimeError, error.what());
+    return nullptr;
+  }
   Py_RETURN_NONE;
 }
 
@@ -197,6 +226,9 @@ PyObject *py_inheritance_bind(PyObject *, PyObject *args) {
   if (!PyArg_ParseTuple(args, "KO", &object_id, &instance)) {
     return nullptr;
   }
+  if (!require_context("svx.inheritance.bind_instance()")) {
+    return nullptr;
+  }
   if (object_id == 0) {
     PyErr_SetString(PyExc_ValueError, "SVX inheritance object id 0 is reserved");
     return nullptr;
@@ -213,6 +245,9 @@ PyObject *py_inheritance_bind(PyObject *, PyObject *args) {
 PyObject *py_inheritance_unbind(PyObject *, PyObject *args) {
   unsigned long long object_id = 0;
   if (!PyArg_ParseTuple(args, "K", &object_id)) {
+    return nullptr;
+  }
+  if (!require_context("svx.inheritance.unbind_instance()")) {
     return nullptr;
   }
   auto it = g_inheritance_instances.find(object_id);
@@ -255,11 +290,6 @@ PyObject *py_inheritance_close(PyObject *, PyObject *args) {
   if (!require_context("svx.inheritance.close()")) {
     return nullptr;
   }
-  auto it = g_inheritance_instances.find(object_id);
-  if (it != g_inheritance_instances.end()) {
-    Py_DECREF(it->second);
-    g_inheritance_instances.erase(it);
-  }
   const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
   PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
   try {
@@ -270,6 +300,11 @@ PyObject *py_inheritance_close(PyObject *, PyObject *args) {
     return nullptr;
   }
   svx::ExecutionContext::restore(thread_state);
+  auto it = g_inheritance_instances.find(object_id);
+  if (it != g_inheritance_instances.end()) {
+    Py_DECREF(it->second);
+    g_inheritance_instances.erase(it);
+  }
   Py_RETURN_NONE;
 }
 
@@ -347,11 +382,19 @@ PyObject *py_signal_declare(PyObject *, PyObject *args) {
   const char *path = nullptr;
   int width = 0;
   int signed_value = 0;
-  if (!PyArg_ParseTuple(args, "sip", &path, &width, &signed_value)) {
+  const char *state_domain = nullptr;
+  const char *unified_type_name = nullptr;
+  const char *encoding_fingerprint = nullptr;
+  unsigned int binary_format_version = 0;
+  if (!PyArg_ParseTuple(args, "sipsssI", &path, &width, &signed_value,
+                        &state_domain, &unified_type_name, &encoding_fingerprint,
+                        &binary_format_version)) {
     return nullptr;
   }
   try {
-    svx::signal::declare_signal(path, width, signed_value != 0);
+    svx::signal::declare_signal(path, width, signed_value != 0, state_domain,
+                                unified_type_name, encoding_fingerprint,
+                                binary_format_version);
   } catch (const svx::signal::SignalError &error) {
     return raise_signal_error(error);
   }
@@ -438,9 +481,13 @@ PyObject *py_channel_put_payload(PyObject *, PyObject *args) {
   const char *kind = nullptr;
   const char *type_name = nullptr;
   const char *content_type = nullptr;
+  const char *unified_type_name = nullptr;
+  const char *encoding_fingerprint = nullptr;
+  unsigned int binary_format_version = 0;
   Py_buffer data;
-  if (!PyArg_ParseTuple(args, "ssssy*", &name, &kind, &type_name, &content_type,
-                        &data)) {
+  if (!PyArg_ParseTuple(args, "ssssssIy*", &name, &kind, &type_name,
+                        &content_type, &unified_type_name, &encoding_fingerprint,
+                        &binary_format_version, &data)) {
     return nullptr;
   }
   if (!require_context("Channel.put_payload()")) {
@@ -451,6 +498,9 @@ PyObject *py_channel_put_payload(PyObject *, PyObject *args) {
   void *payload = svx::dpi::payload_create(
       kind, type_name, content_type, static_cast<const std::uint8_t *>(data.buf),
       static_cast<std::size_t>(data.len));
+  svx::dpi::payload_set_encoding_descriptor(payload, unified_type_name,
+                                        encoding_fingerprint,
+                                        binary_format_version);
   PyBuffer_Release(&data);
 
   try {
@@ -485,9 +535,12 @@ PyObject *py_channel_get_payload(PyObject *, PyObject *args) {
   svx::ExecutionContext::restore(thread_state);
 
   PyObject *result = Py_BuildValue(
-      "sssy#", svx::dpi::payload_kind(payload),
+      "sssssIy#", svx::dpi::payload_kind(payload),
       svx::dpi::payload_type_name(payload),
       svx::dpi::payload_content_type(payload),
+      svx::dpi::payload_unified_type_name(payload),
+      svx::dpi::payload_encoding_fingerprint(payload),
+      svx::dpi::payload_binary_format_version(payload),
       reinterpret_cast<const char *>(svx::dpi::payload_data(payload)),
       static_cast<Py_ssize_t>(svx::dpi::payload_size(payload)));
   svx::dpi::payload_destroy(payload);
@@ -516,9 +569,12 @@ PyObject *py_channel_peek_payload(PyObject *, PyObject *args) {
   svx::ExecutionContext::restore(thread_state);
 
   return Py_BuildValue(
-      "sssy#", svx::dpi::payload_kind(payload),
+      "sssssIy#", svx::dpi::payload_kind(payload),
       svx::dpi::payload_type_name(payload),
       svx::dpi::payload_content_type(payload),
+      svx::dpi::payload_unified_type_name(payload),
+      svx::dpi::payload_encoding_fingerprint(payload),
+      svx::dpi::payload_binary_format_version(payload),
       reinterpret_cast<const char *>(svx::dpi::payload_data(payload)),
       static_cast<Py_ssize_t>(svx::dpi::payload_size(payload)));
 }
@@ -528,9 +584,13 @@ PyObject *py_channel_try_put_payload(PyObject *, PyObject *args) {
   const char *kind = nullptr;
   const char *type_name = nullptr;
   const char *content_type = nullptr;
+  const char *unified_type_name = nullptr;
+  const char *encoding_fingerprint = nullptr;
+  unsigned int binary_format_version = 0;
   Py_buffer data;
-  if (!PyArg_ParseTuple(args, "ssssy*", &name, &kind, &type_name, &content_type,
-                        &data)) {
+  if (!PyArg_ParseTuple(args, "ssssssIy*", &name, &kind, &type_name,
+                        &content_type, &unified_type_name, &encoding_fingerprint,
+                        &binary_format_version, &data)) {
     return nullptr;
   }
   if (!require_context("Channel.try_put_payload()")) {
@@ -541,6 +601,9 @@ PyObject *py_channel_try_put_payload(PyObject *, PyObject *args) {
   void *payload = svx::dpi::payload_create(
       kind, type_name, content_type, static_cast<const std::uint8_t *>(data.buf),
       static_cast<std::size_t>(data.len));
+  svx::dpi::payload_set_encoding_descriptor(payload, unified_type_name,
+                                        encoding_fingerprint,
+                                        binary_format_version);
   PyBuffer_Release(&data);
 
   bool ok = false;
@@ -580,9 +643,12 @@ PyObject *py_channel_try_get_payload(PyObject *, PyObject *args) {
     Py_RETURN_NONE;
   }
   PyObject *result = Py_BuildValue(
-      "sssy#", svx::dpi::payload_kind(payload),
+      "sssssIy#", svx::dpi::payload_kind(payload),
       svx::dpi::payload_type_name(payload),
       svx::dpi::payload_content_type(payload),
+      svx::dpi::payload_unified_type_name(payload),
+      svx::dpi::payload_encoding_fingerprint(payload),
+      svx::dpi::payload_binary_format_version(payload),
       reinterpret_cast<const char *>(svx::dpi::payload_data(payload)),
       static_cast<Py_ssize_t>(svx::dpi::payload_size(payload)));
   svx::dpi::payload_destroy(payload);
@@ -635,12 +701,21 @@ PyMethodDef methods[] = {
     {nullptr, nullptr, 0, nullptr},
 };
 
+void module_free(void *) {
+  Py_CLEAR(g_context_error);
+  Py_CLEAR(g_signal_error);
+}
+
 PyModuleDef module = {
     PyModuleDef_HEAD_INIT,
     "_svx_native",
     "SVX native runtime",
     -1,
     methods,
+    nullptr,
+    nullptr,
+    nullptr,
+    module_free,
 };
 
 } // namespace
@@ -654,9 +729,7 @@ PyMODINIT_FUNC PyInit__svx_native(void) {
   PyObject *errors = PyImport_ImportModule("svx.errors");
   if (errors != nullptr) {
     g_context_error = PyObject_GetAttrString(errors, "SVXContextError");
-    Py_XINCREF(g_context_error);
     g_signal_error = PyObject_GetAttrString(errors, "SVXSignalError");
-    Py_XINCREF(g_signal_error);
     Py_DECREF(errors);
   } else {
     PyErr_Clear();
@@ -716,13 +789,16 @@ extern "C" void svx_inheritance_call_python(unsigned long long object_id,
     Py_XDECREF(callable);
     Py_XDECREF(module);
     if (result == nullptr) {
-      svx::handle_python_exception(context.source());
-      message = "Python inheritance callback failed for " + std::string(method_id);
+      const std::string traceback = svx::handle_python_exception(context.source());
+      message = "Python inheritance callback failed for " + std::string(method_id) +
+                (traceback.empty() ? "" : ":\n" + traceback);
     } else {
       if (!PyBytes_Check(result)) {
         PyErr_SetString(PyExc_TypeError, "SVX inheritance dispatcher must return bytes");
-        svx::handle_python_exception(context.source());
-        message = "Python inheritance callback returned a non-bytes payload for " + std::string(method_id);
+        const std::string traceback = svx::handle_python_exception(context.source());
+        message = "Python inheritance callback returned a non-bytes payload for " +
+                  std::string(method_id) +
+                  (traceback.empty() ? "" : ":\n" + traceback);
       } else {
         if (response != nullptr) {
           *response = svx::dpi::payload_create(
@@ -797,8 +873,10 @@ extern "C" void svx_inheritance_create_python(const char *class_id,
   Py_XDECREF(callable);
   Py_XDECREF(module);
   if (result == nullptr) {
-    svx::handle_python_exception(context.source());
-    message = "Python inheritance factory failed for " + std::string(class_id ? class_id : "");
+    const std::string traceback = svx::handle_python_exception(context.source());
+    message = "Python inheritance factory failed for " +
+              std::string(class_id ? class_id : "") +
+              (traceback.empty() ? "" : ":\n" + traceback);
     if (error != nullptr) {
       *error = message.c_str();
     }

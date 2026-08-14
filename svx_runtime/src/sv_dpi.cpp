@@ -20,6 +20,9 @@ struct NativePayload {
   std::string kind;
   std::string type_name;
   std::string content_type;
+  std::string unified_type_name;
+  std::string encoding_fingerprint;
+  std::uint32_t binary_format_version = 0;
   std::vector<std::uint8_t> data;
 };
 
@@ -66,6 +69,27 @@ const char *payload_type_name(void *payload) {
 
 const char *payload_content_type(void *payload) {
   return static_cast<NativePayload *>(payload)->content_type.c_str();
+}
+
+const char *payload_unified_type_name(void *payload) {
+  return static_cast<NativePayload *>(payload)->unified_type_name.c_str();
+}
+
+const char *payload_encoding_fingerprint(void *payload) {
+  return static_cast<NativePayload *>(payload)->encoding_fingerprint.c_str();
+}
+
+std::uint32_t payload_binary_format_version(void *payload) {
+  return static_cast<NativePayload *>(payload)->binary_format_version;
+}
+
+void payload_set_encoding_descriptor(void *payload, const char *unified_type_name,
+                                 const char *encoding_fingerprint,
+                                 std::uint32_t binary_format_version) {
+  auto *native = static_cast<NativePayload *>(payload);
+  native->unified_type_name = unified_type_name ? unified_type_name : "";
+  native->encoding_fingerprint = encoding_fingerprint ? encoding_fingerprint : "";
+  native->binary_format_version = binary_format_version;
 }
 
 const std::uint8_t *payload_data(void *payload) {
@@ -187,39 +211,6 @@ bool svx_create_object(const char *class_id, void *request,
   return ok != 0;
 }
 
-int svx_signal_validate(const char *path, int width) {
-  using func_t = void (*)(const char *, int, int *);
-  int result = 0;
-  if (void *scope = svGetScopeFromName("svx_pkg")) {
-    svSetScope(scope);
-  }
-  resolve_symbol<func_t>("svx_signal_validate")(path, width, &result);
-  return result;
-}
-
-bool svx_signal_apply(const char *path, int width, void *data,
-                      std::size_t size, int operation) {
-  using func_t = void (*)(const char *, int, void *, int, int, unsigned char *);
-  unsigned char ok = 0;
-  if (void *scope = svGetScopeFromName("svx_pkg")) {
-    svSetScope(scope);
-  }
-  resolve_symbol<func_t>("svx_signal_apply")(path, width, data,
-                                                static_cast<int>(size), operation, &ok);
-  return ok != 0;
-}
-
-bool svx_signal_read(const char *path, int width, void *data, std::size_t size) {
-  using func_t = void (*)(const char *, int, void *, int, unsigned char *);
-  unsigned char ok = 0;
-  if (void *scope = svGetScopeFromName("svx_pkg")) {
-    svSetScope(scope);
-  }
-  resolve_symbol<func_t>("svx_signal_read")(path, width, data,
-                                               static_cast<int>(size), &ok);
-  return ok != 0;
-}
-
 } // namespace svx::dpi
 
 extern "C" {
@@ -254,6 +245,27 @@ const char *svx_payload_type_name(void *payload) {
 
 const char *svx_payload_content_type(void *payload) {
   return svx::dpi::payload_content_type(payload);
+}
+
+const char *svx_payload_unified_type_name(void *payload) {
+  return svx::dpi::payload_unified_type_name(payload);
+}
+
+const char *svx_payload_encoding_fingerprint(void *payload) {
+  return svx::dpi::payload_encoding_fingerprint(payload);
+}
+
+unsigned int svx_payload_binary_format_version(void *payload) {
+  return svx::dpi::payload_binary_format_version(payload);
+}
+
+void svx_payload_set_encoding_descriptor(void *payload,
+                                     const char *unified_type_name,
+                                     const char *encoding_fingerprint,
+                                     unsigned int binary_format_version) {
+  svx::dpi::payload_set_encoding_descriptor(payload, unified_type_name,
+                                        encoding_fingerprint,
+                                        binary_format_version);
 }
 
 void svx_payload_destroy(void *payload) { svx::dpi::payload_destroy(payload); }

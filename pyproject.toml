@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "svx"
-version = "0.1.0"
+version = "1.0.0"
 description = "Simulator-hosted Python verification services for SystemVerilog"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [
-  "svtypes>=0.1.0,<0.2.0",
+  "svtypes>=1.0.0,<2.0.0",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -18,6 +18,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Software Development :: Testing",
 ]
 
@@ -35,6 +36,10 @@ package-dir = {"" = "python"}
 packages = ["svx"]
 
 [tool.setuptools.data-files]
+"share/svx" = [
+  "CMakeLists.txt",
+  "LICENSE",
+]
 "share/svx/sv" = [
   "sv/svx_channel.sv",
   "sv/svx_defs.svh",
@@ -46,6 +51,26 @@ packages = ["svx"]
   "sv/svx_process.sv",
   "sv/svx_signal.sv",
   "sv/svx_timing.sv",
+]
+"share/svx/svx_runtime/include/svx" = [
+  "svx_runtime/include/svx/common.hpp",
+  "svx_runtime/include/svx/context.hpp",
+  "svx_runtime/include/svx/process.hpp",
+  "svx_runtime/include/svx/python_runtime.hpp",
+  "svx_runtime/include/svx/signal.hpp",
+  "svx_runtime/include/svx/signal_vpi.hpp",
+  "svx_runtime/include/svx/sv_dpi.hpp",
+]
+"share/svx/svx_runtime/src" = [
+  "svx_runtime/src/context.cpp",
+  "svx_runtime/src/process.cpp",
+  "svx_runtime/src/python_bindings.cpp",
+  "svx_runtime/src/python_runtime.cpp",
+  "svx_runtime/src/signal.cpp",
+  "svx_runtime/src/signal_dpi.cpp",
+  "svx_runtime/src/signal_vpi_stub.cpp",
+  "svx_runtime/src/sv_dpi.cpp",
+  "svx_runtime/src/svx.cpp",
 ]
 
 [tool.pytest.ini_options]

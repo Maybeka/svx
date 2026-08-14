@@ -23,46 +23,16 @@ module tb;
     forever #(0.5ns) clk = ~clk;
   end
 
-  function automatic void require_svtypes_payload(chandle payload, string channel_name, string expected_type);
-    if (svx_payload_kind(payload) != "svtypes") begin
-      $fatal(2, "%s expected svtypes payload, got kind %s", channel_name, svx_payload_kind(payload));
-    end
-    if (svx_payload_type_name(payload) != expected_type) begin
-      $fatal(2, "%s expected type %s, got %s", channel_name, expected_type, svx_payload_type_name(payload));
-    end
-    if (svx_payload_content_type(payload) != "application/x-svtypes") begin
-      $fatal(2, "%s expected SvTypes content type, got %s", channel_name, svx_payload_content_type(payload));
-    end
-  endfunction
-
   task automatic get_req(output M6BusReq req);
-    chandle payload;
-    byte unsigned bytes[$];
-    int offset;
-
-    svx_channel_get_payload("m6.bus.req", payload);
-    require_svtypes_payload(payload, "m6.bus.req", "M6BusReq");
-    svx_payload_to_byte_queue(payload, bytes);
-    svx_payload_destroy(payload);
-
-    req = new();
-    offset = 0;
-    req.unpack(bytes, offset);
-    if (offset != bytes.size()) begin
-      $fatal(2, "m6.bus.req unpack offset=%0d size=%0d", offset, bytes.size());
-    end
+    svx_get_M6BusReq("m6.bus.req", req);
   endtask
 
   task automatic put_rsp(input M6BusRsp rsp);
-    byte unsigned bytes[$];
-    rsp.pack(bytes);
-    svx_channel_put_byte_queue("m6.bus.rsp", bytes, "svtypes", "M6BusRsp", "application/x-svtypes");
+    svx_put_M6BusRsp("m6.bus.rsp", rsp);
   endtask
 
   task automatic put_obs(input M6BusObs obs);
-    byte unsigned bytes[$];
-    obs.pack(bytes);
-    svx_channel_put_byte_queue("m6.bus.mon", bytes, "svtypes", "M6BusObs", "application/x-svtypes");
+    svx_put_M6BusObs("m6.bus.mon", obs);
   endtask
 
   task automatic existing_style_driver();
