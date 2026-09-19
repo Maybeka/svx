@@ -21,7 +21,7 @@ Types are classified as `BuiltInType` and `UserDefinedType`.
 #### 2.2 `BuiltInType` concept
 
 Python library classes inherited from `BuiltInType`:
-- `Bits`
+- `Bit`
 - `Int` / `LongInt`
 - `Parameter`
 - `Real` / `ShortReal` / `RealTime`

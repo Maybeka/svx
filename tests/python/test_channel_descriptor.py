@@ -4,7 +4,15 @@ import pytest
 
 import svx
 from svx import runtime
-from svtypes import CodecSession, Int, SvObject, encoding_descriptor, svobj
+from svtypes import (
+    Bit,
+    CodecSession,
+    Int,
+    RandomContext,
+    SvObject,
+    encoding_descriptor,
+    svobj,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +27,11 @@ def codec_session():
 @svobj
 class ChannelItem(SvObject):
     number = Int()
+
+
+@svobj
+class RandomizedChannelItem(SvObject):
+    data = Bit(8, rand=True, cov=True)
 
 
 def test_typed_channel_transports_public_encoding_descriptor(monkeypatch):
@@ -45,6 +58,27 @@ def test_typed_channel_transports_public_encoding_descriptor(monkeypatch):
     assert args[5] == descriptor.encoding_fingerprint_hex
     assert args[6] == descriptor.binary_format_version
     assert isinstance(args[7], bytes)
+
+
+def test_typed_channel_transports_svtypes_randomized_value(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        "svx._native.channel_put_payload",
+        lambda *args: captured.setdefault("put", args),
+    )
+
+    item = RandomizedChannelItem()
+    with RandomContext(seed=17):
+        assert item.randomize() is True
+    randomized_value = item.data.value
+    assert 0 <= randomized_value <= 0xFF
+
+    svx.channel("randomized").put(item)
+    args = captured["put"]
+    monkeypatch.setattr("svx._native.channel_get_payload", lambda _name: args[1:])
+
+    received = svx.channel("randomized").get(RandomizedChannelItem)
+    assert received.data.value == randomized_value
 
 
 def test_typed_channel_checked_decode_rejects_descriptor_mismatch(monkeypatch):

@@ -2,6 +2,15 @@
 
 All notable changes to SVX are documented in this file.
 
+## Unreleased
+
+- Updates the SvTypes integration to the 1.2 public `Bit` and `Logic` codecs.
+- Keeps constrained randomization, coverage collection, and UCIS handling in
+  SvTypes; SVX transports explicitly prepared typed values without implicitly
+  randomizing or sampling them.
+- Reorganizes example documentation around current adoption paths and adds
+  generated cross-language inheritance and hierarchical signal-access examples.
+
 ## 1.0.0 - 2026-08-14
 
 - Requires the stable SvTypes `1.x` contract and validates its runtime

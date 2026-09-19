@@ -25,7 +25,7 @@ REQUIRED_RUNTIME_CAPABILITIES = SVTYPES_REQUIRED_CAPABILITIES
 MAX_CALL_PAYLOAD_BYTES = 16 * 1024 * 1024
 LEGACY_SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v1"
 _LEGACY_TYPES = {
-    "bit": {"svtypes": "svtypes.Bits(1)", "sv": "bit", "sv_packer": "bits_packer#(bit)"},
+    "bit": {"svtypes": "svtypes.Bit(1)", "sv": "bit", "sv_packer": "bits_packer#(bit)"},
     "int": {"svtypes": "svtypes.Int()", "sv": "int", "sv_packer": "int_packer"},
     "longint": {"svtypes": "svtypes.LongInt()", "sv": "longint", "sv_packer": "longint_packer"},
     "string": {"svtypes": "svtypes.String()", "sv": "string", "sv_packer": "string_packer"},

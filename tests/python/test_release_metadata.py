@@ -11,9 +11,9 @@ def test_public_version_matches_project_metadata():
     metadata = tomllib.loads(Path("pyproject.toml").read_text())
     assert metadata["project"]["version"] == "1.0.0"
     assert svx.__version__ == metadata["project"]["version"]
-    assert metadata["project"]["dependencies"] == ["svtypes>=1.0.0,<2.0.0"]
+    assert metadata["project"]["dependencies"] == ["svtypes>=1.2.0,<2.0.0"]
     release_contract = Path("docs/RELEASE_1.0.0.md").read_text()
-    assert "| SvTypes | `>=1.0.0,<2.0.0` |" in release_contract
+    assert "| SvTypes | `>=1.2.0,<2.0.0` |" in release_contract
     assert "-DSVX_ENABLE_SANITIZERS=ON" in release_contract
     requirements = Path("docs/SVX_1_0_REQUIRED_FEATURES.md").read_text()
     specification = Path("docs/SVX_SPEC.md").read_text()

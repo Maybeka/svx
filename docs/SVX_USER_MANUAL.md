@@ -61,27 +61,32 @@ verification/
 Example model:
 
 ```python
-from svtypes import Bits, Int, SvObject, get_package, svobj
+from svtypes import Bit, Int, SvObject, get_package, svobj
 
 pkg = get_package("apb_types")
 
 @svobj(registry=pkg)
 class ApbReq(SvObject):
     id = Int()
-    addr = Bits(32)
-    data = Bits(32)
-    write = Bits(1)
+    addr = Bit(32)
+    data = Bit(32)
+    write = Bit(1)
 ```
 
 SvTypes is independent from the SVX runtime. It is the data contract used by
 Python, generated SystemVerilog, and generated C++ support code.
+
+Constrained randomization, coverage collection, and UCIS export remain SvTypes
+operations. Randomize objects before sending them and sample coverage at the
+explicit verification point chosen by the testbench; SVX transports the value
+without implicitly randomizing or sampling it.
 
 ## 4. Generate SystemVerilog Types
 
 Generate matching SV classes from the Python model module:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module verification.svtypes_models.apb_types \
   --out verification/sv/generated/apb_types.sv
 ```
@@ -89,7 +94,7 @@ PYTHONPATH=python:. python3 -m svx svtypes-gen \
 Generate only selected declarations when needed:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module verification.svtypes_models.apb_types \
   --types ApbReq,ApbRsp,ApbObs \
   --out verification/sv/generated/apb_types.sv
@@ -98,7 +103,7 @@ PYTHONPATH=python:. python3 -m svx svtypes-gen \
 Generate SystemVerilog typed-channel helpers at the same time:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module verification.svtypes_models.apb_types \
   --types ApbReq,ApbRsp,ApbObs \
   --channel-helpers \
@@ -113,10 +118,10 @@ commit generated SV files or regenerate them as an explicit build step.
 Use the SVX CLI to discover package files, include paths, and simulator flags.
 
 ```sh
-PYTHONPATH=python:. python3 -m svx share
-PYTHONPATH=python:. python3 -m svx sv-files
-PYTHONPATH=python:. python3 -m svx compile-flags
-PYTHONPATH=python:. python3 -m svx libs
+PYTHONPATH=python:../svtypes/python:. python3 -m svx share
+PYTHONPATH=python:../svtypes/python:. python3 -m svx sv-files
+PYTHONPATH=python:../svtypes/python:. python3 -m svx compile-flags
+PYTHONPATH=python:../svtypes/python:. python3 -m svx libs
 ```
 
 These commands are intended to make project build scripts depend on SVX tooling
@@ -176,12 +181,12 @@ request/response and monitor channel patterns.
 
 ```python
 import svx
-from svtypes import clear_svx_object_registry
+from svtypes import clear_object_registry
 from verification.svtypes_models.apb_types import ApbObs, ApbReq, ApbRsp
 
 @svx.test
 def test_apb_smoke():
-    clear_svx_object_registry()
+    clear_object_registry()
 
     bus = svx.reqrsp_channel("env.apb0", ApbReq, ApbRsp)
     mon = svx.mon_channel("env.apb0.mon", ApbObs)
@@ -376,30 +381,34 @@ paths.
 
 ## 16. Reference Examples
 
-Prepare the M5 existing-environment example:
+Start with [the examples index](../examples/README.md). The recommended first
+end-to-end path is the typed bus testbench, followed by the focused
+cross-language inheritance and hierarchical signal-access examples as needed.
+
+Prepare the existing-environment example:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module examples.milestone_5_existing_env.tests.types \
   --channel-helpers \
   --out examples/milestone_5_existing_env/generated_types.sv
 
 ```
 
-Prepare the M6 CLI workflow example:
+Prepare the CLI workflow example:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module examples.milestone_6_cli_workflow.tests.types \
   --channel-helpers \
   --out examples/milestone_6_cli_workflow/generated/types.sv
 
 ```
 
-Prepare the M7 typed-helper example:
+Prepare the typed-bus example:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module examples.milestone_7_sv_typed_helpers.tests.types \
   --channel-helpers \
   --out examples/milestone_7_sv_typed_helpers/generated/types_and_channels.sv
@@ -454,7 +463,7 @@ front ends pass through the same strict v2 manifest parser; they are not
 additional runtime contracts.
 
 ```sh
-PYTHONPATH=python:. python -m svx inheritance-gen \
+PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
   --manifest inheritance.json --python-out generated/python \
   --sv-out generated/inheritance_mirrors.sv \
   --artifact-manifest generated/svx-artifacts.json
@@ -515,10 +524,10 @@ that module before loading tests:
 
 ```python
 import svx
-from svtypes import Bits, LogicBits
+from svtypes import Bit, Logic
 
-status = svx.declare_signal("tb.status", Bits(8))
-control = svx.declare_signal("tb.control", LogicBits(8))
+status = svx.declare_signal("tb.status", Bit(8))
+control = svx.declare_signal("tb.control", Logic(8))
 ```
 
 ```systemverilog
@@ -529,7 +538,7 @@ Initialization resolves and validates the complete set before the runtime
 becomes ready. The registry is then sealed; paths cannot be added lazily.
 `read()`, `write()`, `force()`, and `release()` are synchronous operations at
 the current simulation point. A two-state codec rejects an observed X or Z.
-`LogicBits` preserves 0, 1, X, and Z through its public SvTypes value/X/Z
+`Logic` preserves 0, 1, X, and Z through its public SvTypes value/X/Z
 planes for reads, deposits, and forces.
 
 Use this interface only for small, temporary setup, inspection, and fault

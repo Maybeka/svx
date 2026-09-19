@@ -173,7 +173,7 @@ def main():
 
 # Post-M1 (planned): keyword arguments with SvTypes marshalling
 @svx.export
-def main(*, addr: Bits(32), data: Bits(64)):
+def main(*, addr: Bit(32), data: Bit(64)):
     ...
 ```
 

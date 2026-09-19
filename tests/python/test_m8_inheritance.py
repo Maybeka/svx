@@ -365,9 +365,16 @@ def test_custom_svtypes_object_null_uses_generated_record():
 
 def test_manifest_migration_upgrades_legacy_scalar_types():
     data = manifest_data()
-    data["classes"][0]["methods"][0]["parameters"][0]["type"] = "int"
+    parameter = data["classes"][0]["methods"][0]["parameters"][0]
+    parameter["type"] = "bit"
     migrated = migrate_manifest(data)
-    assert migrated["classes"][0]["methods"][0]["parameters"][0]["type"] == INT
+    migrated_parameter = migrated["classes"][0]["methods"][0]["parameters"][0]
+    assert migrated_parameter["type"]["python"] == {
+        "module": "svtypes",
+        "symbol": "Bit",
+        "args": [1],
+        "kwargs": {},
+    }
     assert migrated["schema_version"] == "2.0.0"
 
 

@@ -16,7 +16,7 @@ SystemVerilog, manifest, generated-artifact, and runtime contracts.
 | Component | 1.0.0 contract |
 |---|---|
 | Python | 3.11 or newer |
-| SvTypes | `>=1.0.0,<2.0.0` |
+| SvTypes | `>=1.2.0,<2.0.0` |
 | Simulator | A SystemVerilog simulator with the DPI and VPI C interfaces used by SVX |
 | Required simulator behavior | SystemVerilog classes, DPI import/export, resumable calls through exported DPI tasks, and direct VPI object access |
 | Native toolchain | CMake 3.20+, C++20 compiler, and Python development headers for the simulator Python ABI |
@@ -31,7 +31,7 @@ The simulator-loadable native runtime is built with CMake because it must match
 the Python ABI used by the simulator process.
 
 ```sh
-python -m pip install 'svtypes>=1.0.0,<2.0.0'
+python -m pip install 'svtypes>=1.2.0,<2.0.0'
 python -m pip install svx==1.0.0
 cmake -S . -B build
 cmake --build build -j2

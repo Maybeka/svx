@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 
 import pytest
-from svtypes import Bits, LogicBits, LogicValue
+from svtypes import Bit, Logic, LogicValue
 
 from svx.errors import SVXSignalError
 from svx import runtime
@@ -44,10 +44,10 @@ def signal_module(monkeypatch):
 def test_declare_signal_uses_public_svtypes_metadata(signal_module):
     module, calls = signal_module
 
-    signal = module.declare_signal("tb.data", Bits(8))
+    signal = module.declare_signal("tb.data", Bit(8))
 
     assert signal.path == "tb.data"
-    descriptor = __import__("svtypes").encoding_descriptor(Bits(8))
+    descriptor = __import__("svtypes").encoding_descriptor(Bit(8))
     assert calls == [
         (
             "declare",
@@ -93,18 +93,18 @@ def test_declare_signal_rejects_codec_without_public_state_domain(signal_module)
 def test_signal_rejects_noncanonical_svtypes_payload(signal_module):
     module, _ = signal_module
 
-    class BrokenBits(Bits):
+    class BrokenBit(Bit):
         def pack(self, value):
             return b""
 
-    signal = module.declare_signal("tb.data", BrokenBits(8))
+    signal = module.declare_signal("tb.data", BrokenBit(8))
     with pytest.raises(SVXSignalError, match="returned 0 bytes"):
         signal.write(1)
 
 
 def test_four_state_signal_preserves_value_x_and_z_planes(signal_module):
     module, calls = signal_module
-    signal = module.declare_signal("tb.logic", LogicBits(8))
+    signal = module.declare_signal("tb.logic", Logic(8))
 
     assert signal.read() == LogicValue(8, value_mask=1, x_mask=2, z_mask=4)
     signal.write(LogicValue(8, value_mask=0x80, x_mask=2, z_mask=4))
