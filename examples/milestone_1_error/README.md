@@ -1,6 +1,8 @@
-# SVX Milestone 1 Error Example
+# Error Policy
 
-This example verifies the default fatal exception policy.
+[中文](README.zh-CN.md)
+
+Use this to see the default fatal exception policy at the SV/Python boundary.
 
 The exported Python function raises an uncaught exception. SVX should report the
 Python traceback and terminate simulation through the SV fatal path.

@@ -1,6 +1,9 @@
-# SVX Milestone 1 Shared State Example
+# Shared Python State
 
-This example verifies that forked Python object methods share the same Python
+[中文](README.zh-CN.md)
+
+Use this with the fork/join example to understand that forked Python object
+methods share the same Python
 heap while each simulator-owned Python process has its own execution state.
 
 The test forks two bound methods from one `SharedCounter` object:

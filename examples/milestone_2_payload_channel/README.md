@@ -1,6 +1,9 @@
-# SVX Milestone 2 Payload Channel Example
+# Raw Payload Channels
 
-This example verifies the raw payload channel layer:
+[中文](README.zh-CN.md)
+
+Use raw payload channels only when no shared SvTypes schema is appropriate. It
+demonstrates the binary payload layer:
 
 - Python puts bytes into a named channel; SV gets the same payload.
 - SV puts bytes into a named channel; Python blocks in `get_payload()` until
@@ -12,4 +15,5 @@ This example verifies the raw payload channel layer:
 
 Payloads are stored in native binary buffers and passed through SV as opaque
 `chandle` payloads. SV can inspect or copy bytes through payload accessor
-functions.
+functions. Prefer the [typed bus example](../milestone_7_sv_typed_helpers) for
+transactional verification data.

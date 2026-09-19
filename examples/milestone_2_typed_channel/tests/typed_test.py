@@ -1,10 +1,10 @@
 import svx
-from svtypes import Bits, Int, SvObject, svobj
+from svtypes import Bit, Int, SvObject, svobj
 
 
 @svobj
 class M2Transaction(SvObject):
-    addr = Bits(16)
+    addr = Bit(16)
     data = Int()
 
 

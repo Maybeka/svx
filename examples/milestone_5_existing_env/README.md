@@ -1,8 +1,9 @@
-# SVX Milestone 5 Existing-Environment Example
+# Existing SystemVerilog Environment
 
-This example demonstrates the active M5 direction: introduce current SVX into
-an existing-style SystemVerilog environment without adding a new SVX component
-framework.
+[中文](README.zh-CN.md)
+
+Use this adoption pattern to introduce SVX into an existing SystemVerilog
+environment without adding a new SVX component framework.
 
 The test keeps hardware-facing behavior in SystemVerilog:
 
@@ -12,7 +13,7 @@ The test keeps hardware-facing behavior in SystemVerilog:
 - Python owns the test intent and checking in
   `tests/integration_test.py`.
 
-The example uses current M1-M4 primitives only:
+The example uses the stable bootstrap and channel APIs:
 
 - `svx_init`, `svx_load`, and `svx_start`
 - named payload channels
@@ -23,7 +24,7 @@ The example uses current M1-M4 primitives only:
 Generate the SystemVerilog model:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module examples.milestone_5_existing_env.tests.types \
   --channel-helpers \
   --out examples/milestone_5_existing_env/generated_types.sv

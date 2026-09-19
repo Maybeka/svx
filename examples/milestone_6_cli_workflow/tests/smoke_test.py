@@ -1,6 +1,6 @@
 import svx
 
-from svtypes import clear_svx_object_registry
+from svtypes import clear_object_registry
 
 from .types import M6BusObs, M6BusOp, M6BusReq, M6BusRsp
 
@@ -29,7 +29,7 @@ def _check_obs(obs: M6BusObs, req: M6BusReq, data: int) -> None:
 
 @svx.test
 def test_smoke():
-    clear_svx_object_registry()
+    clear_object_registry()
 
     bus = svx.reqrsp_channel("m6.bus", M6BusReq, M6BusRsp)
     mon = svx.mon_channel("m6.bus.mon", M6BusObs)

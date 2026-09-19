@@ -1,6 +1,9 @@
-# SVX Milestone 1 Basic Example
+# Basic Bootstrap
 
-This example verifies the first simulator-hosted Python path:
+[中文](README.zh-CN.md)
+
+Use this as the smallest runnable SVX boundary. It establishes the
+simulator-hosted Python path:
 
 1. SV initializes SVX.
 2. SV loads a Python module.
@@ -8,8 +11,9 @@ This example verifies the first simulator-hosted Python path:
 4. Python calls `svx.display`.
 5. Python calls `svx.delay(1.5, "ns")`.
 
-Expected simulation behavior: the final SV time is advanced by 1.5 ns, rounded
-according to `svx_pkg` time precision.
+The final SV time advances by 1.5 ns, rounded according to `svx_pkg` time
+precision. Continue with the [typed bus example](../milestone_7_sv_typed_helpers)
+for a production-oriented transaction boundary.
 
 ## Build
 

@@ -1,6 +1,9 @@
-# SVX Milestone 6 CLI Workflow Example
+# CLI Generation Workflow
 
-This example demonstrates the M6 developer workflow:
+[中文](README.zh-CN.md)
+
+Use this example when integrating generated types into a project build. It
+demonstrates:
 
 - generate SV types with `python -m svx svtypes-gen`
 - use typed channel role helpers from Python
@@ -10,7 +13,7 @@ This example demonstrates the M6 developer workflow:
 Generate the SystemVerilog model:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx svtypes-gen \
+PYTHONPATH=python:../svtypes/python:. python3 -m svx svtypes-gen \
   --module examples.milestone_6_cli_workflow.tests.types \
   --channel-helpers \
   --out examples/milestone_6_cli_workflow/generated/types.sv
@@ -19,8 +22,8 @@ PYTHONPATH=python:. python3 -m svx svtypes-gen \
 Inspect SVX integration information:
 
 ```sh
-PYTHONPATH=python:. python3 -m svx share
-PYTHONPATH=python:. python3 -m svx compile-flags
+PYTHONPATH=python:../svtypes/python:. python3 -m svx share
+PYTHONPATH=python:../svtypes/python:. python3 -m svx compile-flags
 ```
 
 Integrate `tb.sv` and the generated type file using the target simulator's

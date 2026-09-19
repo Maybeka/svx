@@ -1,7 +1,9 @@
-# SVX Milestone 2 Typed Channel Example
+# Typed Channel Fundamentals
 
-This example verifies the SvTypes typed channel layer on top of raw binary
-payload channels:
+[中文](README.zh-CN.md)
+
+This focused example introduces the SvTypes typed channel layer on top of raw
+binary payload channels:
 
 - Python packs a generated `SvObject` transaction and sends it through
   `Channel.put(...)`.
@@ -24,3 +26,6 @@ PYTHONPATH=python:../svtypes/python:. python -m svx svtypes-gen \
 ```
 
 The transaction payload is never hex-encoded for transport.
+
+For a clocked driver, monitor, request/response channels, and generated helpers,
+continue with the [typed bus example](../milestone_7_sv_typed_helpers).

@@ -1,6 +1,6 @@
 import svx
 
-from svtypes import clear_svx_object_registry
+from svtypes import clear_object_registry
 
 from .types import M5BusObs, M5BusOp, M5BusReq, M5BusRsp
 
@@ -34,7 +34,7 @@ def _expect_obs(obs: M5BusObs, req: M5BusReq, data: int) -> None:
 
 @svx.export
 def python_controlled_test():
-    clear_svx_object_registry()
+    clear_object_registry()
 
     req_ch = svx.channel(REQ_CH)
     rsp_ch = svx.channel(RSP_CH)
@@ -65,7 +65,7 @@ def python_controlled_test():
 
 @svx.export
 def python_checker_failure_demo():
-    clear_svx_object_registry()
+    clear_object_registry()
 
     req_ch = svx.channel(REQ_CH)
     rsp_ch = svx.channel(RSP_CH)

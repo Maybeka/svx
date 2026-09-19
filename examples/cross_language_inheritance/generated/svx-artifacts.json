@@ -1,0 +1,107 @@
+{
+  "artifacts": [
+    {
+      "language": "python",
+      "module": "svx_py",
+      "path": "python/svx_py/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_sv",
+      "path": "python/svx_sv/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_sv.example_driver_pkg",
+      "path": "python/svx_sv/example_driver_pkg.py",
+      "sha256": "37620cad7c6460f593258b505a5860db2bc17ac9a91e375e7ac0f1e9f996040f"
+    },
+    {
+      "language": "systemverilog",
+      "path": "inheritance_mirrors.sv",
+      "sha256": "3fc5a7a7d5a7a326e867c8ca428da80c4b4cc4ef0612952a819aa03c88bed571"
+    }
+  ],
+  "callables": [
+    {
+      "canonical_id": "sv://example_driver_pkg/BaseDriver#drive",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "address",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
+          "unified_type_name": "svx.call.86f748b0f942491f81473a4563febe5cfa7a008a569547262a9ac6cd5f99dca5.request"
+        },
+        "sv_class": "SVXCall_f7e67d72441526fcfdd5_Request",
+        "unified_type_name": "svx.call.86f748b0f942491f81473a4563febe5cfa7a008a569547262a9ac6cd5f99dca5.request"
+      },
+      "response_fields": [],
+      "response_record": null
+    }
+  ],
+  "classes": [
+    "sv://example_driver_pkg/BaseDriver"
+  ],
+  "constructors": [
+    {
+      "canonical_class_id": "sv://example_driver_pkg/BaseDriver",
+      "initiator": "sv",
+      "request_fields": [
+        {
+          "name": "seed",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
+          "unified_type_name": "svx.call.57e2e09b6d1daed50ce1d6efc2f895dc2e28edbdfaa7ebcb82ea6129a462b0b9.request"
+        },
+        "sv_class": "SVXCall_c2eb9d859eefbf2f83fd_Request",
+        "unified_type_name": "svx.call.57e2e09b6d1daed50ce1d6efc2f895dc2e28edbdfaa7ebcb82ea6129a462b0b9.request"
+      }
+    }
+  ],
+  "generator_abi_version": 2,
+  "inheritance_manifest": {
+    "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+    "schema_version": "2.0.0"
+  },
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/generated-artifacts/v1",
+  "schema_version": "1.0.0",
+  "svtypes": {
+    "required_package_major": 1
+  },
+  "svx_runtime_abi_version": 1,
+  "types": [
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+        "unified_type_name": "svtypes.Int"
+      },
+      "python": {
+        "args": [],
+        "kwargs": {},
+        "module": "svtypes",
+        "symbol": "Int"
+      },
+      "unified_type_name": "svtypes.Int"
+    }
+  ]
+}

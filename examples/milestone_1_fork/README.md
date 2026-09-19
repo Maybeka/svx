@@ -1,6 +1,9 @@
-# SVX Milestone 1 Fork Example
+# Simulator-Backed Fork/Join
 
-This example verifies simulator-backed Python fork services:
+[中文](README.zh-CN.md)
+
+Use this when Python test intent needs simulator-owned concurrent work. It
+demonstrates:
 
 - `svx.fork_join`
 - `svx.fork_join_any`

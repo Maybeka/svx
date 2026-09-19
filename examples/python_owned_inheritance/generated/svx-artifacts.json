@@ -1,0 +1,114 @@
+{
+  "artifacts": [
+    {
+      "language": "python",
+      "module": "svx_py",
+      "path": "python/svx_py/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_py.examples.python_owned_inheritance.base_monitor",
+      "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py",
+      "sha256": "be9d8851f0a6d74c76d017209cd44ac0aaddc73d084363690871c1355fe8cf72"
+    },
+    {
+      "language": "python",
+      "module": "svx_sv",
+      "path": "python/svx_sv/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "systemverilog",
+      "path": "inheritance_mirrors.sv",
+      "sha256": "848cb4b7203133344f5d153eb938ffb8f0fa911daf4383b554f6543315d52144"
+    }
+  ],
+  "callables": [
+    {
+      "canonical_id": "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify",
+      "request_fields": [],
+      "request_record": null,
+      "response_fields": [],
+      "response_record": null
+    },
+    {
+      "canonical_id": "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample",
+      "request_fields": [],
+      "request_record": null,
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "result",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
+          "unified_type_name": "svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response"
+        },
+        "sv_class": "SVXCall_9a2f5982598a02ada022_Response",
+        "unified_type_name": "svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response"
+      }
+    }
+  ],
+  "classes": [
+    "py://examples/python_owned_inheritance/base_monitor/BaseMonitor"
+  ],
+  "constructors": [
+    {
+      "canonical_class_id": "py://examples/python_owned_inheritance/base_monitor/BaseMonitor",
+      "initiator": "python",
+      "request_fields": [
+        {
+          "name": "seed",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
+          "unified_type_name": "svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request"
+        },
+        "sv_class": "SVXCall_39a3c03013ca5ac1a853_Request",
+        "unified_type_name": "svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request"
+      }
+    }
+  ],
+  "generator_abi_version": 2,
+  "inheritance_manifest": {
+    "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+    "schema_version": "2.0.0"
+  },
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/generated-artifacts/v1",
+  "schema_version": "1.0.0",
+  "svtypes": {
+    "required_package_major": 1
+  },
+  "svx_runtime_abi_version": 1,
+  "types": [
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+        "unified_type_name": "svtypes.Int"
+      },
+      "python": {
+        "args": [],
+        "kwargs": {},
+        "module": "svtypes",
+        "symbol": "Int"
+      },
+      "unified_type_name": "svtypes.Int"
+    }
+  ]
+}

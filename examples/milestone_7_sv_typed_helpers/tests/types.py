@@ -1,4 +1,4 @@
-from svtypes import Bits, Enum, Int, SvObject, get_package, svobj
+from svtypes import Bit, Enum, Int, SvObject, get_package, svobj
 
 
 m7_pkg = get_package("milestone_7_sv_typed_helpers")
@@ -13,20 +13,20 @@ class M7BusOp(Enum, width=8, signed=False):
 class M7BusReq(SvObject):
     id = Int()
     op = M7BusOp()
-    addr = Bits(8)
-    data = Bits(32)
+    addr = Bit(8)
+    data = Bit(32)
 
 
 @svobj(registry=m7_pkg)
 class M7BusRsp(SvObject):
     id = Int()
-    ok = Bits(1)
-    data = Bits(32)
+    ok = Bit(1)
+    data = Bit(32)
 
 
 @svobj(registry=m7_pkg)
 class M7BusObs(SvObject):
     id = Int()
     op = M7BusOp()
-    addr = Bits(8)
-    data = Bits(32)
+    addr = Bit(8)
+    data = Bit(32)
