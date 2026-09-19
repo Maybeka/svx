@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include <Python.h>
@@ -8,20 +9,21 @@ namespace svx {
 
 class ExecutionContext {
 public:
-  explicit ExecutionContext(std::string source);
+  struct State;
+
+  explicit ExecutionContext(std::string source, int process_index = -1);
   ~ExecutionContext();
 
   static bool is_active();
-  static const ExecutionContext *current();
+  static PyThreadState *current_thread_state();
+  static int current_process_index();
   static void restore(PyThreadState *thread_state);
 
   const char *source() const;
   PyThreadState *thread_state() const;
 
 private:
-  std::string m_source;
-  PyThreadState *m_thread_state;
-  const ExecutionContext *m_previous;
+  std::shared_ptr<State> m_state;
 };
 
 } // namespace svx

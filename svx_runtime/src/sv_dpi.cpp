@@ -13,8 +13,34 @@
 
 namespace {
 
+extern "C" void *svGetScope();
 extern "C" void *svGetScopeFromName(const char *);
-extern "C" void svSetScope(void *);
+extern "C" void *svSetScope(void *);
+extern "C" int svIsDisabledState();
+extern "C" void svAckDisabledState();
+
+class ScopedDpiScope {
+public:
+  ScopedDpiScope() : m_previous(svGetScope()) {
+    void *svx_scope = svGetScopeFromName("svx_pkg");
+    if (svx_scope == nullptr) {
+      throw std::runtime_error("SVX could not resolve DPI scope: svx_pkg");
+    }
+    svSetScope(svx_scope);
+  }
+
+  ~ScopedDpiScope() {
+    if (m_previous != nullptr) {
+      svSetScope(m_previous);
+    }
+  }
+
+  ScopedDpiScope(const ScopedDpiScope &) = delete;
+  ScopedDpiScope &operator=(const ScopedDpiScope &) = delete;
+
+private:
+  void *m_previous;
+};
 
 struct NativePayload {
   std::string kind;
@@ -101,37 +127,57 @@ std::size_t payload_size(void *payload) {
   return static_cast<NativePayload *>(payload)->data.size();
 }
 
-void delay_svx(double duration, int unit_code) {
-  using func_t = void (*)(double, int);
-  if (void *scope = svGetScopeFromName("svx_pkg")) {
-    svSetScope(scope);
+bool delay_svx(double duration, int unit_code, int process_index) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(double, int, int, unsigned char *);
+  unsigned char cancelled = 0;
+  resolve_symbol<func_t>("delay_svx")(duration, unit_code, process_index,
+                                       &cancelled);
+  return cancelled != 0 || svIsDisabledState() != 0;
+}
+
+bool disabled_state() { return svIsDisabledState() != 0; }
+
+void acknowledge_disabled_state() {
+  if (disabled_state()) {
+    svAckDisabledState();
   }
-  resolve_symbol<func_t>("delay_svx")(duration, unit_code);
 }
 
 void fork_svx(void *group, void *procs[SVX_MAX_FORK_NUM],
               e_svx_fork_join_type fork_type) {
+  ScopedDpiScope scope;
   using func_t = void (*)(void *, void **, e_svx_fork_join_type);
   resolve_symbol<func_t>("fork_svx")(group, procs, fork_type);
 }
 
 e_proc_state proc_status_svx(int index) {
+  ScopedDpiScope scope;
   using func_t = e_proc_state (*)(int);
   return resolve_symbol<func_t>("proc_status_svx")(index);
 }
 
 void kill_proc_svx(int index) {
+  ScopedDpiScope scope;
   using func_t = void (*)(int);
   resolve_symbol<func_t>("kill_proc_svx")(index);
 }
 
+void request_cancel_proc_svx(int index) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(int);
+  resolve_symbol<func_t>("request_cancel_proc_svx")(index);
+}
+
 void await_proc_svx(int index) {
+  ScopedDpiScope scope;
   using func_t = void (*)(int);
   resolve_symbol<func_t>("await_proc_svx")(index);
 }
 
 void svx_fatal_svx(const char *source, const char *message) {
   try {
+    ScopedDpiScope scope;
     using func_t = void (*)(const char *, const char *);
     resolve_symbol<func_t>("svx_fatal_svx")(source, message);
   } catch (const std::exception &) {
@@ -140,45 +186,57 @@ void svx_fatal_svx(const char *source, const char *message) {
   }
 }
 
-void svx_channel_put_payload(const char *name, void *payload) {
-  using func_t = void (*)(const char *, void *);
-  resolve_symbol<func_t>("svx_channel_put_payload")(name, payload);
+bool svx_channel_put_payload(const char *name, void *payload, int process_index) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(const char *, void *, int, unsigned char *);
+  unsigned char cancelled = 0;
+  resolve_symbol<func_t>("svx_channel_put_payload")(name, payload, process_index,
+                                                       &cancelled);
+  return cancelled != 0;
 }
 
-void *svx_channel_get_payload(const char *name) {
-  using func_t = void (*)(const char *, void **);
+void *svx_channel_get_payload(const char *name, int process_index, bool *cancelled) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(const char *, int, void **, unsigned char *);
   void *payload = nullptr;
-  resolve_symbol<func_t>("svx_channel_get_payload")(name, &payload);
+  unsigned char was_cancelled = 0;
+  resolve_symbol<func_t>("svx_channel_get_payload")(name, process_index, &payload,
+                                                       &was_cancelled);
+  if (cancelled != nullptr) *cancelled = was_cancelled != 0;
   return payload;
 }
 
-void *svx_channel_peek_payload(const char *name) {
-  using func_t = void (*)(const char *, void **);
+void *svx_channel_peek_payload(const char *name, int process_index, bool *cancelled) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(const char *, int, void **, unsigned char *);
   void *payload = nullptr;
-  resolve_symbol<func_t>("svx_channel_peek_payload")(name, &payload);
+  unsigned char was_cancelled = 0;
+  resolve_symbol<func_t>("svx_channel_peek_payload")(name, process_index, &payload,
+                                                        &was_cancelled);
+  if (cancelled != nullptr) *cancelled = was_cancelled != 0;
   return payload;
 }
 
 bool svx_channel_try_put_payload(const char *name, void *payload) {
+  ScopedDpiScope scope;
   using func_t = unsigned char (*)(const char *, void *);
   return resolve_symbol<func_t>("svx_channel_try_put_payload")(name, payload) != 0;
 }
 
 void *svx_channel_try_get_payload(const char *name) {
+  ScopedDpiScope scope;
   using func_t = void *(*)(const char *);
   return resolve_symbol<func_t>("svx_channel_try_get_payload")(name);
 }
 
 bool svx_invoke_object(std::uint64_t object_id, const char *method_id,
                        void *request, void **response, std::string *error) {
+  ScopedDpiScope scope;
   using func_t = void (*)(std::uint64_t, const char *, void *, unsigned char *,
                           void **, const char **);
   unsigned char ok = 0;
   const char *message = "";
   void *result = nullptr;
-  if (void *scope = svGetScopeFromName("svx_pkg")) {
-    svSetScope(scope);
-  }
   resolve_symbol<func_t>("svx_invoke_object")(object_id, method_id, request,
                                                 &ok, &result, &message);
   if (response != nullptr) {
@@ -191,20 +249,19 @@ bool svx_invoke_object(std::uint64_t object_id, const char *method_id,
 }
 
 void svx_release_object(std::uint64_t object_id) {
+  ScopedDpiScope scope;
   using func_t = void (*)(std::uint64_t);
   resolve_symbol<func_t>("svx_release_object")(object_id);
 }
 
 bool svx_create_object(const char *class_id, void *request,
                        std::uint64_t *object_id, std::string *error) {
+  ScopedDpiScope scope;
   using func_t = void (*)(const char *, void *, unsigned char *, std::uint64_t *,
                           const char **);
   unsigned char ok = 0;
   std::uint64_t result = 0;
   const char *message = "";
-  if (void *scope = svGetScopeFromName("svx_pkg")) {
-    svSetScope(scope);
-  }
   resolve_symbol<func_t>("svx_create_object")(class_id, request, &ok, &result, &message);
   if (object_id != nullptr) *object_id = result;
   if (error != nullptr) *error = message ? message : "";

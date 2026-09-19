@@ -9,6 +9,8 @@
 #include "svx/python_runtime.hpp"
 #include "svx/sv_dpi.hpp"
 
+extern "C" int svx_python_cancellation_pending();
+
 namespace svx {
 namespace {
 std::unordered_set<ProcessGroup *> g_process_groups;
@@ -30,9 +32,21 @@ PythonProcess::~PythonProcess() {
 
 int PythonProcess::exec() {
   PyThreadState *prev = PyThreadState_Swap(m_thread_state);
-  ExecutionContext ctx("svx_process");
+  ExecutionContext ctx("svx_process", m_sv_index);
   PyObject *result = PyObject_CallNoArgs(m_callable);
   if (result == nullptr) {
+    if (dpi::disabled_state()) {
+      PyErr_Clear();
+      m_cancelled = true;
+      PyThreadState_Swap(prev);
+      return 1;
+    }
+    if (svx_python_cancellation_pending() != 0) {
+      PyErr_Clear();
+      m_cancelled = true;
+      PyThreadState_Swap(prev);
+      return 0;
+    }
     m_failed = true;
     handle_python_exception(ctx.source());
     PyThreadState_Swap(prev);
@@ -48,6 +62,8 @@ void PythonProcess::set_sv_index(int index) { m_sv_index = index; }
 int PythonProcess::sv_index() const { return m_sv_index; }
 
 bool PythonProcess::failed() const { return m_failed; }
+
+bool PythonProcess::cancelled() const { return m_cancelled; }
 
 ProcessGroup::ProcessGroup(std::vector<PythonProcess *> children)
     : m_children(std::move(children)) {
@@ -91,11 +107,11 @@ const char *ProcessGroup::status() const {
     }
   }
 
-  if (any_running) {
-    return "running";
-  }
   if (m_killed) {
     return "killed";
+  }
+  if (any_running) {
+    return "running";
   }
   if (all_finished) {
     return "finished";
@@ -130,7 +146,7 @@ void ProcessGroup::kill_all() {
   if (m_stale) throw std::runtime_error("SVX process group belongs to a stopped session");
   for (const PythonProcess *child : m_children) {
     if (child->sv_index() >= 0) {
-      dpi::kill_proc_svx(child->sv_index());
+      dpi::request_cancel_proc_svx(child->sv_index());
     }
   }
   m_killed = true;
@@ -191,11 +207,15 @@ void shutdown_process_groups() {
 
 extern "C" {
 
-void svx_process__exec(void *proc) {
+int svx_process__exec(void *proc) {
   if (proc == nullptr) {
-    return;
+    return 0;
   }
-  static_cast<svx::PythonProcess *>(proc)->exec();
+  const int result = static_cast<svx::PythonProcess *>(proc)->exec();
+  if (result != 0) {
+    svx::dpi::acknowledge_disabled_state();
+  }
+  return result;
 }
 
 void svx_process__set_svobj_idx(void *proc, int index) {

@@ -28,7 +28,7 @@ void runtime_init_with_signal_declarations(
     std::uint32_t sv_runtime_abi_version, const char *sv_product_version,
     const char *module_name);
 void runtime_load(const char *module_name);
-void runtime_start(const char *export_name);
+bool runtime_start(const char *export_name);
 void runtime_shutdown();
 RuntimeState runtime_state();
 const char *runtime_state_name();

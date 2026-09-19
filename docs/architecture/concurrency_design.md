@@ -126,7 +126,7 @@ class ProcessGroup:
         Uses trailing underscore because 'await' is a Python keyword."""
 
     def kill(self) -> None:
-        """Kill all children that are still running."""
+        """Request cooperative termination of all children that are still running."""
 
     def kill_running(self) -> None:
         """Alias for kill(); provided for fork_join_any readability."""
@@ -141,8 +141,8 @@ class ProcessStatus(Enum):
 
 - Each child maps to an SV `process` handle stored in `svx_process_manager`.
 - The process manager assigns integer indices, shared with the C++ side via `svx_process__set_svobj_idx`.
-- `status()` aggregates across all children: returns `RUNNING` if any child is still running or waiting, `KILLED` if no child is running and at least one child was killed, and `FINISHED` only if all children completed normally.
-- `kill()` iterates all children and calls `process::kill()` on the SV side.
+- `status()` reports `KILLED` once `kill()` has requested termination for the group; otherwise it returns `RUNNING` while any child is still running or waiting, and `FINISHED` only if all children completed normally.
+- `kill()` requests cooperative termination for each child. Blocking SVX primitives observe that request, return control to Python through an internal cancellation exception, and therefore allow Python `finally` blocks to run. The child supervisor then terminates SV descendants created by that child after Python has returned.
 - `await_()` blocks the calling SV process via `process::await()` for each child.
 
 ## 5. Process Lifecycle States

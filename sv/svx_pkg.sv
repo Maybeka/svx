@@ -7,8 +7,8 @@ package svx_pkg;
 
   `include "sv/svx_defs.svh"
   `include "sv/svx_init.sv"
-  `include "sv/svx_timing.sv"
   `include "sv/svx_process.sv"
+  `include "sv/svx_timing.sv"
   `include "sv/svx_fork.sv"
   `include "sv/svx_channel.sv"
   `include "sv/svx_inheritance.sv"

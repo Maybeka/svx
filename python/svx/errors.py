@@ -10,6 +10,10 @@ class SVXContextError(SVXError):
     """Raised when an SVX primitive is called outside an SVX context."""
 
 
+class SVXCancellationError(SVXError):
+    """Raised internally when an SVX process is stopped cooperatively."""
+
+
 class SVXExportError(SVXError):
     """Raised when export registration or resolution fails."""
 

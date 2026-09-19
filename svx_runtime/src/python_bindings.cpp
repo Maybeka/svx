@@ -18,6 +18,7 @@ namespace {
 
 PyObject *g_context_error = nullptr;
 PyObject *g_signal_error = nullptr;
+PyObject *g_cancelled_error = nullptr;
 std::unordered_map<unsigned long long, PyObject *> g_inheritance_instances;
 thread_local std::vector<std::string> g_inheritance_call_frames;
 std::uint64_t g_inheritance_callback_count = 0;
@@ -49,6 +50,13 @@ PyObject *raise_signal_error(const svx::signal::SignalError &error) {
   return nullptr;
 }
 
+PyObject *raise_cancellation(PyThreadState *thread_state) {
+  svx::ExecutionContext::restore(thread_state);
+  PyErr_SetString(g_cancelled_error ? g_cancelled_error : PyExc_RuntimeError,
+                  "SVX execution cancelled");
+  return nullptr;
+}
+
 PyObject *py_display(PyObject *, PyObject *args) {
   const char *message = nullptr;
   if (!PyArg_ParseTuple(args, "s", &message)) {
@@ -71,10 +79,14 @@ PyObject *py_delay(PyObject *, PyObject *args) {
     return nullptr;
   }
 
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   try {
-    svx::dpi::delay_svx(duration, unit_code);
+    if (svx::dpi::delay_svx(
+            duration, unit_code,
+            svx::ExecutionContext::current_process_index())) {
+      return raise_cancellation(thread_state);
+    }
   } catch (const std::exception &e) {
     svx::ExecutionContext::restore(thread_state);
     PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -115,8 +127,8 @@ PyObject *py_fork(PyObject *args, svx::e_svx_fork_join_type fork_type,
     return nullptr;
   }
 
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   svx::start_process_group(group, fork_type);
   svx::ExecutionContext::restore(thread_state);
 
@@ -177,8 +189,8 @@ PyObject *py_group_await(PyObject *, PyObject *args) {
   if (!require_context("ProcessGroup.await_()")) {
     return nullptr;
   }
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   try {
     group->await_all();
   } catch (const std::exception &error) {
@@ -290,8 +302,8 @@ PyObject *py_inheritance_close(PyObject *, PyObject *args) {
   if (!require_context("svx.inheritance.close()")) {
     return nullptr;
   }
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   try {
     svx::dpi::svx_release_object(object_id);
   } catch (const std::exception &exception) {
@@ -325,8 +337,8 @@ PyObject *py_inheritance_call_sv(PyObject *, PyObject *args) {
   PyBuffer_Release(&request);
   void *response = nullptr;
   std::string error;
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   bool ok = false;
   try {
     ok = svx::dpi::svx_invoke_object(object_id, method_id, payload, &response, &error);
@@ -366,8 +378,8 @@ PyObject *py_inheritance_create_sv(PyObject *, PyObject *args) {
   PyBuffer_Release(&request);
   std::uint64_t object_id = 0;
   std::string error;
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   bool ok = svx::dpi::svx_create_object(class_id, payload, &object_id, &error);
   svx::ExecutionContext::restore(thread_state);
   svx::dpi::payload_destroy(payload);
@@ -504,7 +516,12 @@ PyObject *py_channel_put_payload(PyObject *, PyObject *args) {
   PyBuffer_Release(&data);
 
   try {
-    svx::dpi::svx_channel_put_payload(name, payload);
+    const bool cancelled = svx::dpi::svx_channel_put_payload(
+        name, payload, svx::ExecutionContext::current_process_index());
+    if (cancelled) {
+      svx::dpi::payload_destroy(payload);
+      return raise_cancellation(svx::ExecutionContext::current_thread_state());
+    }
   } catch (const std::exception &e) {
     svx::dpi::payload_destroy(payload);
     PyErr_SetString(PyExc_RuntimeError, e.what());
@@ -522,17 +539,20 @@ PyObject *py_channel_get_payload(PyObject *, PyObject *args) {
     return nullptr;
   }
 
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   void *payload = nullptr;
+  bool cancelled = false;
   try {
-    payload = svx::dpi::svx_channel_get_payload(name);
+    payload = svx::dpi::svx_channel_get_payload(
+        name, svx::ExecutionContext::current_process_index(), &cancelled);
   } catch (const std::exception &e) {
     svx::ExecutionContext::restore(thread_state);
     PyErr_SetString(PyExc_RuntimeError, e.what());
     return nullptr;
   }
   svx::ExecutionContext::restore(thread_state);
+  if (cancelled) return raise_cancellation(thread_state);
 
   PyObject *result = Py_BuildValue(
       "sssssIy#", svx::dpi::payload_kind(payload),
@@ -556,17 +576,20 @@ PyObject *py_channel_peek_payload(PyObject *, PyObject *args) {
     return nullptr;
   }
 
-  const svx::ExecutionContext *ctx = svx::ExecutionContext::current();
-  PyThreadState *thread_state = ctx ? ctx->thread_state() : PyThreadState_Get();
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   void *payload = nullptr;
+  bool cancelled = false;
   try {
-    payload = svx::dpi::svx_channel_peek_payload(name);
+    payload = svx::dpi::svx_channel_peek_payload(
+        name, svx::ExecutionContext::current_process_index(), &cancelled);
   } catch (const std::exception &e) {
     svx::ExecutionContext::restore(thread_state);
     PyErr_SetString(PyExc_RuntimeError, e.what());
     return nullptr;
   }
   svx::ExecutionContext::restore(thread_state);
+  if (cancelled) return raise_cancellation(thread_state);
 
   return Py_BuildValue(
       "sssssIy#", svx::dpi::payload_kind(payload),
@@ -704,6 +727,7 @@ PyMethodDef methods[] = {
 void module_free(void *) {
   Py_CLEAR(g_context_error);
   Py_CLEAR(g_signal_error);
+  Py_CLEAR(g_cancelled_error);
 }
 
 PyModuleDef module = {
@@ -730,6 +754,7 @@ PyMODINIT_FUNC PyInit__svx_native(void) {
   if (errors != nullptr) {
     g_context_error = PyObject_GetAttrString(errors, "SVXContextError");
     g_signal_error = PyObject_GetAttrString(errors, "SVXSignalError");
+    g_cancelled_error = PyObject_GetAttrString(errors, "SVXCancellationError");
     Py_DECREF(errors);
   } else {
     PyErr_Clear();
@@ -738,11 +763,15 @@ PyMODINIT_FUNC PyInit__svx_native(void) {
   return m;
 }
 
-extern "C" void svx_inheritance_call_python(unsigned long long object_id,
-                                              const char *method_id,
-                                              void *request, unsigned char *ok,
-                                              void **response,
-                                              const char **error) {
+extern "C" int svx_python_cancellation_pending() {
+  return g_cancelled_error != nullptr && PyErr_ExceptionMatches(g_cancelled_error);
+}
+
+extern "C" int svx_inheritance_call_python(unsigned long long object_id,
+                                             const char *method_id,
+                                             void *request, unsigned char *ok,
+                                             void **response,
+                                             const char **error) {
   static thread_local std::string message;
   message.clear();
   if (ok != nullptr) {
@@ -769,7 +798,7 @@ extern "C" void svx_inheritance_call_python(unsigned long long object_id,
       *error = message.c_str();
     }
     PyGILState_Release(gstate);
-    return;
+    return 0;
   }
   g_inheritance_call_frames.push_back(frame);
   const auto callback_started = std::chrono::steady_clock::now();
@@ -817,7 +846,7 @@ extern "C" void svx_inheritance_call_python(unsigned long long object_id,
     }
     PyGILState_Release(gstate);
     g_inheritance_call_frames.pop_back();
-    return;
+    return 0;
   }
 
   g_inheritance_callback_count++;
@@ -830,9 +859,10 @@ extern "C" void svx_inheritance_call_python(unsigned long long object_id,
   }
   PyGILState_Release(gstate);
   g_inheritance_call_frames.pop_back();
+  return 0;
 }
 
-extern "C" void svx_inheritance_shutdown() {
+extern "C" int svx_inheritance_shutdown() {
   PyGILState_STATE gstate = PyGILState_Ensure();
   for (auto &[object_id, instance] : g_inheritance_instances) {
     (void)object_id;
@@ -842,13 +872,14 @@ extern "C" void svx_inheritance_shutdown() {
   g_inheritance_call_frames.clear();
   PyGILState_Release(gstate);
   svx::signal::shutdown();
+  return 0;
 }
 
-extern "C" void svx_inheritance_create_python(const char *class_id,
-                                                unsigned long long object_id,
-                                                void *request,
-                                                unsigned char *ok,
-                                                const char **error) {
+extern "C" int svx_inheritance_create_python(const char *class_id,
+                                               unsigned long long object_id,
+                                               void *request,
+                                               unsigned char *ok,
+                                               const char **error) {
   static thread_local std::string message;
   message.clear();
   if (ok != nullptr) {
@@ -881,19 +912,20 @@ extern "C" void svx_inheritance_create_python(const char *class_id,
       *error = message.c_str();
     }
     PyGILState_Release(gstate);
-    return;
+    return 0;
   }
   Py_DECREF(result);
   if (ok != nullptr) {
     *ok = 1;
   }
   PyGILState_Release(gstate);
+  return 0;
 }
 
 extern "C" void *svx_inheritance_call_python_function(
     unsigned long long object_id, const char *method_id, void *request,
     unsigned char *ok, const char **error) {
   void *response = nullptr;
-  svx_inheritance_call_python(object_id, method_id, request, ok, &response, error);
+  (void)svx_inheritance_call_python(object_id, method_id, request, ok, &response, error);
   return response;
 }

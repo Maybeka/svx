@@ -10,11 +10,14 @@ namespace svx::dpi {
 
 inline constexpr std::size_t SVX_MAX_PAYLOAD_BYTES = 16U * 1024U * 1024U;
 
-void delay_svx(double duration, int unit_code);
+bool delay_svx(double duration, int unit_code, int process_index);
+bool disabled_state();
+void acknowledge_disabled_state();
 void fork_svx(void *group, void *procs[SVX_MAX_FORK_NUM],
               e_svx_fork_join_type fork_type);
 e_proc_state proc_status_svx(int index);
 void kill_proc_svx(int index);
+void request_cancel_proc_svx(int index);
 void await_proc_svx(int index);
 void svx_fatal_svx(const char *source, const char *message);
 void *payload_create(const char *kind, const char *type_name,
@@ -33,9 +36,9 @@ void payload_set_encoding_descriptor(void *payload, const char *unified_type_nam
 const std::uint8_t *payload_data(void *payload);
 std::size_t payload_size(void *payload);
 
-void svx_channel_put_payload(const char *name, void *payload);
-void *svx_channel_get_payload(const char *name);
-void *svx_channel_peek_payload(const char *name);
+bool svx_channel_put_payload(const char *name, void *payload, int process_index);
+void *svx_channel_get_payload(const char *name, int process_index, bool *cancelled);
+void *svx_channel_peek_payload(const char *name, int process_index, bool *cancelled);
 bool svx_channel_try_put_payload(const char *name, void *payload);
 void *svx_channel_try_get_payload(const char *name);
 

@@ -3,25 +3,39 @@
 #include <unordered_map>
 
 namespace {
-std::unordered_map<PyThreadState *, const svx::ExecutionContext *> g_contexts;
+std::unordered_map<PyThreadState *, std::shared_ptr<svx::ExecutionContext::State>>
+    g_contexts;
 }
 
 namespace svx {
 
-ExecutionContext::ExecutionContext(std::string source)
-    : m_source(std::move(source)), m_thread_state(PyThreadState_Get()), m_previous(nullptr) {
-  auto it = g_contexts.find(m_thread_state);
+struct ExecutionContext::State {
+  std::string source;
+  PyThreadState *thread_state;
+  int process_index;
+  std::shared_ptr<State> previous;
+};
+
+ExecutionContext::ExecutionContext(std::string source, int process_index) {
+  PyThreadState *thread_state = PyThreadState_Get();
+  std::shared_ptr<State> previous;
+  auto it = g_contexts.find(thread_state);
   if (it != g_contexts.end()) {
-    m_previous = it->second;
+    previous = it->second;
+    if (process_index < 0) {
+      process_index = previous->process_index;
+    }
   }
-  g_contexts[m_thread_state] = this;
+  m_state = std::make_shared<State>(State{std::move(source), thread_state,
+                                          process_index, std::move(previous)});
+  g_contexts[thread_state] = m_state;
 }
 
 ExecutionContext::~ExecutionContext() {
-  auto it = g_contexts.find(m_thread_state);
-  if (it != g_contexts.end() && it->second == this) {
-    if (m_previous != nullptr) {
-      it->second = m_previous;
+  auto it = g_contexts.find(m_state->thread_state);
+  if (it != g_contexts.end() && it->second == m_state) {
+    if (m_state->previous != nullptr) {
+      it->second = m_state->previous;
     } else {
       g_contexts.erase(it);
     }
@@ -33,13 +47,22 @@ bool ExecutionContext::is_active() {
   return thread_state != nullptr && g_contexts.contains(thread_state);
 }
 
-const ExecutionContext *ExecutionContext::current() {
+PyThreadState *ExecutionContext::current_thread_state() {
   PyThreadState *thread_state = PyThreadState_Get();
   if (thread_state == nullptr) {
     return nullptr;
   }
   auto it = g_contexts.find(thread_state);
-  return it == g_contexts.end() ? nullptr : it->second;
+  return it == g_contexts.end() ? nullptr : it->second->thread_state;
+}
+
+int ExecutionContext::current_process_index() {
+  PyThreadState *thread_state = PyThreadState_Get();
+  if (thread_state == nullptr) {
+    return -1;
+  }
+  auto it = g_contexts.find(thread_state);
+  return it == g_contexts.end() ? -1 : it->second->process_index;
 }
 
 void ExecutionContext::restore(PyThreadState *thread_state) {
@@ -48,8 +71,8 @@ void ExecutionContext::restore(PyThreadState *thread_state) {
   }
 }
 
-const char *ExecutionContext::source() const { return m_source.c_str(); }
+const char *ExecutionContext::source() const { return m_state->source.c_str(); }
 
-PyThreadState *ExecutionContext::thread_state() const { return m_thread_state; }
+PyThreadState *ExecutionContext::thread_state() const { return m_state->thread_state; }
 
 } // namespace svx

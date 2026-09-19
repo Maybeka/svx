@@ -123,16 +123,57 @@ class svx_channel_registry;
   endfunction
 endclass
 
-task automatic svx_channel_put_payload(string name, chandle payload);
-  svx_channel_registry::get(name).put(name, payload);
+task automatic svx_channel_put_payload(string name, chandle payload, int process_index,
+                                       output bit cancelled);
+  cancelled = 0;
+  if (process_index < 0) begin
+    svx_channel_registry::get(name).put(name, payload);
+    return;
+  end
+  fork : svx_channel_put_wait
+    svx_channel_registry::get(name).put(name, payload);
+    begin
+      svx_proc_man::wait_for_cancel(process_index);
+      cancelled = 1;
+    end
+  join_any
+  disable svx_channel_put_wait;
 endtask
 
-task automatic svx_channel_get_payload(string name, output chandle payload);
-  svx_channel_registry::get(name).get(payload);
+task automatic svx_channel_get_payload(string name, int process_index,
+                                       output chandle payload, output bit cancelled);
+  cancelled = 0;
+  payload = null;
+  if (process_index < 0) begin
+    svx_channel_registry::get(name).get(payload);
+    return;
+  end
+  fork : svx_channel_get_wait
+    svx_channel_registry::get(name).get(payload);
+    begin
+      svx_proc_man::wait_for_cancel(process_index);
+      cancelled = 1;
+    end
+  join_any
+  disable svx_channel_get_wait;
 endtask
 
-task automatic svx_channel_peek_payload(string name, output chandle payload);
-  svx_channel_registry::get(name).peek(payload);
+task automatic svx_channel_peek_payload(string name, int process_index,
+                                        output chandle payload, output bit cancelled);
+  cancelled = 0;
+  payload = null;
+  if (process_index < 0) begin
+    svx_channel_registry::get(name).peek(payload);
+    return;
+  end
+  fork : svx_channel_peek_wait
+    svx_channel_registry::get(name).peek(payload);
+    begin
+      svx_proc_man::wait_for_cancel(process_index);
+      cancelled = 1;
+    end
+  join_any
+  disable svx_channel_peek_wait;
 endtask
 
 function automatic bit svx_channel_try_put_payload(string name, chandle payload);
@@ -290,7 +331,8 @@ task automatic svx_channel_put_bytes(
   string content_type = "application/octet-stream"
 );
   chandle payload = svx_payload_from_bytes(data, kind, type_name, content_type);
-  svx_channel_put_payload(name, payload);
+  bit cancelled;
+  svx_channel_put_payload(name, payload, -1, cancelled);
 endtask
 
 task automatic svx_channel_put_byte_queue(
@@ -304,12 +346,13 @@ task automatic svx_channel_put_byte_queue(
   int unsigned binary_format_version = 0
 );
   chandle payload = svx_payload_from_byte_queue(data, kind, type_name, content_type);
+  bit cancelled;
   if (unified_type_name != "") begin
     svx_payload_set_encoding_descriptor(
       payload, unified_type_name, encoding_fingerprint, binary_format_version
     );
   end
-  svx_channel_put_payload(name, payload);
+  svx_channel_put_payload(name, payload, -1, cancelled);
 endtask
 
 function automatic bit svx_channel_try_put_bytes(

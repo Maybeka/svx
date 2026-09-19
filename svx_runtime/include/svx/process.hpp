@@ -20,12 +20,14 @@ public:
   void set_sv_index(int index);
   int sv_index() const;
   bool failed() const;
+  bool cancelled() const;
 
 private:
   PyObject *m_callable;
   PyThreadState *m_thread_state;
   int m_sv_index{-1};
   bool m_failed{false};
+  bool m_cancelled{false};
 };
 
 class ProcessGroup {

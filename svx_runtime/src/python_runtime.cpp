@@ -212,8 +212,8 @@ void runtime_init_with_signal_declarations(
   }
 }
 
-void runtime_start(const char *export_name) {
-  if (!require_runtime_ready("svx_start")) return;
+bool runtime_start(const char *export_name) {
+  if (!require_runtime_ready("svx_start")) return false;
   ExecutionContext ctx(std::string("svx_start('") + export_name + "')");
 
   PyGILState_STATE gstate = PyGILState_Ensure();
@@ -221,18 +221,24 @@ void runtime_start(const char *export_name) {
   if (callable == nullptr) {
     handle_python_exception(ctx.source());
     PyGILState_Release(gstate);
-    return;
+    return false;
   }
 
   PyObject *result = PyObject_CallNoArgs(callable);
   Py_DECREF(callable);
   if (result == nullptr) {
+    if (dpi::disabled_state()) {
+      PyErr_Clear();
+      PyGILState_Release(gstate);
+      return true;
+    }
     handle_python_exception(ctx.source());
     PyGILState_Release(gstate);
-    return;
+    return false;
   }
   Py_DECREF(result);
   PyGILState_Release(gstate);
+  return false;
 }
 
 RuntimeState runtime_state() { return g_runtime_state; }
@@ -341,25 +347,37 @@ bool fatal_policy_enabled() { return g_policy == ExceptionPolicy::Fatal; }
 
 extern "C" {
 
-void svx_runtime_init(unsigned int sv_runtime_abi_version,
-                      const char *sv_product_version) {
+int svx_runtime_init(unsigned int sv_runtime_abi_version,
+                     const char *sv_product_version) {
   svx::runtime_init(sv_runtime_abi_version, sv_product_version);
+  return 0;
 }
 
-void svx_runtime_init_with_signal_declarations(
+int svx_runtime_init_with_signal_declarations(
     unsigned int sv_runtime_abi_version, const char *sv_product_version,
     const char *module_name) {
   svx::runtime_init_with_signal_declarations(
       sv_runtime_abi_version, sv_product_version, module_name);
+  return 0;
 }
 
-void svx_runtime_load(const char *module_name) { svx::runtime_load(module_name); }
-
-void svx_runtime_start(const char *export_name) {
-  svx::runtime_start(export_name);
+int svx_runtime_load(const char *module_name) {
+  svx::runtime_load(module_name);
+  return 0;
 }
 
-void svx_runtime_shutdown() { svx::runtime_shutdown(); }
+int svx_runtime_start(const char *export_name) {
+  const bool disabled = svx::runtime_start(export_name);
+  if (disabled) {
+    svx::dpi::acknowledge_disabled_state();
+  }
+  return disabled ? 1 : 0;
+}
+
+int svx_runtime_shutdown() {
+  svx::runtime_shutdown();
+  return 0;
+}
 
 unsigned int svx_runtime_abi_version() { return svx::SVX_RUNTIME_ABI_VERSION; }
 
