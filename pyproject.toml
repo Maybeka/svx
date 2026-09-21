@@ -30,6 +30,9 @@ dev = [
   "build>=1.2",
   "pytest>=8",
 ]
+manifest = [
+  "pyslang>=11,<12",
+]
 
 [tool.setuptools]
 package-dir = {"" = "python"}

@@ -436,6 +436,7 @@ def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
     manifest = manifest_from_declarations(
         python_modules=modules,
         sv_declaration_files=[Path(item) for item in args.sv_declarations],
+        sv_source_files=[Path(item) for item in args.sv_source],
     )
     text = json.dumps(manifest_dict(manifest), indent=2, sort_keys=True) + "\n"
     target = Path(args.out)
@@ -504,6 +505,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--python-module", action="append", default=[], help="module containing decorated Python-owned classes")
     p.add_argument("--sv-declarations", action="append", default=[], help="versioned SV declaration metadata JSON")
+    p.add_argument(
+        "--sv-source",
+        action="append",
+        default=[],
+        help="SystemVerilog package source validated with the optional pyslang frontend",
+    )
     p.add_argument("--out", required=True, help="output inheritance manifest")
     p.add_argument("--check", action="store_true", help="verify the output is current")
     p.set_defaults(func=_cmd_inheritance_manifest)

@@ -21,6 +21,7 @@ from svx.declarations import (
 )
 from svx.cli import main
 from svx.inheritance import parse_manifest
+from svx.sv_scan import scan_sv_sources
 
 
 def int_type():
@@ -92,6 +93,48 @@ def test_python_decorator_rejects_output_as_a_python_call_argument():
         inheritance_class()(Invalid)
 
 
+def test_manifest_accepts_expanded_lineage_without_generating_its_members():
+    base = {
+        "canonical_id": "sv://tb_pkg/BaseDriver",
+        "language": "sv",
+        "symbol": "tb_pkg::BaseDriver",
+        "methods": [],
+    }
+    middle = {
+        "canonical_id": "py://checks/PythonDriver",
+        "language": "python",
+        "symbol": "checks.PythonDriver",
+        "methods": [],
+    }
+    target = {
+        "canonical_id": "sv://tb_pkg/FinalDriver",
+        "language": "sv",
+        "symbol": "tb_pkg::FinalDriver",
+        "methods": [],
+        "base_lineage": [base, middle],
+    }
+    manifest = parse_manifest(
+        {
+            "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+            "schema_version": "2.0.0",
+            "generator_abi_version": 2,
+            "required_runtime_capabilities": [
+                "svtypes.checked-encoding-descriptor.v1",
+                "svtypes.codec-context.v1",
+                "svtypes.record-schema.v1",
+                "svtypes.remote-reference.v1",
+            ],
+            "classes": [target],
+        }
+    )
+    assert [item.canonical_id for item in manifest.classes[0].base_lineage] == [
+        base["canonical_id"],
+        middle["canonical_id"],
+    ]
+    assert [item.canonical_id for item in manifest.classes] == [target["canonical_id"]]
+    assert manifest_dict(manifest)["classes"][0]["base_lineage"] == [base, middle]
+
+
 def test_sv_sidecar_rejects_python_owned_class(tmp_path):
     path = Path(tmp_path) / "invalid.json"
     path.write_text(
@@ -105,6 +148,78 @@ def test_sv_sidecar_rejects_python_owned_class(tmp_path):
     )
     with pytest.raises(SVXInheritanceError, match="only SV-owned"):
         manifest_from_declarations(sv_declaration_files=(path,))
+
+
+def test_pyslang_scans_and_validates_sv_inheritance_declarations(tmp_path):
+    pytest.importorskip("pyslang")
+    source = tmp_path / "drivers.sv"
+    source.write_text(
+        "package tb_pkg;\n"
+        "  virtual class BaseDriver;\n"
+        "    virtual task drive(input int value); endtask\n"
+        "  endclass\n"
+        "  class FinalDriver extends BaseDriver; endclass\n"
+        "endpackage\n"
+    )
+    facts = scan_sv_sources([source])
+    assert facts["tb_pkg::FinalDriver"].direct_base == "BaseDriver"
+    assert facts["tb_pkg::BaseDriver"].virtual_methods == {"drive"}
+
+    sidecar = tmp_path / "sv-declarations.json"
+    sidecar.write_text(
+        json.dumps(
+            {
+                "schema_uri": SV_DECLARATION_SCHEMA_URI,
+                "schema_version": SV_DECLARATION_SCHEMA_VERSION,
+                "classes": [
+                    {
+                        "canonical_id": "sv://tb_pkg/BaseDriver",
+                        "language": "sv",
+                        "symbol": "tb_pkg::BaseDriver",
+                        "methods": [
+                            {
+                                "canonical_id": "sv://tb_pkg/BaseDriver#drive",
+                                "name": "drive",
+                                "parameters": [],
+                                "return_type": "void",
+                                "timing": "task",
+                                "virtual": True,
+                                "pure_virtual": False,
+                            }
+                        ],
+                    },
+                    {
+                        "canonical_id": "sv://tb_pkg/FinalDriver",
+                        "language": "sv",
+                        "symbol": "tb_pkg::FinalDriver",
+                        "methods": [],
+                        "base_lineage": [
+                            {
+                                "canonical_id": "sv://tb_pkg/BaseDriver",
+                                "language": "sv",
+                                "symbol": "tb_pkg::BaseDriver",
+                                "methods": [
+                                    {
+                                        "canonical_id": "sv://tb_pkg/BaseDriver#drive",
+                                        "name": "drive",
+                                        "parameters": [],
+                                        "return_type": "void",
+                                        "timing": "task",
+                                        "virtual": True,
+                                        "pure_virtual": False,
+                                    }
+                                ],
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
+    )
+    manifest = manifest_from_declarations(
+        sv_declaration_files=[sidecar], sv_source_files=[source]
+    )
+    assert [cls.name for cls in manifest.classes] == ["BaseDriver", "FinalDriver"]
 
 
 def test_inheritance_manifest_cli_generates_and_checks(tmp_path, monkeypatch):

@@ -16,7 +16,7 @@
       "language": "python",
       "module": "svx_sv.example_driver_pkg",
       "path": "python/svx_sv/example_driver_pkg.py",
-      "sha256": "37620cad7c6460f593258b505a5860db2bc17ac9a91e375e7ac0f1e9f996040f"
+      "sha256": "871a0da72e6c007035576633a9b53e1f36e35ed7b3e8d4f2db376a57ce02491d"
     },
     {
       "language": "systemverilog",

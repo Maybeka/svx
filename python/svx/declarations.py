@@ -17,6 +17,7 @@ from .inheritance import (
     Manifest,
     parse_manifest,
 )
+from .sv_scan import validate_sv_declarations
 
 
 SV_DECLARATION_SCHEMA_URI = "https://svx.dev/schema/sv-inheritance-declarations/v1"
@@ -107,13 +108,15 @@ def inheritance_class(
     canonical_id: str | None = None,
     constructor_parameters: Iterable[dict[str, Any]] = (),
     constructor_initiator: str = "python",
+    base_lineage: Iterable[dict[str, Any]] | None = None,
 ):
-    """Declare a Python-owned class for manifest generation."""
+    """Declare one explicit Python generation target for manifest generation."""
 
     constructor = {
         "initiator": constructor_initiator,
         "parameters": list(constructor_parameters),
     }
+    normalized_lineage = list(base_lineage or ())
 
     def decorate(cls: type):
         if not isinstance(cls, type):
@@ -153,6 +156,7 @@ def inheritance_class(
                 "symbol": f"{cls.__module__}.{cls.__name__}",
                 "constructor": constructor,
                 "methods": methods,
+                "base_lineage": normalized_lineage,
             },
         )
         return cls
@@ -205,12 +209,17 @@ def manifest_from_declarations(
     *,
     python_modules: Iterable[ModuleType] = (),
     sv_declaration_files: Iterable[Path] = (),
+    sv_source_files: Iterable[Path] = (),
 ) -> Manifest:
     """Normalize supported declaration front ends to the sole v2 manifest model."""
 
     classes = _python_declarations(python_modules)
+    sv_classes: list[dict[str, Any]] = []
     for path in sv_declaration_files:
-        classes.extend(load_sv_declarations(path))
+        sv_classes.extend(load_sv_declarations(path))
+    if sv_source_files:
+        validate_sv_declarations(sv_classes, sv_source_files)
+    classes.extend(sv_classes)
     return parse_manifest(
         {
             "schema_uri": SCHEMA_URI,
@@ -222,22 +231,36 @@ def manifest_from_declarations(
     )
 
 
-def manifest_dict(manifest: Manifest) -> dict[str, Any]:
-    """Return the validated JSON representation of a generated manifest."""
+def _class_declaration(cls: Any) -> dict[str, Any]:
+    """Render a normalized class without recursively rendering its lineage."""
 
-    # Reparse through the existing dataclass-to-source representation is avoided:
-    # declaration metadata is retained on the normalized immutable objects.
-    classes: list[dict[str, Any]] = []
-    for cls in manifest.classes:
-        declaration: dict[str, Any] = {
-            "canonical_id": cls.canonical_id,
-            "language": cls.language,
-            "symbol": cls.symbol,
-            "methods": [],
+    declaration: dict[str, Any] = {
+        "canonical_id": cls.canonical_id,
+        "language": cls.language,
+        "symbol": cls.symbol,
+        "methods": [],
+    }
+    if cls.constructor is not None:
+        declaration["constructor"] = {
+            "initiator": cls.constructor.initiator,
+            "parameters": [
+                {
+                    "name": parameter.name,
+                    "type": parameter.type_binding.runtime_spec()
+                    | {
+                        "sv": parameter.type_binding.sv,
+                        "sv_packer": parameter.type_binding.sv_packer,
+                    },
+                    "direction": parameter.direction,
+                }
+                for parameter in cls.constructor.parameters
+            ],
         }
-        if cls.constructor is not None:
-            declaration["constructor"] = {
-                "initiator": cls.constructor.initiator,
+    for method in cls.methods:
+        declaration["methods"].append(
+            {
+                "canonical_id": method.canonical_id,
+                "name": method.name,
                 "parameters": [
                     {
                         "name": parameter.name,
@@ -248,40 +271,35 @@ def manifest_dict(manifest: Manifest) -> dict[str, Any]:
                         },
                         "direction": parameter.direction,
                     }
-                    for parameter in cls.constructor.parameters
+                    for parameter in method.parameters
                 ],
+                "return_type": (
+                    method.return_type.runtime_spec()
+                    | {
+                        "sv": method.return_type.sv,
+                        "sv_packer": method.return_type.sv_packer,
+                    }
+                    if method.return_type is not None
+                    else "void"
+                ),
+                "timing": method.timing,
+                "virtual": method.virtual,
+                "pure_virtual": method.pure_virtual,
             }
-        for method in cls.methods:
-            declaration["methods"].append(
-                {
-                    "canonical_id": method.canonical_id,
-                    "name": method.name,
-                    "parameters": [
-                        {
-                            "name": parameter.name,
-                            "type": parameter.type_binding.runtime_spec()
-                            | {
-                                "sv": parameter.type_binding.sv,
-                                "sv_packer": parameter.type_binding.sv_packer,
-                            },
-                            "direction": parameter.direction,
-                        }
-                        for parameter in method.parameters
-                    ],
-                    "return_type": (
-                        method.return_type.runtime_spec()
-                        | {
-                            "sv": method.return_type.sv,
-                            "sv_packer": method.return_type.sv_packer,
-                        }
-                        if method.return_type is not None
-                        else "void"
-                    ),
-                    "timing": method.timing,
-                    "virtual": method.virtual,
-                    "pure_virtual": method.pure_virtual,
-                }
-            )
+        )
+    return declaration
+
+
+def manifest_dict(manifest: Manifest) -> dict[str, Any]:
+    """Return the validated JSON representation of a generated manifest."""
+
+    classes: list[dict[str, Any]] = []
+    for cls in manifest.classes:
+        declaration = _class_declaration(cls)
+        if cls.base_lineage:
+            declaration["base_lineage"] = [
+                _class_declaration(ancestor) for ancestor in cls.base_lineage
+            ]
         classes.append(declaration)
     return {
         "schema_uri": manifest.schema_uri,

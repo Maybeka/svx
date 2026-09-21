@@ -129,6 +129,28 @@ def test_manifest_emits_language_specific_mirrors():
     assert "class BaseDriver_python_proxy extends BaseDriver implements svx_dispatchable;" in sv_text
 
 
+def test_python_initiated_sv_base_emits_mirror_and_proxy_factory():
+    data = manifest_data()
+    data["classes"][0]["constructor"] = {
+        "initiator": "python",
+        "parameters": [{"name": "seed", "type": INT}],
+    }
+    manifest = parse_manifest(data)
+
+    python_text = emit_python_mirrors(manifest)[next(
+        path for path in emit_python_mirrors(manifest) if str(path) == "svx_sv/tb_pkg.py"
+    )]
+    assert "def __init__(self, seed):" in python_text
+    assert "_native.inheritance_create_sv('sv://tb_pkg/BaseDriver'" in python_text
+    assert "encode_constructor('sv://tb_pkg/BaseDriver', {'seed': seed})" in python_text
+
+    sv_text = emit_sv_mirrors(manifest)
+    assert "function new(longint unsigned object_id, input int seed);" in sv_text
+    assert "class BaseDriver_python_proxy_factory implements svx_factory;" in sv_text
+    assert "instance = new(object_id, constructor_request.seed);" in sv_text
+    assert "function void register_BaseDriver_python_proxy_factory();" in sv_text
+
+
 def test_manifest_rejects_cross_language_contract_errors():
     invalid = manifest_data()
     invalid["classes"][0]["unknown"] = True
