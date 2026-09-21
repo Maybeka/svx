@@ -462,6 +462,10 @@ Use `--check` to verify the normalized manifest without rewriting it. Both
 front ends pass through the same strict v2 manifest parser; they are not
 additional runtime contracts.
 
+Install `svx[manifest]` and pass `--sv-source drivers.sv` to validate the
+declared SV package, class, `extends`, and virtual-method facts with the
+`pyslang` frontend. SvTypes bindings remain the sole contract for call data.
+
 ```sh
 PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
   --manifest inheritance.json --python-out generated/python \
