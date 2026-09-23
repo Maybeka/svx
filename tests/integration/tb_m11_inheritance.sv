@@ -1,7 +1,7 @@
 `include "sv/svx_pkg.sv"
 `include ".tmp/m11_inheritance/mirrors.sv"
 
-class SvCounter extends svx_py_tests_integration_m11_base_pkg::BaseMonitor;
+class SvCounter extends svx_projection_tests_integration_m11_base_pkg::BaseMonitorProxy;
   int calls;
   int seed;
   function new(longint unsigned object_id, int seed);
@@ -20,10 +20,10 @@ endclass
 
 class SvCounterFactory implements svx_pkg::svx_factory;
   virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
-    svx_py_tests_integration_m11_base_pkg::BaseMonitor::constructor_request_t constructor_request;
+    svx_projection_tests_integration_m11_base_pkg::BaseMonitorProxy::constructor_request_t constructor_request;
     int seed;
     SvCounter counter;
-    constructor_request = svx_py_tests_integration_m11_base_pkg::BaseMonitor::svx_decode_constructor_request(request);
+    constructor_request = svx_projection_tests_integration_m11_base_pkg::BaseMonitorProxy::svx_decode_constructor_request(request);
     seed = constructor_request.seed;
     counter = new(object_id, seed);
     ok = 1;

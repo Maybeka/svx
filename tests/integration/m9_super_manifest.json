@@ -2,6 +2,7 @@
   "classes": [
     {
       "canonical_id": "sv://tb_pkg/BaseDriver",
+      "constructor": {"initiator": "sv", "parameters": []},
       "language": "sv",
       "methods": [
         {
@@ -39,6 +40,24 @@
         }
       ],
       "symbol": "tb_pkg::BaseDriver"
+    },
+    {
+      "canonical_id": "py://tests/integration/m9_super/Driver",
+      "language": "python",
+      "symbol": "tests.integration.m9_super_test.Driver",
+      "methods": [],
+      "base_lineage": [
+        {
+          "canonical_id": "sv://tb_pkg/BaseDriver",
+          "constructor": {"initiator": "sv", "parameters": []},
+          "language": "sv",
+          "methods": [
+            {"canonical_id": "sv://tb_pkg/BaseDriver#drive", "name": "drive", "parameters": [], "pure_virtual": false, "return_type": "void", "timing": "task", "virtual": true},
+            {"canonical_id": "sv://tb_pkg/BaseDriver#read_count", "name": "read_count", "parameters": [], "pure_virtual": false, "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}, "timing": "function", "virtual": true}
+          ],
+          "symbol": "tb_pkg::BaseDriver"
+        }
+      ]
     }
   ],
   "generator_abi_version": 2,

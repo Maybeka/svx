@@ -7,12 +7,14 @@ import pytest
 from svtypes import Int
 
 from svx import (
+    SVMirror,
     SVXInheritanceError,
     inheritance_class,
     inheritance_method,
     inheritance_parameter,
     inheritance_type,
     manifest_from_declarations,
+    sv_mirror,
 )
 from svx.declarations import (
     SV_DECLARATION_SCHEMA_URI,
@@ -77,6 +79,41 @@ def test_python_decorators_and_sv_sidecar_normalize_to_v2_manifest(tmp_path):
         "output",
     ]
     parse_manifest(manifest_dict(manifest))
+
+
+def test_sv_mirror_declaration_contributes_complete_sv_base_lineage(tmp_path):
+    module = ModuleType("checks.mirror")
+    AMirror = type("AMirror", (SVMirror,), {"__module__": module.__name__})
+    AMirror = sv_mirror("sv://tb_pkg/BaseDriver")(AMirror)
+    module.AMirror = AMirror
+
+    Child = type("Child", (AMirror,), {"__module__": module.__name__})
+    Child = inheritance_class(canonical_id="py://checks/Child")(Child)
+    module.Child = Child
+
+    sv_file = tmp_path / "sv-declarations.json"
+    sv_file.write_text(
+        json.dumps(
+            {
+                "schema_uri": SV_DECLARATION_SCHEMA_URI,
+                "schema_version": SV_DECLARATION_SCHEMA_VERSION,
+                "classes": [
+                    {
+                        "canonical_id": "sv://tb_pkg/BaseDriver",
+                        "language": "sv",
+                        "symbol": "tb_pkg::BaseDriver",
+                        "methods": [],
+                    }
+                ],
+            }
+        )
+    )
+
+    manifest = manifest_from_declarations(
+        python_modules=(module,), sv_declaration_files=(sv_file,)
+    )
+    child = next(item for item in manifest.classes if item.canonical_id == "py://checks/Child")
+    assert [item.canonical_id for item in child.base_lineage] == ["sv://tb_pkg/BaseDriver"]
 
 
 def test_python_decorator_rejects_output_as_a_python_call_argument():

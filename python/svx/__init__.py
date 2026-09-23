@@ -6,7 +6,9 @@ from .errors import (
     SVXError,
     SVXExportError,
     SVXInheritanceError,
+    SVXReadonlyRefError,
     SVXRemoteError,
+    SVXStaleRefError,
     SVXChannelError,
     SVXSignalError,
     get_exception_policy,
@@ -28,13 +30,15 @@ from .roles import (
 )
 from .primitives import delay, display, fork_join, fork_join_any, fork_join_none
 from .test_runner import test
-from .inheritance import close_instance
+from .inheritance import Ref, close_instance
 from .declarations import (
+    SVMirror,
     inheritance_class,
     inheritance_method,
     inheritance_parameter,
     inheritance_type,
     manifest_from_declarations,
+    sv_mirror,
 )
 from .signal import Signal, declare_signal
 from .runtime import RuntimeState, state as runtime_state
@@ -46,11 +50,14 @@ __all__ = [
     "SVXError",
     "SVXExportError",
     "SVXInheritanceError",
+    "SVXReadonlyRefError",
     "SVXRemoteError",
+    "SVXStaleRefError",
     "SVXChannelError",
     "SVXSignalError",
     "__version__",
     "Signal",
+    "SVMirror",
     "RuntimeState",
     "Channel",
     "ConfigChannel",
@@ -58,6 +65,7 @@ __all__ = [
     "Payload",
     "ReqChannel",
     "ReqRspChannel",
+    "Ref",
     "RspChannel",
     "channel",
     "close_instance",
@@ -82,5 +90,6 @@ __all__ = [
     "rsp_channel",
     "runtime_state",
     "set_exception_policy",
+    "sv_mirror",
     "test",
 ]

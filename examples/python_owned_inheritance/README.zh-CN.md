@@ -5,8 +5,8 @@
 此示例展示相反的所有权方向：Python 声明 base class 并拥有构造，
 SystemVerilog 提供具体 derived class。
 
-`BaseMonitor` 是普通 Python base class，生成的 Python mirror 保留其名称。
-`SvCounter` 从生成的 SV proxy 派生，重载一个 nonblocking function 和一个
+`BaseMonitor` 是普通 Python base class，生成的 `BaseMonitorProxy` 是它的 SV
+projection。`SvCounter` 从该 proxy 派生，重载一个 nonblocking function 和一个
 timed task，并在两个方向调用 `super()`。Python 构造 `BaseMonitor(9)` 后，SVX
 请求已注册的 `SvCounterFactory` 用相同 constructor 参数创建并绑定 SV partner。
 

@@ -12,13 +12,13 @@ endpackage
 `include ".tmp/m9_super/mirrors.sv"
 module tb;
   import svx_pkg::*;
-  import svx_pyproxy_tb_pkg_pkg::*;
+  import svx_projection_tb_pkg_pkg::*;
   initial begin
-    BaseDriver_python_proxy driver;
+    BaseDriverMirror driver;
     svx_init();
     svx_load("tests.integration.m9_super_test");
     svx_start("m9.super_setup");
-    driver = new(3);
+    driver = new();
     driver.drive();
     if (driver.read_count() != 19) begin
       $fatal(2, "M9 Python function override was not called");

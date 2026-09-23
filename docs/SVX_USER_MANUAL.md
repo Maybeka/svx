@@ -477,13 +477,14 @@ Set `SVX_ARTIFACT_MANIFEST` to that compatibility manifest before runtime
 initialization. Use the same command with `--check` in a build verification
 step to reject stale mirrors without rewriting them.
 
-For an SV-owned `tb_pkg::BaseDriver`, derive from `svx_sv.tb_pkg.BaseDriver`.
-The generated SV `BaseDriver_python_proxy` is the base-typed object used by SV.
-For a Python-owned `checks.BaseMonitor`, derive in SV from the generated
-`svx_py_checks_pkg::BaseMonitor`; Python accesses the SV-derived object through
-`svx_py.checks.BaseMonitor`. Generated proxies retain the foreign base's simple
-name. Declared task overrides may call `super()` across either language
-boundary.
+For an SV-owned `tb_pkg::BaseDriver` that crosses into Python, derive from the
+generated `svx_mirrors.tb_pkg.BaseDriverMirror`; SV constructs the corresponding
+`BaseDriverMirror`, which creates and binds the Python instance. For a
+Python-owned `checks.BaseMonitor` that is followed by an SV descendant, derive
+in SV from the generated `svx_projection_checks_pkg::BaseMonitorProxy`; Python
+accesses the SV-derived object through `svx_py.checks.BaseMonitor`. AMirror and
+Proxy helpers are generated only for explicit cross-language lineage targets.
+Declared task overrides may call `super()` across either language boundary.
 
 All proxy objects use a nonzero unique 64-bit remote object ID. Call
 `svx.close_instance(id)` for deterministic pair release, or invoke
@@ -498,12 +499,48 @@ sides with the same typed values, binds the pair, then runs the post-bind hook.
 If either construction step fails, it rolls back both partial entries. Foreign
 virtual calls from constructors are invalid until binding completes.
 
-Python mirror signatures contain request values only: `input`, `inout`, and
-`ref`. A pure `output` parameter is not passed by the caller. A method with only
-a function result returns that result directly. When copy-out values exist,
-the method returns the generated `<Class><Method>Response` SvTypes value, with
-fields for `output`, `inout`, and `ref`, followed by `result` when present.
-Scalar fields use the normal SvTypes generated-object `.value` accessor.
+The generated lifecycle is `ALLOCATED -> SV_CONSTRUCTED -> BOUND ->
+PY_INITIALIZED -> ACTIVE`. An SV-originated construction must use the generated
+construction marker and invoke `svx_post_construct()` after ordinary SV base
+and derived construction; SVX cannot observe the end of arbitrary handwritten
+`new` expressions. A raw existing SV handle can be given a Python mirror only
+through explicit `svx.adopt_instance(target, handle)`. Adoption does not call
+Python `__init__`, does not transfer ownership of the SV object, and rejects an
+unknown target or an already-bound handle.
+
+Python mirror task signatures contain request values for `input` and `inout`; a
+readwrite `ref` parameter requires `svx.Ref[T]`, not a bare Python value. A
+`const ref` parameter accepts an ordinary SvTypes value. A pure `output`
+parameter is not passed by the caller. `Ref.value` is the public read/write
+surface. For Python-to-SV task calls, the generated SV wrapper places each Ref in a
+typed temporary `svx_ref_argument`, passes its `value` to the target's declared
+`ref` formal, and binds `Ref.value` to that helper for the active call. For
+SV-to-Python task callbacks, the same helper is a portal whose service task retains
+the original SV `ref` formal; `Ref.value` synchronously reads or writes that
+real lvalue until the callback ends. After return, exception, cancellation, or
+shutdown, the binding is stale and `.value` fails. A method with only a
+function result returns that result directly. When copy-out values exist, the method returns the generated
+`<Class><Method>Response` SvTypes value, with fields for `output`, `inout`, and
+the final `ref` values, followed by `result` when present. Scalar fields use
+the normal SvTypes generated-object `.value` accessor.
+
+An inheritance callback is always an ordinary synchronous Python `def`.
+`async def`, an awaitable return value, and `asyncio` are invalid in this path
+and cause a fatal SVX callback diagnostic.
+
+SystemVerilog functions may declare `ref` parameters. For a cross-language
+function, SVX emits `SVXW_FUNCTION_REF_AS_INOUT` and explicitly treats that
+boundary formal as `inout`: Python receives an ordinary value and returns its
+updated value in the generated response. The original SV formal remains `ref`,
+but live aliasing and alias-sensitive behavior are unavailable across this
+warned boundary. A cross-language `const ref` function emits
+`SVXW_FUNCTION_CONST_REF_AS_INPUT` and has input-only boundary behavior.
+
+Parameterized SV bases are supported only as concrete specializations. A
+manifest identifies `Packet#(int, 16)` with complete type/value arguments, and
+that concrete specialization has its own generated mirror/proxy artifact and
+canonical class identity. Open parameters and unresolved source expressions
+are rejected during generation.
 
 For Python-initiated creation, register a concrete `svx_pkg::svx_factory`
 under the manifest class ID before constructing the generated Python proxy.

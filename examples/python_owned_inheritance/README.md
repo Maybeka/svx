@@ -5,8 +5,8 @@
 Use this example for the inverse ownership direction: Python declares the base
 class and owns construction; SystemVerilog supplies the concrete derived class.
 
-`BaseMonitor` is a normal Python base class. The generated Python mirror keeps
-its name. `SvCounter` extends the generated SV proxy, overrides both a
+`BaseMonitor` is a normal Python base class. The generated `BaseMonitorProxy`
+is its SV projection. `SvCounter` extends that proxy, overrides both a
 nonblocking function and a timed task, and calls `super()` in each direction.
 Python constructs `BaseMonitor(9)`, so SVX asks the registered `SvCounterFactory`
 to create and bind the SV partner with the same constructor arguments.

@@ -5,11 +5,12 @@
 Use this example when an existing SystemVerilog virtual base class should gain
 a Python implementation without replacing the SV environment that owns it.
 
-`BaseDriver` is declared in SystemVerilog. `PythonDriver` derives from its
-generated Python mirror, validates the constructor argument, and overrides the
-timed `drive` task. SV constructs the generated proxy using the normal base
-type and invokes `drive`; the call reaches the Python override and advances
-simulation time through `svx.delay`.
+`BaseDriver` is declared in SystemVerilog. The manifest records the complete
+`BaseDriver (SV) -> PythonDriver (Python)` lineage. Generation creates a paired
+`BaseDriverMirror` in both languages: the SV mirror extends `BaseDriver`, and
+the Python mirror is the base of `PythonDriver`. SV constructs the AMirror and
+invokes `drive`; the call reaches the Python override and advances simulation
+time through `svx.delay`.
 
 ## Generate Mirrors
 
@@ -27,15 +28,17 @@ PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
 Compile `tb.sv` with the generated SV mirror, then make both
 `generated/python` and the repository Python roots visible to the simulator
 process. The testbench loads `python_checks.py`, which imports
-`svx_sv.example_driver_pkg.BaseDriver` from the generated mirror package.
+`svx_mirrors.example_driver_pkg.BaseDriverMirror` from the generated mirror
+package.
 
 ## What To Reuse
 
 - Keep the base class and any existing SV ownership model in SV.
 - Declare each crossing method, direction, timing class, and SvTypes value type
   in the manifest.
-- Derive the Python implementation from the generated mirror with the same
-  foreign class and method names.
+- Derive the Python implementation from the generated AMirror.
+- Put the complete SV ancestor declaration in the Python target's
+  `base_lineage`; this is context, not a request to generate a second base.
 - Let the declared initiator own construction. This example uses SV initiation.
 - Call `svx_shutdown()` at simulation teardown to release all mirror pairs.
 

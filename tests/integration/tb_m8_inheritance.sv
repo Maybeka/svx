@@ -9,7 +9,7 @@ endpackage
 `include ".tmp/m8_inheritance/mirrors.sv"
 
 module tb;
-  import svx_py_checks_pkg::*;
+  import svx_projection_checks_pkg::*;
 
   initial begin
     $display("M8 declaration-only inheritance mirrors compiled");

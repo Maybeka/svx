@@ -1,9 +1,9 @@
 package example_driver_pkg;
   virtual class BaseDriver;
-    function new(input int seed);
+    function new();
     endfunction
 
-    virtual task drive(input int address);
+    virtual task drive();
       $fatal(2, "BaseDriver.drive must be overridden by PythonDriver");
     endtask
   endclass
@@ -15,17 +15,17 @@ endpackage
 module tb;
   import example_driver_pkg::*;
   import svx_pkg::*;
-  import svx_pyproxy_example_driver_pkg_pkg::*;
+  import svx_projection_example_driver_pkg_pkg::*;
 
   initial begin
-    BaseDriver_python_proxy driver;
+    BaseDriverMirror driver;
     time before_drive;
 
     svx_init();
     svx_load("examples.cross_language_inheritance.python_checks");
-    driver = new(9);
+    driver = new();
     before_drive = $time;
-    driver.drive(32'h40);
+    driver.drive();
     if ($time - before_drive != 2ns) begin
       $fatal(2, "Python override advanced %0t instead of 2ns", $time - before_drive);
     end

@@ -443,16 +443,16 @@ package svx_call_records_pkg;
 endpackage : svx_call_records_pkg
 
 
-`ifndef SVX_PY_EXAMPLES_PYTHON_OWNED_INHERITANCE_BASE_MONITOR_PKG__SV
-`define SVX_PY_EXAMPLES_PYTHON_OWNED_INHERITANCE_BASE_MONITOR_PKG__SV
+`ifndef SVX_PROJECTION_EXAMPLES_PYTHON_OWNED_INHERITANCE_BASE_MONITOR_PKG__SV
+`define SVX_PROJECTION_EXAMPLES_PYTHON_OWNED_INHERITANCE_BASE_MONITOR_PKG__SV
 
-package svx_py_examples_python_owned_inheritance_base_monitor_pkg;
+package svx_projection_examples_python_owned_inheritance_base_monitor_pkg;
   import svx_pkg::*;
   import svtypes_pkg::*;
   import svx_call_records_pkg::*;
 
-  // Generated SV base for py://examples/python_owned_inheritance/base_monitor/BaseMonitor
-  virtual class BaseMonitor implements svx_dispatchable;
+  // Generated SV projection for py://examples/python_owned_inheritance/base_monitor/BaseMonitor
+  virtual class BaseMonitorProxy implements svx_dispatchable;
     longint unsigned __svx_remote_object_id;
 
     function new(longint unsigned object_id);
@@ -553,7 +553,7 @@ package svx_py_examples_python_owned_inheritance_base_monitor_pkg;
         end
       endcase
     endtask
-  endclass : BaseMonitor
-endpackage : svx_py_examples_python_owned_inheritance_base_monitor_pkg
+  endclass : BaseMonitorProxy
+endpackage : svx_projection_examples_python_owned_inheritance_base_monitor_pkg
 
-`endif // SVX_PY_EXAMPLES_PYTHON_OWNED_INHERITANCE_BASE_MONITOR_PKG__SV
+`endif // SVX_PROJECTION_EXAMPLES_PYTHON_OWNED_INHERITANCE_BASE_MONITOR_PKG__SV

@@ -1,73 +1,22 @@
 {
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0",
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": ["svtypes.checked-encoding-descriptor.v1", "svtypes.codec-context.v1", "svtypes.record-schema.v1", "svtypes.remote-reference.v1"],
   "classes": [
     {
       "canonical_id": "sv://example_driver_pkg/BaseDriver",
-      "constructor": {
-        "initiator": "sv",
-        "parameters": [
-          {
-            "name": "seed",
-            "type": {
-              "unified_type_name": "svtypes.Int",
-              "python": {
-                "args": [],
-                "kwargs": {},
-                "module": "svtypes",
-                "symbol": "Int"
-              },
-              "sv": "int",
-              "sv_packer": "int_packer",
-              "encoding_descriptor": {
-                "binary_format_version": 1,
-                "unified_type_name": "svtypes.Int",
-                "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
-              }
-            }
-          }
-        ]
-      },
       "language": "sv",
-      "methods": [
-        {
-          "canonical_id": "sv://example_driver_pkg/BaseDriver#drive",
-          "name": "drive",
-          "parameters": [
-            {
-              "name": "address",
-              "type": {
-                "unified_type_name": "svtypes.Int",
-                "python": {
-                  "args": [],
-                  "kwargs": {},
-                  "module": "svtypes",
-                  "symbol": "Int"
-                },
-                "sv": "int",
-                "sv_packer": "int_packer",
-                "encoding_descriptor": {
-                  "binary_format_version": 1,
-                  "unified_type_name": "svtypes.Int",
-                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
-                }
-              }
-            }
-          ],
-          "pure_virtual": false,
-          "return_type": "void",
-          "timing": "task",
-          "virtual": true
-        }
-      ],
-      "symbol": "example_driver_pkg::BaseDriver"
+      "symbol": "example_driver_pkg::BaseDriver",
+      "constructor": {"initiator": "sv", "parameters": []},
+      "methods": [{"canonical_id": "sv://example_driver_pkg/BaseDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}]
+    },
+    {
+      "canonical_id": "py://examples/cross_language_inheritance/python_checks/PythonDriver",
+      "language": "python",
+      "symbol": "examples.cross_language_inheritance.python_checks.PythonDriver",
+      "methods": [{"canonical_id": "py://examples/cross_language_inheritance/python_checks/PythonDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}],
+      "base_lineage": [{"canonical_id": "sv://example_driver_pkg/BaseDriver", "language": "sv", "symbol": "example_driver_pkg::BaseDriver", "constructor": {"initiator": "sv", "parameters": []}, "methods": [{"canonical_id": "sv://example_driver_pkg/BaseDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}]}]
     }
-  ],
-  "generator_abi_version": 2,
-  "required_runtime_capabilities": [
-    "svtypes.checked-encoding-descriptor.v1",
-    "svtypes.codec-context.v1",
-    "svtypes.record-schema.v1",
-    "svtypes.remote-reference.v1"
-  ],
-  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
-  "schema_version": "2.0.0"
+  ]
 }

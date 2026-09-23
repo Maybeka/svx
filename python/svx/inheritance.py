@@ -12,9 +12,9 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import tempfile
-from typing import Any
+from typing import Any, Generic, Protocol, TypeVar
 
-from .errors import SVXInheritanceError, SVXRemoteError
+from .errors import SVXInheritanceError, SVXReadonlyRefError, SVXRemoteError, SVXStaleRefError
 from ._svtypes_contract import SVTYPES_REQUIRED_CAPABILITIES
 
 
@@ -22,6 +22,7 @@ SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v2"
 SCHEMA_VERSION = "2.0.0"
 GENERATOR_ABI_VERSION = 2
 REQUIRED_RUNTIME_CAPABILITIES = SVTYPES_REQUIRED_CAPABILITIES
+EXTERNAL_FIELD_STORAGE_CAPABILITY = "svtypes.external-field-storage.v1"
 MAX_CALL_PAYLOAD_BYTES = 16 * 1024 * 1024
 LEGACY_SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v1"
 _LEGACY_TYPES = {
@@ -34,6 +35,71 @@ _LEGACY_TYPES = {
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CANONICAL_ID = re.compile(r"^(sv|py)://[A-Za-z_][A-Za-z0-9_./]*$")
 _SCHEMA_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+_RefValue = TypeVar("_RefValue")
+
+
+class _RefEndpoint(Protocol[_RefValue]):
+    """Internal synchronous endpoint used by generated ref helpers/portals."""
+
+    def read(self) -> _RefValue: ...
+
+    def write(self, value: _RefValue) -> None: ...
+
+
+class Ref(Generic[_RefValue]):
+    """A typed, optionally call-scoped cross-language SystemVerilog ref.
+
+    A standalone Ref retains its supplied value. Generated invocation code
+    temporarily binds it to a typed helper or portal; a borrowed portal becomes
+    stale when closed, while a caller-owned helper retains its final value.
+    """
+
+    def __init__(self, value: _RefValue | None = None) -> None:
+        self._value = value
+        self._endpoint: _RefEndpoint[_RefValue] | None = None
+        self._readonly = False
+        self._stale = False
+        self._borrowed = False
+
+    @property
+    def value(self) -> _RefValue | None:
+        if self._stale:
+            raise SVXStaleRefError("SVX ref is no longer active")
+        if self._endpoint is not None:
+            return self._endpoint.read()
+        return self._value
+
+    @value.setter
+    def value(self, value: _RefValue) -> None:
+        if self._stale:
+            raise SVXStaleRefError("SVX ref is no longer active")
+        if self._readonly:
+            raise SVXReadonlyRefError("cannot assign through a const ref")
+        if self._endpoint is not None:
+            self._endpoint.write(value)
+        else:
+            self._value = value
+
+    def _bind(
+        self,
+        endpoint: _RefEndpoint[_RefValue],
+        *,
+        readonly: bool = False,
+        borrowed: bool = False,
+    ) -> None:
+        if self._endpoint is not None or self._stale:
+            raise SVXInheritanceError("Ref is already bound or stale")
+        self._endpoint = endpoint
+        self._readonly = readonly
+        self._borrowed = borrowed
+
+    def _close(self, *, retain_value: bool) -> None:
+        if self._endpoint is not None and retain_value:
+            self._value = self._endpoint.read()
+        self._endpoint = None
+        self._readonly = False
+        if self._borrowed or not retain_value:
+            self._stale = True
 
 @dataclass(frozen=True)
 class TypeBinding:
@@ -66,6 +132,9 @@ class Parameter:
     name: str
     type_binding: TypeBinding
     direction: str
+    # ``readonly`` is the cross-language spelling of SV ``const ref``. It is
+    # meaningful only when direction is ``ref``.
+    ref_access: str = "readwrite"
 
 
 @dataclass(frozen=True)
@@ -86,12 +155,39 @@ class Constructor:
 
 
 @dataclass(frozen=True)
+class Field:
+    """One directly declared, schema-backed instance field."""
+
+    name: str
+    type_binding: TypeBinding
+
+
+@dataclass(frozen=True)
+class SpecializationArgument:
+    """One closed SV parameterized-class argument."""
+
+    kind: str
+    type_binding: TypeBinding | None = None
+    sv_type: str | None = None
+    value: Any = None
+
+
+@dataclass(frozen=True)
+class Specialization:
+    """A normalized, concrete SV class specialization."""
+
+    arguments: tuple[SpecializationArgument, ...]
+
+
+@dataclass(frozen=True)
 class ForeignClass:
     canonical_id: str
     language: str
     symbol: str
     methods: tuple[Method, ...]
     constructor: Constructor | None
+    specialization: Specialization | None = None
+    fields: tuple[Field, ...] = ()
     # Root-to-direct-parent context for this generation target.  Its members
     # are descriptions only; they never independently request code emission.
     base_lineage: tuple["ForeignClass", ...] = ()
@@ -99,6 +195,17 @@ class ForeignClass:
     @property
     def name(self) -> str:
         return self.symbol.split("::")[-1].split(".")[-1]
+
+    @property
+    def generated_name(self) -> str:
+        """Stable helper name; concrete specializations cannot collide."""
+
+        if self.specialization is None:
+            return self.name
+        digest = hashlib.sha256(
+            json.dumps(_specialization_dict(self.specialization), sort_keys=True).encode("utf-8")
+        ).hexdigest()[:12]
+        return f"{self.name}__svx_{digest}"
 
 
 @dataclass(frozen=True)
@@ -108,6 +215,25 @@ class Manifest:
     generator_abi_version: int
     required_runtime_capabilities: tuple[str, ...]
     classes: tuple[ForeignClass, ...]
+
+
+@dataclass(frozen=True)
+class ProjectionStep:
+    """One generated cross-language class portion for a target lineage."""
+
+    kind: str
+    source_class_id: str
+    generated_name: str
+    extends_class_id: str
+
+
+@dataclass(frozen=True)
+class ProjectionPlan:
+    """The minimal generated portions required for one top-level target."""
+
+    target_class_id: str
+    lineage: tuple[ForeignClass, ...]
+    steps: tuple[ProjectionStep, ...]
 
 
 def _error(where: str, message: str) -> SVXInheritanceError:
@@ -301,14 +427,118 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
 
 def _parse_parameter(value: Any, where: str) -> Parameter:
     raw = _object(value, where)
-    _reject_unknown(raw, {"name", "type", "direction"}, where)
+    _reject_unknown(raw, {"name", "type", "direction", "ref_access"}, where)
     name = _identifier(_required_string(raw, "name", where), f"{where}.name")
     type_binding = _type_binding(raw.get("type"), f"{where}.type", allow_void=False)
     direction = raw.get("direction", "input")
     if direction not in {"input", "output", "inout", "ref"}:
         raise _error(f"{where}.direction", "must be input, output, inout, or ref")
+    ref_access = raw.get("ref_access", "readwrite")
+    if ref_access not in {"readwrite", "readonly"}:
+        raise _error(f"{where}.ref_access", "must be readwrite or readonly")
+    if direction != "ref" and "ref_access" in raw:
+        raise _error(f"{where}.ref_access", "is valid only for ref parameters")
     assert type_binding is not None
-    return Parameter(name=name, type_binding=type_binding, direction=direction)
+    return Parameter(
+        name=name,
+        type_binding=type_binding,
+        direction=direction,
+        ref_access=ref_access,
+    )
+
+
+def _parse_field(value: Any, where: str) -> Field:
+    raw = _object(value, where)
+    _reject_unknown(raw, {"name", "type"}, where)
+    name = _identifier(_required_string(raw, "name", where), f"{where}.name")
+    type_binding = _type_binding(raw.get("type"), f"{where}.type", allow_void=False)
+    assert type_binding is not None
+    return Field(name, type_binding)
+
+
+def _json_literal(value: Any, where: str) -> Any:
+    """Accept normalized scalar specialization values, never source expressions."""
+
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    raise _error(where, "must be a normalized JSON scalar literal")
+
+
+def _parse_specialization(value: Any, where: str, language: str) -> Specialization:
+    if language != "sv":
+        raise _error(where, "is valid only for SystemVerilog classes")
+    raw = _object(value, where)
+    _reject_unknown(raw, {"arguments"}, where)
+    arguments_raw = raw.get("arguments")
+    if not isinstance(arguments_raw, list) or not arguments_raw:
+        raise _error(f"{where}.arguments", "must be a non-empty list")
+    arguments: list[SpecializationArgument] = []
+    for index, item in enumerate(arguments_raw):
+        argument_where = f"{where}.arguments[{index}]"
+        argument = _object(item, argument_where)
+        kind = _required_string(argument, "kind", argument_where)
+        if kind == "type":
+            _reject_unknown(argument, {"kind", "type"}, argument_where)
+            arguments.append(
+                SpecializationArgument(
+                    kind="type",
+                    type_binding=_type_binding(argument.get("type"), f"{argument_where}.type", allow_void=False),
+                )
+            )
+        elif kind == "value":
+            _reject_unknown(argument, {"kind", "sv_type", "value"}, argument_where)
+            sv_type = _required_string(argument, "sv_type", argument_where)
+            if not re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_:$ ]*", sv_type):
+                raise _error(f"{argument_where}.sv_type", "contains unsupported source characters")
+            arguments.append(
+                SpecializationArgument(
+                    kind="value",
+                    sv_type=sv_type,
+                    value=_json_literal(argument.get("value"), f"{argument_where}.value"),
+                )
+            )
+        else:
+            raise _error(f"{argument_where}.kind", "must be type or value")
+    return Specialization(tuple(arguments))
+
+
+def _specialization_dict(specialization: Specialization) -> dict[str, Any]:
+    arguments: list[dict[str, Any]] = []
+    for argument in specialization.arguments:
+        if argument.kind == "type":
+            assert argument.type_binding is not None
+            arguments.append({"kind": "type", "type": argument.type_binding.runtime_spec() | {
+                "sv": argument.type_binding.sv,
+                "sv_packer": argument.type_binding.sv_packer,
+            }})
+        else:
+            arguments.append(
+                {"kind": "value", "sv_type": argument.sv_type, "value": argument.value}
+            )
+    return {"arguments": arguments}
+
+
+def _sv_specialization_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "1'b1" if value else "1'b0"
+    if isinstance(value, str):
+        return json.dumps(value)
+    return str(value)
+
+
+def _sv_class_reference(cls: ForeignClass) -> str:
+    """Render the source class type, including only closed manifest arguments."""
+
+    if cls.specialization is None:
+        return cls.name
+    arguments: list[str] = []
+    for argument in cls.specialization.arguments:
+        if argument.kind == "type":
+            assert argument.type_binding is not None
+            arguments.append(argument.type_binding.sv)
+        else:
+            arguments.append(_sv_specialization_value(argument.value))
+    return f"{cls.name}#({', '.join(arguments)})"
 
 
 def _parse_method(value: Any, cls_id: str, where: str) -> Method:
@@ -390,7 +620,15 @@ def _validate_symbol(language: str, symbol: str, where: str) -> None:
 
 def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> ForeignClass:
     raw = _object(value, where)
-    allowed = {"canonical_id", "language", "symbol", "methods", "constructor"}
+    allowed = {
+        "canonical_id",
+        "language",
+        "symbol",
+        "methods",
+        "constructor",
+        "specialization",
+        "fields",
+    }
     if not lineage_member:
         allowed.add("base_lineage")
     _reject_unknown(raw, allowed, where)
@@ -405,6 +643,12 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
         raise _error(f"{where}.canonical_id", "scheme must match language")
     symbol = _required_string(raw, "symbol", where)
     _validate_symbol(language, symbol, f"{where}.symbol")
+    specialization_raw = raw.get("specialization")
+    specialization = (
+        _parse_specialization(specialization_raw, f"{where}.specialization", language)
+        if specialization_raw is not None
+        else None
+    )
 
     raw_methods = raw.get("methods", [])
     if not isinstance(raw_methods, list):
@@ -413,6 +657,15 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
     method_names = [method.name for method in methods]
     if len(method_names) != len(set(method_names)):
         raise _error(f"{where}.methods", "method overloads are not supported; names must be unique")
+    raw_fields = raw.get("fields", [])
+    if not isinstance(raw_fields, list):
+        raise _error(f"{where}.fields", "must be a list")
+    fields = tuple(_parse_field(item, f"{where}.fields[{index}]") for index, item in enumerate(raw_fields))
+    field_names = [field.name for field in fields]
+    if len(field_names) != len(set(field_names)):
+        raise _error(f"{where}.fields", "contains duplicate field names")
+    if set(field_names) & set(method_names):
+        raise _error(f"{where}.fields", "field names must not collide with method names")
     constructor_raw = raw.get("constructor")
     constructor = _parse_constructor(constructor_raw, f"{where}.constructor") if constructor_raw is not None else None
     raw_lineage = raw.get("base_lineage", [])
@@ -429,7 +682,16 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
         raise _error(f"{where}.base_lineage", "must not contain the target class itself")
     if len(lineage_ids) != len(set(lineage_ids)):
         raise _error(f"{where}.base_lineage", "contains duplicate canonical class IDs")
-    return ForeignClass(canonical_id, language, symbol, methods, constructor, base_lineage)
+    return ForeignClass(
+        canonical_id,
+        language,
+        symbol,
+        methods,
+        constructor,
+        specialization,
+        fields,
+        base_lineage,
+    )
 
 
 def parse_manifest(data: Any) -> Manifest:
@@ -464,20 +726,41 @@ def parse_manifest(data: Any) -> Manifest:
         raise _error("root.required_runtime_capabilities", "must be a list of strings")
     if len(capabilities) != len(set(capabilities)):
         raise _error("root.required_runtime_capabilities", "contains duplicates")
-    missing = sorted(set(REQUIRED_RUNTIME_CAPABILITIES) - set(capabilities))
+    raw_classes = raw.get("classes")
+    if not isinstance(raw_classes, list) or not raw_classes:
+        raise _error("root.classes", "must be a non-empty list")
+    classes = tuple(_parse_class(item, f"root.classes[{index}]") for index, item in enumerate(raw_classes))
+    required_capabilities = set(REQUIRED_RUNTIME_CAPABILITIES)
+    if any(
+        candidate.fields
+        for cls in classes
+        for candidate in (*cls.base_lineage, cls)
+    ):
+        required_capabilities.add(EXTERNAL_FIELD_STORAGE_CAPABILITY)
+    missing = sorted(required_capabilities - set(capabilities))
     if missing:
         raise _error(
             "root.required_runtime_capabilities",
             "is missing required capabilities: " + ", ".join(missing),
         )
-    raw_classes = raw.get("classes")
-    if not isinstance(raw_classes, list) or not raw_classes:
-        raise _error("root.classes", "must be a non-empty list")
-    classes = tuple(_parse_class(item, f"root.classes[{index}]") for index, item in enumerate(raw_classes))
     class_ids = [cls.canonical_id for cls in classes]
     if len(class_ids) != len(set(class_ids)):
         raise _error("root.classes", "contains duplicate canonical class IDs")
     _validate_generated_names(classes)
+    specializations: dict[tuple[str, str], str] = {}
+    for cls in classes:
+        if cls.specialization is None:
+            continue
+        key = (
+            cls.symbol,
+            json.dumps(_specialization_dict(cls.specialization), sort_keys=True),
+        )
+        existing = specializations.setdefault(key, cls.canonical_id)
+        if existing != cls.canonical_id:
+            raise _error(
+                "root.classes",
+                f"concrete specialization {cls.symbol} is assigned both {existing!r} and {cls.canonical_id!r}",
+            )
     top_level = {cls.canonical_id: cls for cls in classes}
     for cls in classes:
         for ancestor in cls.base_lineage:
@@ -494,6 +777,77 @@ def parse_manifest(data: Any) -> Manifest:
         tuple(capabilities),
         classes,
     )
+
+
+def projection_plan(target: ForeignClass) -> ProjectionPlan:
+    """Resolve the minimal mirror/proxy portions for one declared target.
+
+    ``base_lineage`` is deliberately retained as context instead of becoming a
+    recursive generation list. This plan is the single place the generator uses
+    to decide which language-boundary artifacts a target actually needs.
+    """
+
+    lineage = (*target.base_lineage, target)
+    steps: list[ProjectionStep] = []
+    for index, current in enumerate(lineage[:-1]):
+        child = lineage[index + 1]
+        if current.language == "sv" and child.language == "python":
+            steps.append(
+                ProjectionStep(
+                    kind="sv_mirror",
+                    source_class_id=current.canonical_id,
+                    generated_name=f"{current.generated_name}Mirror",
+                    extends_class_id=current.canonical_id,
+                )
+            )
+        elif current.language == "python" and child.language == "sv":
+            # The proxy carries this Python class only because the following
+            # SV class needs a real SV base portion for it.
+            steps.append(
+                ProjectionStep(
+                    kind="sv_proxy",
+                    source_class_id=current.canonical_id,
+                    generated_name=f"{current.generated_name}Proxy",
+                    extends_class_id=current.canonical_id,
+                )
+            )
+    return ProjectionPlan(target.canonical_id, tuple(lineage), tuple(steps))
+
+
+def projection_plans(manifest: Manifest) -> tuple[ProjectionPlan, ...]:
+    """Return deterministic, target-only plans for the complete manifest."""
+
+    return tuple(projection_plan(target) for target in manifest.classes)
+
+
+def _projected_class_ids(manifest: Manifest) -> set[str]:
+    """Classes represented by an explicit alternating-lineage helper path.
+
+    A lineage owns its generated bridge classes.  This prevents a target-only
+    projection from manufacturing a competing representation for one of its
+    ancestors; for example, an SV base crossing to Python is represented by
+    ``AMirror`` exactly once.
+    """
+
+    projected: set[str] = set()
+    for plan in projection_plans(manifest):
+        if plan.steps:
+            projected.update(cls.canonical_id for cls in plan.lineage)
+    return projected
+
+
+def _all_manifest_classes(manifest: Manifest) -> tuple[ForeignClass, ...]:
+    """Return one canonical declaration for every target or lineage member."""
+
+    resolved: dict[str, ForeignClass] = {}
+    for target in manifest.classes:
+        for cls in (*target.base_lineage, target):
+            previous = resolved.setdefault(cls.canonical_id, cls)
+            if previous != cls:
+                raise SVXInheritanceError(
+                    f"conflicting lineage declarations for {cls.canonical_id}"
+                )
+    return tuple(resolved[key] for key in sorted(resolved))
 
 
 def migrate_manifest(data: Any) -> dict[str, Any]:
@@ -534,7 +888,12 @@ def load_manifest(path: Path) -> Manifest:
 
 
 def _python_module_for(cls: ForeignClass) -> str:
-    return "svx_sv." + ".".join(cls.symbol.split("::")[:-1])
+    module = "svx_sv." + ".".join(cls.symbol.split("::")[:-1])
+    # Preserve the foreign simple class name while isolating concrete
+    # specializations in deterministic generated Python modules.
+    if cls.specialization is not None:
+        module += "__" + cls.generated_name.lower()
+    return module
 
 
 def _sv_package_for(cls: ForeignClass) -> str:
@@ -554,12 +913,12 @@ def _validate_generated_names(classes: tuple[ForeignClass, ...]) -> None:
         else:
             namespace = _sv_package_for(cls)
             target = "SystemVerilog"
-        key = (target, namespace, cls.name)
+        key = (target, namespace, cls.generated_name)
         previous = seen.get(key)
         if previous is not None:
             raise _error(
                 "root.classes",
-                f"generated {target} name {namespace}.{cls.name} collides between "
+                f"generated {target} name {namespace}.{cls.generated_name} collides between "
                 f"{previous.canonical_id!r} and {cls.canonical_id!r}",
             )
         seen[key] = cls
@@ -639,9 +998,10 @@ def _response_parameters(method: Method) -> tuple[Parameter, ...]:
 def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
     """Return relative output paths and declaration-only Python mirror source."""
 
+    projected = _projected_class_ids(manifest)
     modules: dict[str, list[ForeignClass]] = {}
     for cls in manifest.classes:
-        if cls.language == "sv":
+        if cls.language == "sv" and cls.canonical_id not in projected:
             modules.setdefault(_python_module_for(cls), []).append(cls)
 
     emitted: dict[PurePosixPath, str] = {PurePosixPath("svx_sv/__init__.py"): "# Generated by svx inheritance-gen.\n"}
@@ -691,9 +1051,99 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             lines.append("")
         emitted[path] = "\n".join(lines).rstrip() + "\n"
 
+    # Python counterparts of SV AMirror portions.  They are emitted only for
+    # actual SV->Python boundaries and become the natural Python base imported
+    # by user classes; no legacy foreign-name proxy is involved.
+    projection_modules: dict[str, list[ForeignClass]] = {}
+    for plan in projection_plans(manifest):
+        for step in plan.steps:
+            if step.kind != "sv_mirror":
+                continue
+            source = next(
+                cls for cls in plan.lineage if cls.canonical_id == step.source_class_id
+            )
+            module = "svx_mirrors." + "_".join(source.symbol.split("::")[:-1])
+            projection_modules.setdefault(module, []).append(source)
+    if projection_modules:
+        emitted[PurePosixPath("svx_mirrors/__init__.py")] = "# Generated by svx inheritance-gen.\n"
+    for module, sources in sorted(projection_modules.items()):
+        path = PurePosixPath(*module.split(".")).with_suffix(".py")
+        lines = [
+            "# Generated by svx inheritance-gen. Do not edit.",
+            "from __future__ import annotations",
+            "from svx import _native",
+            "from svx.declarations import SVMirror",
+            "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, register_constructor, register_contract, register_python_subclass",
+            "",
+        ]
+        seen: set[str] = set()
+        for source in sorted(sources, key=lambda item: item.canonical_id):
+            if source.canonical_id in seen:
+                continue
+            seen.add(source.canonical_id)
+            lines.append("register_contract({")
+            for method in source.methods:
+                lines.append(f"    {method.canonical_id!r}: {_contract_repr(method)},")
+            lines.append("})")
+            parameters = source.constructor.parameters if source.constructor else ()
+            if source.constructor is not None:
+                lines.append(f"register_constructor({source.canonical_id!r}, {_field_specs(parameters)})")
+            names = ", ".join(parameter.name for parameter in parameters)
+            signature = f"self, {names}" if names else "self"
+            values = "{" + ", ".join(f"{p.name!r}: {p.name}" for p in parameters) + "}"
+            mirror_name = f"{source.generated_name}Mirror"
+            lines.extend(
+                [
+                    "",
+                    f"class {mirror_name}(SVMirror):",
+                    f"    \"\"\"Executable Python base view of {source.symbol}.\"\"\"",
+                    f"    __svx_foreign_class_id__ = {source.canonical_id!r}",
+                    "",
+                    "    def __init_subclass__(cls, **kwargs):",
+                    "        super().__init_subclass__(**kwargs)",
+                    f"        register_python_subclass({source.canonical_id!r}, cls)",
+                    "",
+                    "    @classmethod",
+                    "    def __svx_create_from_sv__(cls, remote_object_id, *args):",
+                    "        instance = cls.__new__(cls)",
+                    "        SVMirror.__init__(instance)",
+                    "        instance._svx_bind_remote_object(remote_object_id)",
+                    "        bind_instance(remote_object_id, instance)",
+                    "        try:",
+                    "            cls.__init__(instance, *args)",
+                    "        except BaseException:",
+                    "            from svx.inheritance import unbind_instance",
+                    "            unbind_instance(remote_object_id)",
+                    "            raise",
+                    "        return instance",
+                    "",
+                    f"    def __init__({signature}):",
+                    "        if self._svx_remote_object_id is not None:",
+                    "            return",
+                    "        super().__init__()",
+                    f"        object_id = _native.inheritance_create_sv({source.canonical_id!r}, encode_constructor({source.canonical_id!r}, {values}))",
+                    "        self._svx_bind_remote_object(object_id)",
+                    "        try:",
+                    "            bind_instance(object_id, self)",
+                    "        except BaseException:",
+                    "            _native.inheritance_close(object_id)",
+                    "            raise",
+                ]
+            )
+            for method in source.methods:
+                lines.extend(
+                    [
+                        "",
+                        f"    def {method.name}({_python_request_parameter_list(method)}):",
+                        f"        return invoke_sv(self._svx_remote_object_id, {method.canonical_id!r}, {_request_values_repr(method)})",
+                    ]
+                )
+            lines.append("")
+        emitted[path] = "\n".join(lines).rstrip() + "\n"
+
     reverse_modules: dict[str, list[ForeignClass]] = {}
     for cls in manifest.classes:
-        if cls.language == "python":
+        if cls.language == "python" and cls.canonical_id not in projected:
             reverse_modules.setdefault(_python_reverse_module_for(cls), []).append(cls)
     emitted[PurePosixPath("svx_py/__init__.py")] = "# Generated by svx inheritance-gen.\n"
     for module_name, classes in sorted(reverse_modules.items()):
@@ -740,10 +1190,13 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
 def _sv_parameters(method: Method) -> str:
     if not method.parameters:
         return ""
-    return ", ".join(
-        f"{parameter.direction} {parameter.type_binding.sv} {parameter.name}"
-        for parameter in method.parameters
-    )
+    def render(parameter: Parameter) -> str:
+        direction = parameter.direction
+        if direction == "ref" and parameter.ref_access == "readonly":
+            direction = "const ref"
+        return f"{direction} {parameter.type_binding.sv} {parameter.name}"
+
+    return ", ".join(render(parameter) for parameter in method.parameters)
 
 
 def _sv_record_type(
@@ -773,7 +1226,7 @@ def _sv_record_type(
 
 def _manifest_sv_record_types(manifest: Manifest) -> list[type]:
     records: list[type] = []
-    for cls in manifest.classes:
+    for cls in _all_manifest_classes(manifest):
         if cls.constructor is not None and cls.constructor.parameters:
             records.append(
                 _sv_record_type(
@@ -950,13 +1403,357 @@ def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
     return result
 
 
-def emit_sv_mirrors(manifest: Manifest) -> str:
-    """Emit M8 mirrors and M9 zero-argument SV-to-Python proxy subclasses."""
+def _emit_sv_field_dispatch_cases(cls: ForeignClass, field: Field) -> list[str]:
+    """Emit root read/set endpoints used only by ``SVXFieldStorage``.
 
+    SvTypes owns byte normalization and descriptor checking on the Python side;
+    generated SV code owns the matching concrete packer and rejects trailing
+    bytes. Path-aware collection endpoints are added with their explicit
+    manifest operation table rather than silently doing whole-field writeback.
+    """
+
+    field_id = f"{cls.canonical_id}.{field.name}"
+    packer = field.type_binding.sv_packer
+    return [
+        f"        {json.dumps(field_id + '@svx_field_read')}: begin",
+        "          if (bytes.size() != 0) begin",
+        "            ok = 0;",
+        '            error = "field read request must be empty";',
+        "          end else begin",
+        "            bytes.delete();",
+        f"            {packer}::pack({field.name}, bytes);",
+        "            ok = 1;",
+        '            error = "";',
+        '            response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+        "          end",
+        "        end",
+        f"        {json.dumps(field_id + '@svx_field_set')}: begin",
+        "          int field_offset;",
+        "          field_offset = 0;",
+        f"          {packer}::unpack({field.name}, bytes, field_offset);",
+        f'          svx_require_unpacked_all("{field_id}", "field write", "field value", field_offset, bytes.size());',
+        "          bytes.delete();",
+        "          ok = 1;",
+        '          error = "";',
+        '          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+        "        end",
+    ]
+
+
+def _emit_sv_projection_invoke(
+    cls: ForeignClass,
+    *,
+    base_methods: tuple[Method, ...],
+    delegate_unmatched_to_super: bool = False,
+) -> list[str]:
+    """Emit generated base gateways and selected projected-field endpoints."""
+
+    lines = [
+        "",
+        "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+        "      byte unsigned bytes[$];",
+        "      int offset;",
+        "      response = null;",
+        "      svx_payload_to_byte_queue(request, bytes);",
+        "      offset = 0;",
+        "      case (method_id)",
+    ]
+    for method in base_methods:
+        lines.extend(_emit_sv_dispatch_case(method, "super."))
+    for field in cls.fields:
+        lines.extend(_emit_sv_field_dispatch_cases(cls, field))
+    if delegate_unmatched_to_super:
+        # A Python-to-SV proxy sits above an SV mirror.  Its inherited member
+        # calls must reach the mirror's explicit base gateway, rather than
+        # invoking the mirror's virtual override and re-entering Python.
+        lines.extend(
+            [
+                "        default: super.svx_invoke(method_id, request, ok, response, error);",
+                "      endcase",
+                "    endtask",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "        default: begin",
+                "          ok = 0;",
+                '          error = {"unsupported projected member: ", method_id};',
+                "        end",
+                "      endcase",
+                "    endtask",
+            ]
+        )
+    return lines
+
+
+def _emit_sv_projection_class(
+    generated_name: str,
+    base_type: str,
+    cls: ForeignClass,
+    *,
+    base_methods: tuple[Method, ...],
+    dispatch_virtuals: tuple[Method, ...],
+    delegate_unmatched_to_super: bool = False,
+) -> list[str]:
+    """Emit an AMirror or BProxy portion without manufacturing user classes."""
+
+    lines = [
+        "",
+        f"  class {generated_name} extends {base_type} implements svx_dispatchable;",
+        "    longint unsigned __svx_remote_object_id;",
+    ]
+    for field in cls.fields:
+        lines.append(f"    {field.type_binding.sv} {field.name};")
+    constructor = cls.constructor
+    constructor_parameters = (
+        ", ".join(f"input {p.type_binding.sv} {p.name}" for p in constructor.parameters)
+        if constructor is not None
+        else ""
+    )
+    constructor_arguments = (
+        ", ".join(p.name for p in constructor.parameters) if constructor is not None else ""
+    )
+    if constructor is not None and constructor.initiator == "sv":
+        lines.extend(
+            [
+                "",
+                f"    function new({constructor_parameters});",
+                "      bit ok;",
+                "      chandle request;",
+                "      string error;",
+                "      byte unsigned bytes[$];",
+                *(
+                    [
+                        f"      {_call_record_class_name(cls.canonical_id, 'request')} request_value;"
+                    ]
+                    if constructor.parameters
+                    else []
+                ),
+                f"      super.new({constructor_arguments});",
+                "      __svx_remote_object_id = svx_inheritance_registry::allocate_object_id();",
+            ]
+        )
+        if constructor.parameters:
+            record_name = _call_record_class_name(cls.canonical_id, "request")
+            lines.append("      request_value = new();")
+            for parameter in constructor.parameters:
+                lines.append(f"      request_value.{parameter.name} = {parameter.name};")
+            lines.append("      request_value.pack(bytes);")
+        lines.extend(
+            [
+                '      request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+                f"      svx_inheritance_create_python({json.dumps(cls.canonical_id)}, __svx_remote_object_id, request, ok, error);",
+                "      svx_payload_destroy(request);",
+                "      if (!ok) begin",
+                f'        $fatal(2, "SVX AMirror construction {cls.canonical_id} failed: %s", error);',
+                "      end",
+                "      svx_inheritance_registry::register_object(__svx_remote_object_id, this);",
+                "    endfunction",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                f"    function new(longint unsigned object_id{', ' if constructor_parameters else ''}{constructor_parameters});",
+                f"      super.new({constructor_arguments});",
+                "      __svx_remote_object_id = object_id;",
+                "      svx_inheritance_registry::register_object(object_id, this);",
+                "    endfunction",
+            ]
+        )
+    for method in dispatch_virtuals:
+        lines.extend(_emit_sv_outbound_method(method))
+    lines.extend(
+        _emit_sv_projection_invoke(
+            cls,
+            base_methods=base_methods,
+            delegate_unmatched_to_super=delegate_unmatched_to_super,
+        )
+    )
+    lines.append(f"  endclass : {generated_name}")
+    return lines
+
+
+def _emit_sv_projection_factory(source: ForeignClass, helper_name: str) -> list[str]:
+    """Factory used when Python creates the paired SV mirror/proxy object."""
+
+    constructor = source.constructor
+    if constructor is not None and constructor.initiator != "python":
+        return []
+    parameters = constructor.parameters if constructor is not None else ()
+    record_name = _call_record_class_name(source.canonical_id, "request")
+    factory_name = f"{helper_name}_factory"
+    registration_name = f"register_{helper_name}_factory"
+    lines = ["", f"  class {factory_name} implements svx_factory;", "    virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);"]
+    if parameters:
+        lines.extend(
+            [
+                f"      {record_name} constructor_request;",
+                f"      {helper_name} instance;",
+                f"      constructor_request = {record_name}::svx_decode_constructor_request(request);",
+            ]
+        )
+        # Record classes use a static decoder on the generated mirror class in
+        # the legacy path. Keep decoding local here so projection factories do
+        # not require a second generated base class.
+        lines[-1] = "      byte unsigned bytes[$];"
+        lines.extend(
+            [
+                "      int offset;",
+                "      constructor_request = new();",
+                "      svx_payload_to_byte_queue(request, bytes);",
+                "      offset = 0;",
+                "      constructor_request.unpack(bytes, offset);",
+                f'      svx_require_unpacked_all("{source.canonical_id}", "constructor request", "call request", offset, bytes.size());',
+                f"      instance = new(object_id, {', '.join('constructor_request.' + p.name for p in parameters)});",
+            ]
+        )
+    else:
+        lines.extend([f"      {helper_name} instance;", "      instance = new(object_id);"])
+    lines.extend(
+        [
+            "      ok = 1;",
+            '      error = "";',
+            "    endtask",
+            f"  endclass : {factory_name}",
+            "",
+            f"  function void {registration_name}();",
+            f"    static {factory_name} factory;",
+            "    if (factory == null) factory = new();",
+            f"    svx_inheritance_registry::register_factory({json.dumps(source.canonical_id)}, factory);",
+            "  endfunction",
+        ]
+    )
+    return lines
+
+
+def _emit_sv_projection_helpers(
+    manifest: Manifest,
+    *,
+    has_call_records: bool,
+) -> list[str]:
+    """Materialize only mirrors/proxies implied by top-level target lineages."""
+
+    mirrors: dict[str, tuple[ForeignClass, ForeignClass]] = {}
+    proxies: dict[str, tuple[ForeignClass, ForeignClass, ForeignClass]] = {}
+    for plan in projection_plans(manifest):
+        active_mirror: ForeignClass | None = None
+        for index, current in enumerate(plan.lineage[:-1]):
+            child = plan.lineage[index + 1]
+            if current.language == "sv" and child.language == "python":
+                active_mirror = current
+                mirrors.setdefault(current.canonical_id, (current, child))
+            elif current.language == "python" and child.language == "sv":
+                if active_mirror is None:
+                    raise SVXInheritanceError(
+                        f"cannot project {current.canonical_id} into SV without a preceding SV mirror"
+                    )
+                proxies.setdefault(current.canonical_id, (current, active_mirror, child))
+
+    packages: dict[str, list[str]] = {}
+    dependencies: dict[str, set[str]] = {}
+    for source, _child in mirrors.values():
+        package = "svx_projection_" + "_".join(source.symbol.split("::")[:-1]) + "_pkg"
+        packages.setdefault(package, []).append(source.canonical_id)
+    for source, _mirror, _child in proxies.values():
+        package = "svx_projection_" + "_".join(source.symbol.split(".")[:-1]) + "_pkg"
+        packages.setdefault(package, []).append(source.canonical_id)
+        mirror_package = (
+            "svx_projection_" + "_".join(_mirror.symbol.split("::")[:-1]) + "_pkg"
+        )
+        if mirror_package != package:
+            dependencies.setdefault(package, set()).add(mirror_package)
+
+    # A generated proxy imports its preceding mirror package.  Emit packages
+    # in dependency order so a single generated source file is compilable.
+    ordered_packages: list[str] = []
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(package: str) -> None:
+        if package in visited:
+            return
+        if package in visiting:
+            raise SVXInheritanceError(f"cyclic generated projection package dependency at {package}")
+        visiting.add(package)
+        for dependency in sorted(dependencies.get(package, ())):
+            if dependency in packages:
+                visit(dependency)
+        visiting.remove(package)
+        visited.add(package)
+        ordered_packages.append(package)
+
+    for package in sorted(packages):
+        visit(package)
+
+    lines: list[str] = []
+    for package in ordered_packages:
+        guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
+        lines.extend(
+            [
+                "",
+                f"`ifndef {guard}",
+                f"`define {guard}",
+                "",
+                f"package {package};",
+                "  import svx_pkg::*;",
+                "  import svtypes_pkg::*;",
+                *(["  import svx_call_records_pkg::*;"] if has_call_records else []),
+            ]
+        )
+        class_ids = sorted(set(packages[package]))
+        for class_id in class_ids:
+            if class_id in mirrors:
+                source, _child = mirrors[class_id]
+                source_package = source.symbol.split("::")[0]
+                lines.append(f"  import {source_package}::*;")
+            if class_id in proxies:
+                _source, mirror_source, _child = proxies[class_id]
+                mirror_package = "svx_projection_" + "_".join(mirror_source.symbol.split("::")[:-1]) + "_pkg"
+                if mirror_package != package:
+                    lines.append(f"  import {mirror_package}::*;")
+        for class_id in class_ids:
+            if class_id in mirrors:
+                source, _child = mirrors[class_id]
+                lines.extend(
+                    _emit_sv_projection_class(
+                        f"{source.generated_name}Mirror",
+                        _sv_class_reference(source),
+                        source,
+                        base_methods=source.methods,
+                        dispatch_virtuals=tuple(method for method in source.methods if method.virtual),
+                    )
+                )
+                lines.extend(_emit_sv_projection_factory(source, f"{source.generated_name}Mirror"))
+            if class_id in proxies:
+                source, mirror_source, _child = proxies[class_id]
+                lines.extend(
+                    _emit_sv_projection_class(
+                        f"{source.generated_name}Proxy",
+                        f"{mirror_source.generated_name}Mirror",
+                        source,
+                        base_methods=mirror_source.methods,
+                        dispatch_virtuals=tuple(method for method in source.methods if method.virtual),
+                        delegate_unmatched_to_super=True,
+                    )
+                )
+        lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
+    return lines
+
+
+def emit_sv_mirrors(manifest: Manifest) -> str:
+    """Emit target-scoped SV AMirror and Proxy projection helpers."""
+
+    projected = _projected_class_ids(manifest)
     packages: dict[str, list[ForeignClass]] = {}
     for cls in manifest.classes:
-        if cls.language == "python":
-            packages.setdefault(_sv_package_for(cls), []).append(cls)
+        if cls.language == "python" and cls.canonical_id not in projected:
+            packages.setdefault(
+                "svx_projection_" + "_".join(cls.symbol.split(".")[:-1]) + "_pkg",
+                [],
+            ).append(cls)
 
     lines = ["// Generated by svx inheritance-gen. Do not edit."]
     record_types = _manifest_sv_record_types(manifest)
@@ -964,7 +1761,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
         imported_packages = sorted(
             {
                 binding.sv.split("::", 1)[0]
-                for cls in manifest.classes
+                for cls in _all_manifest_classes(manifest)
                 for binding in [
                     *(
                         parameter.type_binding
@@ -998,7 +1795,11 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
         lines.extend(["", f"`ifndef {guard}", f"`define {guard}", "", f"package {package};", "  import svx_pkg::*;", "  import svtypes_pkg::*;", *record_import])
         for cls in sorted(classes, key=lambda item: item.name):
-            lines.extend(["", f"  // Generated SV base for {cls.canonical_id}", f"  virtual class {cls.name} implements svx_dispatchable;", "    longint unsigned __svx_remote_object_id;", "", "    function new(longint unsigned object_id);", "      __svx_remote_object_id = object_id;", "      svx_inheritance_registry::register_object(object_id, this);", "    endfunction"])
+            proxy_name = f"{cls.generated_name}Proxy"
+            lines.extend(["", f"  // Generated SV projection for {cls.canonical_id}", f"  virtual class {proxy_name} implements svx_dispatchable;", "    longint unsigned __svx_remote_object_id;"])
+            for field in cls.fields:
+                lines.append(f"    {field.type_binding.sv} {field.name};")
+            lines.extend(["", "    function new(longint unsigned object_id);", "      __svx_remote_object_id = object_id;", "      svx_inheritance_registry::register_object(object_id, this);", "    endfunction"])
             if cls.constructor is not None and cls.constructor.parameters:
                 record_name = _call_record_class_name(cls.canonical_id, "request")
                 lines.extend(
@@ -1024,88 +1825,13 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             lines.extend(["", "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);", "      byte unsigned bytes[$];", "      int offset;", "      response = null;", "      svx_payload_to_byte_queue(request, bytes);", "      offset = 0;", "      case (method_id)"])
             for method in cls.methods:
                 lines.extend(_emit_sv_dispatch_case(method))
+            for field in cls.fields:
+                lines.extend(_emit_sv_field_dispatch_cases(cls, field))
             lines.extend(["        default: begin", "          ok = 0;", "          error = {\"unsupported method: \", method_id};", "        end", "      endcase", "    endtask"])
-            lines.append(f"  endclass : {cls.name}")
+            lines.append(f"  endclass : {proxy_name}")
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
 
-    proxy_packages: dict[str, list[ForeignClass]] = {}
-    for cls in manifest.classes:
-        if cls.language == "sv":
-            proxy_packages.setdefault("svx_pyproxy_" + "_".join(cls.symbol.split("::")[:-1]) + "_pkg", []).append(cls)
-    for package, classes in sorted(proxy_packages.items()):
-        guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
-        lines.extend(["", f"`ifndef {guard}", f"`define {guard}", "", f"package {package};", "  import svx_pkg::*;", "  import svtypes_pkg::*;", *record_import])
-        for cls in sorted(classes, key=lambda item: item.name):
-            base_package = cls.symbol.split("::")[0]
-            lines.extend([f"  import {base_package}::*;", "", f"  class {cls.name}_python_proxy extends {cls.name} implements svx_dispatchable;", "    longint unsigned __svx_remote_object_id;"])
-            if (
-                cls.constructor is not None
-                and cls.constructor.initiator == "python"
-                and cls.constructor.parameters
-            ):
-                record_name = _call_record_class_name(cls.canonical_id, "request")
-                lines.extend(["", f"    typedef {record_name} constructor_request_t;", "", "    static function constructor_request_t svx_decode_constructor_request(input chandle request);", "      constructor_request_t value;", "      byte unsigned bytes[$];", "      int offset;", "      value = new();", "      svx_payload_to_byte_queue(request, bytes);", "      offset = 0;", "      value.unpack(bytes, offset);", f"      svx_require_unpacked_all(\"{cls.canonical_id}\", \"constructor request\", \"call request\", offset, bytes.size());", "      return value;", "    endfunction"])
-            if cls.constructor is not None and cls.constructor.initiator == "sv":
-                constructor_parameters = ", ".join(
-                    f"input {parameter.type_binding.sv} {parameter.name}"
-                    for parameter in cls.constructor.parameters
-                )
-                super_arguments = ", ".join(parameter.name for parameter in cls.constructor.parameters)
-                lines.extend(["", f"    function new({constructor_parameters});", "      bit ok;", "      chandle request;", "      string error;", "      byte unsigned bytes[$];"])
-                if cls.constructor.parameters:
-                    lines.append(
-                        f"      {_call_record_class_name(cls.canonical_id, 'request')} request_value;"
-                    )
-                lines.extend([f"      super.new({super_arguments});", "      __svx_remote_object_id = svx_inheritance_registry::allocate_object_id();"])
-                if cls.constructor.parameters:
-                    lines.append("      request_value = new();")
-                    for parameter in cls.constructor.parameters:
-                        lines.append(f"      request_value.{parameter.name} = {parameter.name};")
-                    lines.append("      request_value.pack(bytes);")
-                lines.extend(["      request = svx_payload_from_byte_queue(bytes, \"svx-inheritance\", \"\", \"application/x-svx-inheritance\");", f"      svx_inheritance_create_python({json.dumps(cls.canonical_id)}, __svx_remote_object_id, request, ok, error);", "      svx_payload_destroy(request);", "      if (!ok) begin", f"        $fatal(2, \"SVX inheritance factory {cls.canonical_id} failed: %s\", error);", "      end", "      svx_inheritance_registry::register_object(__svx_remote_object_id, this);", "    endfunction"])
-            elif cls.constructor is not None and cls.constructor.initiator == "python":
-                constructor_parameters = ", ".join(
-                    f"input {parameter.type_binding.sv} {parameter.name}"
-                    for parameter in cls.constructor.parameters
-                )
-                super_arguments = ", ".join(parameter.name for parameter in cls.constructor.parameters)
-                lines.extend(["", f"    function new(longint unsigned object_id{', ' if constructor_parameters else ''}{constructor_parameters});", f"      super.new({super_arguments});", "      __svx_remote_object_id = object_id;", "      svx_inheritance_registry::register_object(object_id, this);", "    endfunction"])
-            else:
-                lines.extend(["", "    function new(longint unsigned object_id);", "      super.new();", "      __svx_remote_object_id = object_id;", "      svx_inheritance_registry::register_object(object_id, this);", "    endfunction"])
-            for method in cls.methods:
-                lines.extend(_emit_sv_outbound_method(method))
-            lines.extend(["", "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);", "      byte unsigned bytes[$];", "      int offset;", "      response = null;", "      svx_payload_to_byte_queue(request, bytes);", "      offset = 0;"])
-            dispatch_methods = [
-                method
-                for method in cls.methods
-                if (method.timing == "task" and method.return_type is None)
-                or (method.timing == "function" and method.return_type is not None)
-            ]
-            if dispatch_methods:
-                lines.append("      case (method_id)")
-                for method in dispatch_methods:
-                    lines.extend(_emit_sv_dispatch_case(method, "super."))
-                lines.extend(["        default: begin", "          ok = 0;", "          error = {\"unsupported base method: \", method_id};", "        end", "      endcase"])
-            else:
-                lines.extend(["      ok = 0;", "      error = {\"no supported base method for: \", method_id};"])
-            lines.extend(["    endtask"])
-            lines.extend([f"  endclass : {cls.name}_python_proxy"])
-            if cls.constructor is not None and cls.constructor.initiator == "python":
-                factory_name = f"{cls.name}_python_proxy_factory"
-                registration_name = f"register_{cls.name}_python_proxy_factory"
-                lines.extend(["", f"  class {factory_name} implements svx_factory;", "    virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);"])
-                if cls.constructor.parameters:
-                    record_name = _call_record_class_name(cls.canonical_id, "request")
-                    lines.extend([f"      {record_name} constructor_request;", f"      {cls.name}_python_proxy instance;", f"      constructor_request = {cls.name}_python_proxy::svx_decode_constructor_request(request);"])
-                    constructor_arguments = ", ".join(
-                        f"constructor_request.{parameter.name}"
-                        for parameter in cls.constructor.parameters
-                    )
-                else:
-                    lines.extend([f"      {cls.name}_python_proxy instance;"])
-                    constructor_arguments = ""
-                lines.extend([f"      instance = new(object_id{', ' if constructor_arguments else ''}{constructor_arguments});", "      ok = 1;", "      error = \"\";", "    endtask", f"  endclass : {factory_name}", "", f"  function void {registration_name}();", f"    static {factory_name} factory;", "    if (factory == null) factory = new();", f"    svx_inheritance_registry::register_factory({json.dumps(cls.canonical_id)}, factory);", "  endfunction"])
-        lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
+    lines.extend(_emit_sv_projection_helpers(manifest, has_call_records=bool(record_types)))
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -1217,6 +1943,7 @@ def artifact_manifest(
                         {
                             "name": parameter.name,
                             "direction": parameter.direction,
+                            "ref_access": parameter.ref_access,
                             "unified_type_name": parameter.type_binding.unified_type_name,
                         }
                         for parameter in _request_parameters(method)
@@ -1225,6 +1952,7 @@ def artifact_manifest(
                         {
                             "name": parameter.name,
                             "direction": parameter.direction,
+                            "ref_access": parameter.ref_access,
                             "unified_type_name": parameter.type_binding.unified_type_name,
                         }
                         for parameter in _response_parameters(method)

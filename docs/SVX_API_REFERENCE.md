@@ -11,9 +11,10 @@ The following names exported from `svx` are stable:
   `fork_join_none`;
 - channels: `Payload`, `Channel`, `channel`, the typed role classes, and their
   corresponding factory functions;
-- inheritance lifecycle: `close_instance`;
+- inheritance lifecycle: `Ref` and `close_instance`;
 - inheritance declarations: `inheritance_type`, `inheritance_parameter`,
-  `inheritance_method`, `inheritance_class`, and `manifest_from_declarations`;
+  `inheritance_method`, `inheritance_class`, `SVMirror`, `sv_mirror`, and
+  `manifest_from_declarations`;
 - hierarchical access: `Signal` and `declare_signal`;
 - runtime and errors: `RuntimeState`, `runtime_state`, the `SVXError` hierarchy,
   `FATAL`, `REPORT`, `set_exception_policy`, and `get_exception_policy`.
@@ -27,14 +28,31 @@ registration helpers, and names
 beginning with an underscore are private runtime ABI and may not be called by
 user code.
 
-Generated Python mirrors keep the foreign class and method names. Their method
-signatures contain `input`, `inout`, and `ref` values; pure `output` values are
-not call arguments. A method with only a function result returns that result
-directly. A method with any copy-out value returns its generated SvTypes
-response value, exported by the generated module as
-`<Class><Method>Response`; its fields are the declared `output`, `inout`, and
-`ref` values followed by `result` when present. Field values use normal
-SvTypes generated-object access, including `.value` for scalar descriptors.
+Generated Python mirrors keep the foreign class and method names. Their task
+signatures contain `input` and `inout` values plus `svx.Ref[T]` objects for
+declared readwrite `ref` parameters; pure `output` values are not call
+arguments. A task `const ref` accepts an ordinary value for Python-to-SV calls
+and supplies a read-only `Ref[T]` for SV-to-Python callbacks.
+`Ref.value` is the only public ref accessor. During a Python-to-SV call it is
+bound to a typed temporary `svx_ref_argument.value`; during an SV-to-Python
+callback it is bound to a generated portal that directly reads/writes the
+original SV `ref` actual. It becomes stale when that call ends or unwinds. A
+method with only a function result returns that result directly. A method with
+any copy-out value returns its generated SvTypes response value, exported by
+the generated module as `<Class><Method>Response`; its fields are the declared
+`output`, `inout`, and final `ref` values followed by `result` when present.
+Field values use normal SvTypes generated object access, including `.value` for
+scalar descriptors. Inheritance callbacks must be synchronous ordinary Python
+functions; coroutine functions and awaitable results are rejected fatally.
+For a manifest `function` formal declared `ref`, the generated API emits
+`SVXW_FUNCTION_REF_AS_INOUT` and exposes that formal as an ordinary input value
+with a completion-time response value, rather than as `Ref[T]`.
+A manifest `function const ref` emits `SVXW_FUNCTION_CONST_REF_AS_INPUT` and
+is input-only at the cross-language boundary.
+
+`SVXReadonlyRefError` reports assignment through a callback `const ref`.
+`SVXStaleRefError` reports access to a borrowed task `Ref` after its callback
+portal has closed. Both derive from `SVXInheritanceError`.
 
 ## Stable CLI
 

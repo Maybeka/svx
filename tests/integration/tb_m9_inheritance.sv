@@ -15,9 +15,9 @@ endpackage
 module tb;
   import m10_object_types_pkg::*;
   import svx_pkg::*;
-  import svx_pyproxy_tb_pkg_pkg::*;
+  import svx_projection_tb_pkg_pkg::*;
 
-  class IntermediateDriver extends BaseDriver_python_proxy;
+  class IntermediateDriver extends BaseDriverMirror;
     function new(input int seed);
       super.new(seed);
     endfunction
@@ -36,8 +36,8 @@ module tb;
     svx_init();
     svx_load("tests.integration.m9_inheritance_test");
     svx_start("m9.setup");
-    // The generated proxy remains an ordinary SV base class: user SV classes
-    // may appear between it and the final instance without changing dispatch.
+    // User SV classes may appear after AMirror without changing virtual
+    // dispatch to the paired Python instance.
     driver = new(9);
     packet = new();
     packet.address = 37;

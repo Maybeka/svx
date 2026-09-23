@@ -1,0 +1,65 @@
+{
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0",
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "classes": [
+    {
+      "canonical_id": "sv://amirror_pkg/Base",
+      "language": "sv",
+      "symbol": "amirror_pkg::Base",
+      "constructor": {"initiator": "sv", "parameters": []},
+      "methods": [
+        {
+          "canonical_id": "sv://amirror_pkg/Base#ping",
+          "name": "ping",
+          "parameters": [],
+          "return_type": "void",
+          "timing": "task",
+          "virtual": true,
+          "pure_virtual": false
+        }
+      ]
+    },
+    {
+      "canonical_id": "py://tests/integration/amirror_inheritance/PythonChild",
+      "language": "python",
+      "symbol": "tests.integration.amirror_inheritance_test.PythonChild",
+      "methods": [
+        {
+          "canonical_id": "py://tests/integration/amirror_inheritance/PythonChild#ping",
+          "name": "ping",
+          "parameters": [],
+          "return_type": "void",
+          "timing": "task",
+          "virtual": true,
+          "pure_virtual": false
+        }
+      ],
+      "base_lineage": [
+        {
+          "canonical_id": "sv://amirror_pkg/Base",
+          "language": "sv",
+          "symbol": "amirror_pkg::Base",
+          "constructor": {"initiator": "sv", "parameters": []},
+          "methods": [
+            {
+              "canonical_id": "sv://amirror_pkg/Base#ping",
+              "name": "ping",
+              "parameters": [],
+              "return_type": "void",
+              "timing": "task",
+              "virtual": true,
+              "pure_virtual": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

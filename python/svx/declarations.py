@@ -10,6 +10,7 @@ from typing import Any, Callable, Iterable
 
 from .errors import SVXInheritanceError
 from .inheritance import (
+    EXTERNAL_FIELD_STORAGE_CAPABILITY,
     GENERATOR_ABI_VERSION,
     REQUIRED_RUNTIME_CAPABILITIES,
     SCHEMA_URI,
@@ -19,9 +20,83 @@ from .inheritance import (
 )
 from .sv_scan import validate_sv_declarations
 
+from svtypes import SvObject
+
 
 SV_DECLARATION_SCHEMA_URI = "https://svx.dev/schema/sv-inheritance-declarations/v1"
 SV_DECLARATION_SCHEMA_VERSION = "1.0.0"
+
+
+class SVMirror(SvObject):
+    """Executable Python base for a declared SystemVerilog mirror surface.
+
+    Generated mirror implementations extend this source declaration. The base
+    intentionally owns no foreign object by itself: construction/binding is a
+    generated lifecycle operation, not a side effect of importing a stub.
+    """
+
+    _svx_remote_object_id: int | None = None
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+    def _svx_bind_remote_object(self, object_id: int) -> None:
+        if not isinstance(object_id, int) or object_id <= 0:
+            raise ValueError("SVX mirror object id must be a non-zero integer")
+        if self._svx_remote_object_id is not None:
+            raise SVXInheritanceError("SVX mirror is already bound")
+        self._svx_remote_object_id = object_id
+
+    def _svx_bind_projected_fields(self, field_ids_by_name: dict[str, str]) -> None:
+        """Bind selected SvTypes fields to this mirror's SV object storage.
+
+        Generated lifecycle code invokes this only after the paired SV object
+        exists. Fields absent from ``field_ids_by_name`` deliberately retain
+        normal Python-local storage, which is what a direct Python child of an
+        SV class requires.
+        """
+
+        if self._svx_remote_object_id is None:
+            raise SVXInheritanceError("cannot bind projected fields before the SV mirror exists")
+        from .field_storage import bind_projected_fields, projected_field_identities
+
+        identities = projected_field_identities(self, field_ids_by_name)
+        self._svx_field_storage = bind_projected_fields(
+            self,
+            self._svx_remote_object_id,
+            identities,
+        )
+
+    def _svx_release_projected_fields(self) -> None:
+        """Detach external fields before the paired SV object is released."""
+
+        storage = getattr(self, "_svx_field_storage", None)
+        self.unbind_external_storage()
+        if storage is not None:
+            storage.close()
+            self._svx_field_storage = None
+
+
+def sv_mirror(canonical_id: str):
+    """Mark an ``SVMirror`` source class as the static view of one SV class.
+
+    The decorator does not generate code or allocate an SV instance. During
+    manifest discovery its canonical ID is matched to an explicit SV class
+    declaration, from which the full ancestor context is obtained.
+    """
+
+    if not isinstance(canonical_id, str) or not canonical_id.startswith("sv://"):
+        raise ValueError("sv_mirror canonical_id must be an sv:// identifier")
+
+    def decorate(cls: type):
+        if not isinstance(cls, type) or not issubclass(cls, SVMirror):
+            raise TypeError("sv_mirror() requires an SVMirror subclass")
+        if "__svx_sv_mirror__" in cls.__dict__:
+            raise SVXInheritanceError(f"SV mirror {cls.__name__} is already declared")
+        setattr(cls, "__svx_sv_mirror__", {"canonical_id": canonical_id})
+        return cls
+
+    return decorate
 
 
 def inheritance_type(
@@ -61,7 +136,11 @@ def inheritance_type(
 
 
 def inheritance_parameter(
-    name: str, type_binding: dict[str, Any], *, direction: str = "input"
+    name: str,
+    type_binding: dict[str, Any],
+    *,
+    direction: str = "input",
+    ref_access: str = "readwrite",
 ) -> dict[str, Any]:
     """Declare one ordered inheritance parameter."""
 
@@ -69,9 +148,16 @@ def inheritance_parameter(
         raise ValueError("inheritance parameter name must be an identifier")
     if direction not in {"input", "output", "inout", "ref"}:
         raise ValueError("inheritance parameter direction is invalid")
+    if ref_access not in {"readwrite", "readonly"}:
+        raise ValueError("inheritance parameter ref_access is invalid")
+    if direction != "ref" and ref_access != "readwrite":
+        raise ValueError("inheritance parameter ref_access is valid only for ref")
     if not isinstance(type_binding, dict):
         raise TypeError("inheritance parameter type must be a declarative type binding")
-    return {"name": name, "type": type_binding, "direction": direction}
+    declaration = {"name": name, "type": type_binding, "direction": direction}
+    if direction == "ref" and ref_access != "readwrite":
+        declaration["ref_access"] = ref_access
+    return declaration
 
 
 def inheritance_method(
@@ -109,6 +195,7 @@ def inheritance_class(
     constructor_parameters: Iterable[dict[str, Any]] = (),
     constructor_initiator: str = "python",
     base_lineage: Iterable[dict[str, Any]] | None = None,
+    specialization: dict[str, Any] | None = None,
 ):
     """Declare one explicit Python generation target for manifest generation."""
 
@@ -124,6 +211,15 @@ def inheritance_class(
         if "<locals>" in cls.__qualname__ or "." in cls.__qualname__:
             raise SVXInheritanceError("nested Python inheritance classes are unsupported")
         class_id = canonical_id or f"py://{cls.__module__.replace('.', '/')}/{cls.__name__}"
+        mirror_bases = [
+            base.__dict__["__svx_sv_mirror__"]["canonical_id"]
+            for base in cls.__mro__[1:]
+            if isinstance(base, type) and "__svx_sv_mirror__" in base.__dict__
+        ]
+        if len(mirror_bases) > 1:
+            raise SVXInheritanceError(
+                f"Python inheritance class {cls.__name__} has multiple SV mirror bases"
+            )
         methods: list[dict[str, Any]] = []
         for name, member in cls.__dict__.items():
             metadata = getattr(member, "__svx_inheritance_method__", None)
@@ -157,6 +253,8 @@ def inheritance_class(
                 "constructor": constructor,
                 "methods": methods,
                 "base_lineage": normalized_lineage,
+                "mirror_base_ids": mirror_bases,
+                **({"specialization": specialization} if specialization is not None else {}),
             },
         )
         return cls
@@ -175,7 +273,9 @@ def _python_declarations(modules: Iterable[ModuleType]) -> list[dict[str, Any]]:
             )
             if isinstance(declaration, dict):
                 if value.__module__ == module.__name__:
-                    declarations.append(declaration)
+                    # Discovery may enrich a lineage; never mutate decorator
+                    # metadata retained on the user's source class.
+                    declarations.append(dict(declaration))
     return declarations
 
 
@@ -220,12 +320,48 @@ def manifest_from_declarations(
     if sv_source_files:
         validate_sv_declarations(sv_classes, sv_source_files)
     classes.extend(sv_classes)
+    declared_by_id = {
+        item.get("canonical_id"): item
+        for item in classes
+        if isinstance(item, dict) and isinstance(item.get("canonical_id"), str)
+    }
+    for declaration in classes:
+        if declaration.get("language") != "python":
+            continue
+        mirror_base_ids = declaration.pop("mirror_base_ids", [])
+        if declaration.get("base_lineage") or not mirror_base_ids:
+            continue
+        if len(mirror_base_ids) != 1:
+            raise SVXInheritanceError("Python inheritance declaration has invalid mirror bases")
+        base = declared_by_id.get(mirror_base_ids[0])
+        if not isinstance(base, dict) or base.get("language") != "sv":
+            raise SVXInheritanceError(
+                f"Python mirror base {mirror_base_ids[0]!r} has no matching SV declaration"
+            )
+        # Manifest lineage is flat. Reuse the complete SV declaration context,
+        # but never nest a lineage member inside another lineage member.
+        inherited = base.get("base_lineage", [])
+        if not isinstance(inherited, list):
+            raise SVXInheritanceError("SV mirror base has invalid base_lineage")
+        direct = {key: value for key, value in base.items() if key != "base_lineage"}
+        declaration["base_lineage"] = [*inherited, direct]
+    def declares_fields(item: object) -> bool:
+        if not isinstance(item, dict):
+            return False
+        if item.get("fields"):
+            return True
+        lineage = item.get("base_lineage", [])
+        return isinstance(lineage, list) and any(declares_fields(base) for base in lineage)
+
+    required_capabilities = list(REQUIRED_RUNTIME_CAPABILITIES)
+    if any(declares_fields(item) for item in classes):
+        required_capabilities.append(EXTERNAL_FIELD_STORAGE_CAPABILITY)
     return parse_manifest(
         {
             "schema_uri": SCHEMA_URI,
             "schema_version": SCHEMA_VERSION,
             "generator_abi_version": GENERATOR_ABI_VERSION,
-            "required_runtime_capabilities": list(REQUIRED_RUNTIME_CAPABILITIES),
+            "required_runtime_capabilities": required_capabilities,
             "classes": classes,
         }
     )
@@ -240,6 +376,18 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
         "symbol": cls.symbol,
         "methods": [],
     }
+    if cls.fields:
+        declaration["fields"] = [
+            {
+                "name": field.name,
+                "type": field.type_binding.runtime_spec()
+                | {
+                    "sv": field.type_binding.sv,
+                    "sv_packer": field.type_binding.sv_packer,
+                },
+            }
+            for field in cls.fields
+        ]
     if cls.constructor is not None:
         declaration["constructor"] = {
             "initiator": cls.constructor.initiator,
@@ -252,6 +400,11 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
                         "sv_packer": parameter.type_binding.sv_packer,
                     },
                     "direction": parameter.direction,
+                    **(
+                        {"ref_access": parameter.ref_access}
+                        if parameter.direction == "ref" and parameter.ref_access != "readwrite"
+                        else {}
+                    ),
                 }
                 for parameter in cls.constructor.parameters
             ],
@@ -270,6 +423,11 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
                             "sv_packer": parameter.type_binding.sv_packer,
                         },
                         "direction": parameter.direction,
+                        **(
+                            {"ref_access": parameter.ref_access}
+                            if parameter.direction == "ref" and parameter.ref_access != "readwrite"
+                            else {}
+                        ),
                     }
                     for parameter in method.parameters
                 ],
@@ -287,6 +445,28 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
                 "pure_virtual": method.pure_virtual,
             }
         )
+    if cls.specialization is not None:
+        declaration["specialization"] = {
+            "arguments": [
+                (
+                    {
+                        "kind": "type",
+                        "type": argument.type_binding.runtime_spec()
+                        | {
+                            "sv": argument.type_binding.sv,
+                            "sv_packer": argument.type_binding.sv_packer,
+                        },
+                    }
+                    if argument.kind == "type"
+                    else {
+                        "kind": "value",
+                        "sv_type": argument.sv_type,
+                        "value": argument.value,
+                    }
+                )
+                for argument in cls.specialization.arguments
+            ]
+        }
     return declaration
 
 

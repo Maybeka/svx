@@ -1,8 +1,8 @@
 import svx
-from svx_sv.tb_pkg import BaseDriver
+from svx_mirrors.tb_pkg import BaseDriverMirror
 
 
-class PythonDriver(BaseDriver):
+class PythonDriver(BaseDriverMirror):
     def __init__(self, seed):
         if seed != 9:
             raise AssertionError(f"expected factory seed 9, got {seed}")
