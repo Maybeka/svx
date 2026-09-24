@@ -508,33 +508,32 @@ through explicit `svx.adopt_instance(target, handle)`. Adoption does not call
 Python `__init__`, does not transfer ownership of the SV object, and rejects an
 unknown target or an already-bound handle.
 
-Python mirror task signatures contain request values for `input` and `inout`; a
-readwrite `ref` parameter requires `svx.Ref[T]`, not a bare Python value. A
-`const ref` parameter accepts an ordinary SvTypes value. A pure `output`
-parameter is not passed by the caller. `Ref.value` is the public read/write
-surface. For Python-to-SV task calls, the generated SV wrapper places each Ref in a
-typed temporary `svx_ref_argument`, passes its `value` to the target's declared
-`ref` formal, and binds `Ref.value` to that helper for the active call. For
-SV-to-Python task callbacks, the same helper is a portal whose service task retains
-the original SV `ref` formal; `Ref.value` synchronously reads or writes that
-real lvalue until the callback ends. After return, exception, cancellation, or
-shutdown, the binding is stale and `.value` fails. A method with only a
-function result returns that result directly. When copy-out values exist, the method returns the generated
-`<Class><Method>Response` SvTypes value, with fields for `output`, `inout`, and
-the final `ref` values, followed by `result` when present. Scalar fields use
-the normal SvTypes generated-object `.value` accessor.
+Python mirror task signatures contain request values for `input` and `inout`;
+a pure `output` parameter is not passed by the caller. A method with only a
+function result returns that result directly. A Python-to-SV mirror call with
+copy-out values returns the decoded SvTypes response object. For an
+SV-to-Python callback, return the generated
+`<Class><Method>Response(**values)` factory result from the Python override;
+it creates the response through the registered SvTypes contract and accepts
+exactly the declared `output` and `inout` values, followed by `result` when
+present. Scalar response fields use the normal SvTypes generated object
+`.value` accessor.
 
 An inheritance callback is always an ordinary synchronous Python `def`.
 `async def`, an awaitable return value, and `asyncio` are invalid in this path
 and cause a fatal SVX callback diagnostic.
 
-SystemVerilog functions may declare `ref` parameters. For a cross-language
-function, SVX emits `SVXW_FUNCTION_REF_AS_INOUT` and explicitly treats that
-boundary formal as `inout`: Python receives an ordinary value and returns its
-updated value in the generated response. The original SV formal remains `ref`,
-but live aliasing and alias-sensitive behavior are unavailable across this
-warned boundary. A cross-language `const ref` function emits
-`SVXW_FUNCTION_CONST_REF_AS_INPUT` and has input-only boundary behavior.
+Cross-language inheritance manifests accept only `input`, `output`, and
+`inout`. `ref` and `const ref` are rejected during generation because SVX does
+not transport SV lvalue aliases. A member that needs ref semantics remains in
+user SystemVerilog. Applications can define a separate mutable protocol through
+SvTypes objects or getter/setter methods.
+
+An SV method declared with `"static": true` is exposed as an AMirror Python
+`@staticmethod`. SVX registers a class-level generated dispatcher that invokes
+the qualified SV static member with no object ID. Static methods cannot be
+`virtual`; a Python subclass can shadow the name for ordinary Python lookup but
+does not override the SV static implementation.
 
 Parameterized SV bases are supported only as concrete specializations. A
 manifest identifies `Packet#(int, 16)` with complete type/value arguments, and

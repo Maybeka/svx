@@ -1,10 +1,11 @@
 import json
 from io import StringIO
 from pathlib import Path
+import sys
 from types import ModuleType
 
 import pytest
-from svtypes import Int
+from svtypes import Int, Object, Queue
 
 from svx import (
     SVMirror,
@@ -23,7 +24,7 @@ from svx.declarations import (
 )
 from svx.cli import main
 from svx.inheritance import parse_manifest
-from svx.sv_scan import scan_sv_sources
+from svx.sv_scan import scan_sv_sources, validate_sv_declarations
 
 
 def int_type():
@@ -130,6 +131,38 @@ def test_python_decorator_rejects_output_as_a_python_call_argument():
         inheritance_class()(Invalid)
 
 
+@pytest.mark.parametrize("direction", ["ref", "const ref"])
+def test_python_declaration_rejects_ref_parameter(direction):
+    with pytest.raises(ValueError, match="does not support ref"):
+        inheritance_parameter("value", int_type(), direction=direction)
+
+
+def test_inheritance_declaration_discovers_direct_svtypes_fields(monkeypatch):
+    module = ModuleType("checks.projected_fields")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    Driver = type(
+        "Driver",
+        (),
+        {
+            "__module__": module.__name__,
+            "count": Int(),
+            "history": Queue(Int()),
+            "child": Object("Child"),
+        },
+    )
+    Driver = inheritance_class(canonical_id="py://checks/ProjectedDriver")(Driver)
+    module.Driver = Driver
+
+    manifest = manifest_from_declarations(python_modules=(module,))
+    fields = {field.name: field.type_binding for field in manifest.classes[0].fields}
+    assert fields["count"].unified_type_name == "svtypes.Int"
+    assert fields["count"].sv == "int"
+    assert fields["count"].sv_packer == "svtypes_pkg::int_packer"
+    assert fields["history"].unified_type_name == "svtypes.Queue[elem=svtypes.Int]"
+    assert fields["history"].sv == "int [$]"
+    assert fields["child"].sv == "Child"
+
+
 def test_manifest_accepts_expanded_lineage_without_generating_its_members():
     base = {
         "canonical_id": "sv://tb_pkg/BaseDriver",
@@ -194,6 +227,7 @@ def test_pyslang_scans_and_validates_sv_inheritance_declarations(tmp_path):
         "package tb_pkg;\n"
         "  virtual class BaseDriver;\n"
         "    virtual task drive(input int value); endtask\n"
+        "    static function int static_value(); return 1; endfunction\n"
         "  endclass\n"
         "  class FinalDriver extends BaseDriver; endclass\n"
         "endpackage\n"
@@ -201,6 +235,7 @@ def test_pyslang_scans_and_validates_sv_inheritance_declarations(tmp_path):
     facts = scan_sv_sources([source])
     assert facts["tb_pkg::FinalDriver"].direct_base == "BaseDriver"
     assert facts["tb_pkg::BaseDriver"].virtual_methods == {"drive"}
+    assert facts["tb_pkg::BaseDriver"].static_methods == {"static_value"}
 
     sidecar = tmp_path / "sv-declarations.json"
     sidecar.write_text(
@@ -257,6 +292,21 @@ def test_pyslang_scans_and_validates_sv_inheritance_declarations(tmp_path):
         sv_declaration_files=[sidecar], sv_source_files=[source]
     )
     assert [cls.name for cls in manifest.classes] == ["BaseDriver", "FinalDriver"]
+
+    with pytest.raises(SVXInheritanceError, match="static in the manifest"):
+        validate_sv_declarations(
+            [
+                {
+                    "canonical_id": "sv://tb_pkg/BaseDriver",
+                    "language": "sv",
+                    "symbol": "tb_pkg::BaseDriver",
+                    "methods": [
+                        {"name": "drive", "virtual": False, "static": True}
+                    ],
+                }
+            ],
+            [source],
+        )
 
 
 def test_inheritance_manifest_cli_generates_and_checks(tmp_path, monkeypatch):

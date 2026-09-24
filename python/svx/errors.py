@@ -44,14 +44,6 @@ class SVXInheritanceError(SVXError):
     """Raised when a cross-language inheritance declaration is invalid."""
 
 
-class SVXReadonlyRefError(SVXInheritanceError):
-    """Raised when a callback attempts to write a ``const ref`` value."""
-
-
-class SVXStaleRefError(SVXInheritanceError):
-    """Raised when a call-scoped ``Ref`` is used after its portal closes."""
-
-
 class SVXRemoteError(SVXInheritanceError):
     """Raised when a declared foreign object or method call fails."""
 

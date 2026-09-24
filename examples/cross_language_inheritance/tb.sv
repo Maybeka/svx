@@ -15,7 +15,7 @@ endpackage
 module tb;
   import example_driver_pkg::*;
   import svx_pkg::*;
-  import svx_projection_example_driver_pkg_pkg::*;
+  import svx_projection_example_driver_pkg_BaseDriverMirror_pkg::*;
 
   initial begin
     BaseDriverMirror driver;

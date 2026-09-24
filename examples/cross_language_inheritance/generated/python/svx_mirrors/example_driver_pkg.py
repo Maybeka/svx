@@ -2,7 +2,7 @@
 from __future__ import annotations
 from svx import _native
 from svx.declarations import SVMirror
-from svx.inheritance import bind_instance, encode_constructor, invoke_sv, register_constructor, register_contract, register_python_subclass
+from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, response_value
 
 register_contract({
     'sv://example_driver_pkg/BaseDriver#drive': {'request': (), 'response': ()},
@@ -12,10 +12,19 @@ register_constructor('sv://example_driver_pkg/BaseDriver', ())
 class BaseDriverMirror(SVMirror):
     """Executable Python base view of example_driver_pkg::BaseDriver."""
     __svx_foreign_class_id__ = 'sv://example_driver_pkg/BaseDriver'
+    __svx_projected_fields_by_class_id__ = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        register_python_subclass('sv://example_driver_pkg/BaseDriver', cls)
+        if BaseDriverMirror in cls.__bases__:
+            register_python_subclass('sv://example_driver_pkg/BaseDriver', cls)
+
+    def _svx_bind_active_projected_fields(self):
+        declaration = getattr(type(self), '__svx_inheritance_class__', {})
+        class_id = declaration.get('canonical_id') if isinstance(declaration, dict) else None
+        field_ids = self.__svx_projected_fields_by_class_id__.get(class_id)
+        if field_ids:
+            self._svx_bind_projected_fields(field_ids)
 
     @classmethod
     def __svx_create_from_sv__(cls, remote_object_id, *args):
@@ -24,8 +33,10 @@ class BaseDriverMirror(SVMirror):
         instance._svx_bind_remote_object(remote_object_id)
         bind_instance(remote_object_id, instance)
         try:
+            instance._svx_bind_active_projected_fields()
             cls.__init__(instance, *args)
         except BaseException:
+            instance._svx_release_projected_fields()
             from svx.inheritance import unbind_instance
             unbind_instance(remote_object_id)
             raise
@@ -34,12 +45,14 @@ class BaseDriverMirror(SVMirror):
     def __init__(self):
         if self._svx_remote_object_id is not None:
             return
-        super().__init__()
+        SVMirror.__init__(self)
         object_id = _native.inheritance_create_sv('sv://example_driver_pkg/BaseDriver', encode_constructor('sv://example_driver_pkg/BaseDriver', {}))
         self._svx_bind_remote_object(object_id)
         try:
             bind_instance(object_id, self)
+            self._svx_bind_active_projected_fields()
         except BaseException:
+            self._svx_release_projected_fields()
             _native.inheritance_close(object_id)
             raise
 

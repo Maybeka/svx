@@ -1,0 +1,136 @@
+{
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0",
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1",
+    "svtypes.external-field-storage.v1"
+  ],
+  "classes": [
+    {
+      "canonical_id": "sv://field_pkg/Base",
+      "language": "sv",
+      "symbol": "field_pkg::Base",
+      "constructor": {"initiator": "sv", "parameters": []},
+      "methods": []
+    },
+    {
+      "canonical_id": "py://tests/integration/field_projection/PythonLayer",
+      "language": "python",
+      "symbol": "tests.integration.field_projection_inheritance_test.PythonLayer",
+      "fields": [
+        {
+          "name": "retry",
+          "type": {
+            "unified_type_name": "svtypes.Int",
+            "python": {"module": "svtypes", "symbol": "Int", "args": [], "kwargs": {}},
+            "sv": "int",
+            "sv_packer": "int_packer",
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "unified_type_name": "svtypes.Int",
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+            }
+          }
+        },
+        {
+          "name": "history",
+          "type": {
+            "unified_type_name": "svtypes.Queue[elem=svtypes.Int]",
+            "python": {"module": "tests.integration.field_projection_types", "symbol": "queue_of_int", "args": [], "kwargs": {}},
+            "sv": "int [$]",
+            "sv_packer": "svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)",
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "unified_type_name": "svtypes.Queue[elem=svtypes.Int]",
+              "encoding_fingerprint": "9e48d2be43492e85f07460d11e431afa295cb5d7fb374f0fdbd47d8e6c226466"
+            }
+          }
+        },
+        {
+          "name": "mapping",
+          "type": {
+            "unified_type_name": "svtypes.AssocArray[key=svtypes.Int,value=svtypes.Int]",
+            "python": {"module": "tests.integration.field_projection_types", "symbol": "int_to_int", "args": [], "kwargs": {}},
+            "sv": "int [int]",
+            "sv_packer": "svtypes_pkg::assoc_array_packer#(int, int, svtypes_pkg::int_packer, svtypes_pkg::int_packer)",
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "unified_type_name": "svtypes.AssocArray[key=svtypes.Int,value=svtypes.Int]",
+              "encoding_fingerprint": "e78db40d75aaa6fe3e3287314340640fb67a883dd9ea65e68f17adf04e6699b2"
+            }
+          }
+        }
+      ],
+      "methods": []
+    },
+    {
+      "canonical_id": "sv://field_pkg/Final",
+      "language": "sv",
+      "symbol": "field_pkg::Final",
+      "methods": [],
+      "base_lineage": [
+        {
+          "canonical_id": "sv://field_pkg/Base",
+          "language": "sv",
+          "symbol": "field_pkg::Base",
+          "constructor": {"initiator": "sv", "parameters": []},
+          "methods": []
+        },
+        {
+          "canonical_id": "py://tests/integration/field_projection/PythonLayer",
+          "language": "python",
+          "symbol": "tests.integration.field_projection_inheritance_test.PythonLayer",
+          "fields": [
+            {
+              "name": "retry",
+              "type": {
+                "unified_type_name": "svtypes.Int",
+                "python": {"module": "svtypes", "symbol": "Int", "args": [], "kwargs": {}},
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "unified_type_name": "svtypes.Int",
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+                }
+              }
+            },
+            {
+              "name": "history",
+              "type": {
+                "unified_type_name": "svtypes.Queue[elem=svtypes.Int]",
+                "python": {"module": "tests.integration.field_projection_types", "symbol": "queue_of_int", "args": [], "kwargs": {}},
+                "sv": "int [$]",
+                "sv_packer": "svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)",
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "unified_type_name": "svtypes.Queue[elem=svtypes.Int]",
+                  "encoding_fingerprint": "9e48d2be43492e85f07460d11e431afa295cb5d7fb374f0fdbd47d8e6c226466"
+                }
+              }
+            },
+            {
+              "name": "mapping",
+              "type": {
+                "unified_type_name": "svtypes.AssocArray[key=svtypes.Int,value=svtypes.Int]",
+                "python": {"module": "tests.integration.field_projection_types", "symbol": "int_to_int", "args": [], "kwargs": {}},
+                "sv": "int [int]",
+                "sv_packer": "svtypes_pkg::assoc_array_packer#(int, int, svtypes_pkg::int_packer, svtypes_pkg::int_packer)",
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "unified_type_name": "svtypes.AssocArray[key=svtypes.Int,value=svtypes.Int]",
+                  "encoding_fingerprint": "e78db40d75aaa6fe3e3287314340640fb67a883dd9ea65e68f17adf04e6699b2"
+                }
+              }
+            }
+          ],
+          "methods": []
+        }
+      ]
+    }
+  ]
+}

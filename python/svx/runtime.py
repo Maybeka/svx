@@ -32,6 +32,7 @@ SVX_FEATURE_BITS = frozenset(
         "checked_svtypes_payloads",
         "codec_sessions",
         "cross_language_inheritance",
+        "projected_field_storage",
         "hierarchical_signal_access",
         "remote_references",
     }
@@ -289,13 +290,13 @@ def _load_artifact_manifest(
             method_id,
             "request",
             entry.get("request_fields"),
-            {"input", "inout", "ref"},
+            {"input", "inout"},
         )
         response_fields = validate_fields(
             method_id,
             "response",
             entry.get("response_fields"),
-            {"output", "inout", "ref", "return"},
+            {"output", "inout", "return"},
         )
         for field in response_fields:
             if (field.get("name") == "result") != (field.get("direction") == "return"):

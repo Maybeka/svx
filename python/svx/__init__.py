@@ -6,9 +6,7 @@ from .errors import (
     SVXError,
     SVXExportError,
     SVXInheritanceError,
-    SVXReadonlyRefError,
     SVXRemoteError,
-    SVXStaleRefError,
     SVXChannelError,
     SVXSignalError,
     get_exception_policy,
@@ -30,7 +28,7 @@ from .roles import (
 )
 from .primitives import delay, display, fork_join, fork_join_any, fork_join_none
 from .test_runner import test
-from .inheritance import Ref, close_instance
+from .inheritance import close_instance
 from .declarations import (
     SVMirror,
     inheritance_class,
@@ -50,9 +48,7 @@ __all__ = [
     "SVXError",
     "SVXExportError",
     "SVXInheritanceError",
-    "SVXReadonlyRefError",
     "SVXRemoteError",
-    "SVXStaleRefError",
     "SVXChannelError",
     "SVXSignalError",
     "__version__",
@@ -65,7 +61,6 @@ __all__ = [
     "Payload",
     "ReqChannel",
     "ReqRspChannel",
-    "Ref",
     "RspChannel",
     "channel",
     "close_instance",

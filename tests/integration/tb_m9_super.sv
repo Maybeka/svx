@@ -12,7 +12,7 @@ endpackage
 `include ".tmp/m9_super/mirrors.sv"
 module tb;
   import svx_pkg::*;
-  import svx_projection_tb_pkg_pkg::*;
+  import svx_projection_tb_pkg_BaseDriverMirror_pkg::*;
   initial begin
     BaseDriverMirror driver;
     svx_init();

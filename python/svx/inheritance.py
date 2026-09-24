@@ -12,9 +12,9 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import tempfile
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any
 
-from .errors import SVXInheritanceError, SVXReadonlyRefError, SVXRemoteError, SVXStaleRefError
+from .errors import SVXInheritanceError, SVXRemoteError
 from ._svtypes_contract import SVTYPES_REQUIRED_CAPABILITIES
 
 
@@ -35,72 +35,6 @@ _LEGACY_TYPES = {
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CANONICAL_ID = re.compile(r"^(sv|py)://[A-Za-z_][A-Za-z0-9_./]*$")
 _SCHEMA_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
-_RefValue = TypeVar("_RefValue")
-
-
-class _RefEndpoint(Protocol[_RefValue]):
-    """Internal synchronous endpoint used by generated ref helpers/portals."""
-
-    def read(self) -> _RefValue: ...
-
-    def write(self, value: _RefValue) -> None: ...
-
-
-class Ref(Generic[_RefValue]):
-    """A typed, optionally call-scoped cross-language SystemVerilog ref.
-
-    A standalone Ref retains its supplied value. Generated invocation code
-    temporarily binds it to a typed helper or portal; a borrowed portal becomes
-    stale when closed, while a caller-owned helper retains its final value.
-    """
-
-    def __init__(self, value: _RefValue | None = None) -> None:
-        self._value = value
-        self._endpoint: _RefEndpoint[_RefValue] | None = None
-        self._readonly = False
-        self._stale = False
-        self._borrowed = False
-
-    @property
-    def value(self) -> _RefValue | None:
-        if self._stale:
-            raise SVXStaleRefError("SVX ref is no longer active")
-        if self._endpoint is not None:
-            return self._endpoint.read()
-        return self._value
-
-    @value.setter
-    def value(self, value: _RefValue) -> None:
-        if self._stale:
-            raise SVXStaleRefError("SVX ref is no longer active")
-        if self._readonly:
-            raise SVXReadonlyRefError("cannot assign through a const ref")
-        if self._endpoint is not None:
-            self._endpoint.write(value)
-        else:
-            self._value = value
-
-    def _bind(
-        self,
-        endpoint: _RefEndpoint[_RefValue],
-        *,
-        readonly: bool = False,
-        borrowed: bool = False,
-    ) -> None:
-        if self._endpoint is not None or self._stale:
-            raise SVXInheritanceError("Ref is already bound or stale")
-        self._endpoint = endpoint
-        self._readonly = readonly
-        self._borrowed = borrowed
-
-    def _close(self, *, retain_value: bool) -> None:
-        if self._endpoint is not None and retain_value:
-            self._value = self._endpoint.read()
-        self._endpoint = None
-        self._readonly = False
-        if self._borrowed or not retain_value:
-            self._stale = True
-
 @dataclass(frozen=True)
 class TypeBinding:
     """One immutable public SvTypes declaration and generated SV adapter."""
@@ -132,9 +66,6 @@ class Parameter:
     name: str
     type_binding: TypeBinding
     direction: str
-    # ``readonly`` is the cross-language spelling of SV ``const ref``. It is
-    # meaningful only when direction is ``ref``.
-    ref_access: str = "readwrite"
 
 
 @dataclass(frozen=True)
@@ -146,6 +77,7 @@ class Method:
     timing: str
     virtual: bool
     pure_virtual: bool
+    is_static: bool
 
 
 @dataclass(frozen=True)
@@ -284,11 +216,9 @@ def _codec_from_spec(spec: dict[str, Any]):
             f"SvTypes declaration factory {module_name}:{symbol} is unavailable"
         )
     codec = factory(*args, **kwargs)
-    if not callable(getattr(codec, "pack", None)) or not callable(
-        getattr(codec, "unpack", None)
-    ):
+    if not callable(getattr(codec, "sv_decl", None)):
         raise SVXInheritanceError(
-            f"SvTypes declaration {module_name}:{symbol} does not provide pack/unpack"
+            f"SvTypes declaration {module_name}:{symbol} does not provide an SV declaration"
         )
     return codec
 
@@ -402,7 +332,10 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
     for field, content, grammar in (
         ("unified_type_name", binding.unified_type_name, r"[^\s]+"),
         ("python.module", binding.python_module, r"[A-Za-z_][A-Za-z0-9_.]*"),
-        ("sv", binding.sv, r"[$A-Za-z_][A-Za-z0-9_:$#() ,]*"),
+        # SvTypes collections use ordinary SV unpacked dimensions such as
+        # ``int []`` and ``int [$]``.  Keep the grammar deliberately narrow
+        # while permitting those generated declaration forms.
+        ("sv", binding.sv, r"[$A-Za-z_][A-Za-z0-9_:$#() ,\[\]]*"),
         ("sv_packer", binding.sv_packer, r"[A-Za-z_][A-Za-z0-9_:.$#() ,]*"),
     ):
         if not re.fullmatch(grammar, content):
@@ -427,23 +360,22 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
 
 def _parse_parameter(value: Any, where: str) -> Parameter:
     raw = _object(value, where)
-    _reject_unknown(raw, {"name", "type", "direction", "ref_access"}, where)
+    _reject_unknown(raw, {"name", "type", "direction"}, where)
     name = _identifier(_required_string(raw, "name", where), f"{where}.name")
     type_binding = _type_binding(raw.get("type"), f"{where}.type", allow_void=False)
     direction = raw.get("direction", "input")
-    if direction not in {"input", "output", "inout", "ref"}:
-        raise _error(f"{where}.direction", "must be input, output, inout, or ref")
-    ref_access = raw.get("ref_access", "readwrite")
-    if ref_access not in {"readwrite", "readonly"}:
-        raise _error(f"{where}.ref_access", "must be readwrite or readonly")
-    if direction != "ref" and "ref_access" in raw:
-        raise _error(f"{where}.ref_access", "is valid only for ref parameters")
+    if direction in {"ref", "const ref"}:
+        raise _error(
+            f"{where}.direction",
+            "ref and const ref are not supported across an SVX inheritance boundary; use input, output, or inout",
+        )
+    if direction not in {"input", "output", "inout"}:
+        raise _error(f"{where}.direction", "must be input, output, or inout")
     assert type_binding is not None
     return Parameter(
         name=name,
         type_binding=type_binding,
         direction=direction,
-        ref_access=ref_access,
     )
 
 
@@ -545,7 +477,7 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
     raw = _object(value, where)
     _reject_unknown(
         raw,
-        {"canonical_id", "name", "parameters", "return_type", "timing", "virtual", "pure_virtual"},
+        {"canonical_id", "name", "parameters", "return_type", "timing", "virtual", "pure_virtual", "static"},
         where,
     )
     name = _identifier(_required_string(raw, "name", where), f"{where}.name")
@@ -570,7 +502,7 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
         raise _error(where, "task methods must have return_type 'void'")
     if return_type is not None and any(
         parameter.name == "result"
-        and parameter.direction in {"output", "inout", "ref"}
+        and parameter.direction in {"output", "inout"}
         for parameter in parameters
     ):
         raise _error(
@@ -580,13 +512,18 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
 
     virtual = raw.get("virtual")
     pure_virtual = raw.get("pure_virtual", False)
+    is_static = raw.get("static", False)
     if not isinstance(virtual, bool):
         raise _error(f"{where}.virtual", "must be a boolean")
     if not isinstance(pure_virtual, bool):
         raise _error(f"{where}.pure_virtual", "must be a boolean")
+    if not isinstance(is_static, bool):
+        raise _error(f"{where}.static", "must be a boolean")
     if pure_virtual and not virtual:
         raise _error(where, "pure_virtual methods must also be virtual")
-    return Method(canonical_id, name, parameters, return_type, timing, virtual, pure_virtual)
+    if is_static and virtual:
+        raise _error(where, "static methods cannot be virtual across an SVX inheritance boundary")
+    return Method(canonical_id, name, parameters, return_type, timing, virtual, pure_virtual, is_static)
 
 
 def _parse_constructor(value: Any, where: str) -> Constructor:
@@ -654,6 +591,8 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
     if not isinstance(raw_methods, list):
         raise _error(f"{where}.methods", "must be a list")
     methods = tuple(_parse_method(item, canonical_id, f"{where}.methods[{index}]") for index, item in enumerate(raw_methods))
+    if language == "python" and any(method.is_static for method in methods):
+        raise _error(where, "static methods are supported only for an SV source class")
     method_names = [method.name for method in methods]
     if len(method_names) != len(set(method_names)):
         raise _error(f"{where}.methods", "method overloads are not supported; names must be unique")
@@ -928,10 +867,11 @@ def _python_parameter_list(method: Method) -> str:
     return ", ".join(["self", *(parameter.name for parameter in method.parameters)])
 
 
-def _python_request_parameter_list(method: Method) -> str:
-    return ", ".join(
-        ["self", *(parameter.name for parameter in _request_parameters(method))]
-    )
+def _python_request_parameter_list(method: Method, *, include_self: bool = True) -> str:
+    parameters = [parameter.name for parameter in _request_parameters(method)]
+    if include_self:
+        parameters.insert(0, "self")
+    return ", ".join(parameters)
 
 
 def _binding_repr(binding: TypeBinding) -> str:
@@ -979,11 +919,15 @@ def _request_values_repr(method: Method) -> str:
     return "{" + entries + "}"
 
 
+def _python_static_request_parameter_list(method: Method) -> str:
+    return ", ".join(parameter.name for parameter in _request_parameters(method))
+
+
 def _request_parameters(method: Method) -> tuple[Parameter, ...]:
     return tuple(
         parameter
         for parameter in method.parameters
-        if parameter.direction in {"input", "inout", "ref"}
+        if parameter.direction in {"input", "inout"}
     )
 
 
@@ -991,7 +935,7 @@ def _response_parameters(method: Method) -> tuple[Parameter, ...]:
     return tuple(
         parameter
         for parameter in method.parameters
-        if parameter.direction in {"output", "inout", "ref"}
+        if parameter.direction in {"output", "inout"}
     )
 
 
@@ -1008,7 +952,7 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
     for module_name, classes in sorted(modules.items()):
         module_parts = module_name.split(".")
         path = PurePosixPath(*module_parts).with_suffix(".py")
-        lines = ["# Generated by svx inheritance-gen. Do not edit.", "from __future__ import annotations", "from svx import _native", "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, register_constructor, register_contract, register_python_subclass, response_type, unbind_instance", ""]
+        lines = ["# Generated by svx inheritance-gen. Do not edit.", "from __future__ import annotations", "from svx import _native", "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, response_type, unbind_instance", ""]
         for cls in sorted(classes, key=lambda item: item.name):
             lines.append("register_contract({")
             for method in cls.methods:
@@ -1036,6 +980,16 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             if not cls.methods:
                 lines.append("    pass")
             for method in cls.methods:
+                if method.is_static:
+                    lines.extend(
+                        [
+                            "",
+                            "    @staticmethod",
+                            f"    def {method.name}({_python_static_request_parameter_list(method)}):",
+                            f"        return invoke_sv_static({cls.canonical_id!r}, {method.canonical_id!r}, {_request_values_repr(method)})",
+                        ]
+                    )
+                    continue
                 lines.extend(
                     [
                         "",
@@ -1055,15 +1009,66 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
     # actual SV->Python boundaries and become the natural Python base imported
     # by user classes; no legacy foreign-name proxy is involved.
     projection_modules: dict[str, list[ForeignClass]] = {}
+    # ``SVXFieldStorage`` is bound by the generated mirror which constructs
+    # the final Python portion.  That is not always the first mirror in an
+    # alternating chain: for A(SV) -> B(Python) -> C(SV) -> D(Python), D is
+    # constructed through CMirror, while B's fields physically live in the
+    # inherited BProxy portion of the same C/D SV object.  Keep the map on the
+    # mirror that owns the Python construction path, keyed by the concrete
+    # Python target class ID.
+    projected_python_fields: dict[str, dict[str, dict[str, str]]] = {}
     for plan in projection_plans(manifest):
+        active_mirror: ForeignClass | None = None
+        proxy_sources: list[ForeignClass] = []
         for step in plan.steps:
-            if step.kind != "sv_mirror":
-                continue
             source = next(
                 cls for cls in plan.lineage if cls.canonical_id == step.source_class_id
             )
-            module = "svx_mirrors." + "_".join(source.symbol.split("::")[:-1])
-            projection_modules.setdefault(module, []).append(source)
+            if step.kind == "sv_mirror":
+                active_mirror = source
+                module = "svx_mirrors." + "_".join(source.symbol.split("::")[:-1])
+                projection_modules.setdefault(module, []).append(source)
+            elif step.kind == "sv_proxy":
+                proxy_sources.append(source)
+
+        selected_fields = {
+            field.name: f"{source.canonical_id}.{field.name}"
+            for source in proxy_sources
+            for field in source.fields
+        }
+        if not selected_fields:
+            continue
+        target = plan.lineage[-1]
+        if target.language == "python":
+            # The last SV mirror is the entry point for the final Python
+            # target. It must bind every earlier Python portion projected into
+            # the final SV object, not merely fields belonging to its direct
+            # Python predecessor.
+            if active_mirror is None:
+                raise SVXInheritanceError(
+                    f"cannot bind projected fields for {target.canonical_id} without an SV mirror"
+                )
+            projected_python_fields.setdefault(active_mirror.canonical_id, {})[
+                target.canonical_id
+            ] = selected_fields
+        else:
+            # An SV target is constructed through the mirror immediately
+            # preceding each Python-to-SV edge. That mirror constructs the
+            # corresponding Python class during the inherited SV constructor.
+            active_mirror = None
+            for step in plan.steps:
+                source = next(
+                    cls for cls in plan.lineage if cls.canonical_id == step.source_class_id
+                )
+                if step.kind == "sv_mirror":
+                    active_mirror = source
+                elif step.kind == "sv_proxy" and active_mirror is not None and source.fields:
+                    projected_python_fields.setdefault(active_mirror.canonical_id, {})[
+                        source.canonical_id
+                    ] = {
+                        field.name: f"{source.canonical_id}.{field.name}"
+                        for field in source.fields
+                    }
     if projection_modules:
         emitted[PurePosixPath("svx_mirrors/__init__.py")] = "# Generated by svx inheritance-gen.\n"
     for module, sources in sorted(projection_modules.items()):
@@ -1073,7 +1078,7 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             "from __future__ import annotations",
             "from svx import _native",
             "from svx.declarations import SVMirror",
-            "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, register_constructor, register_contract, register_python_subclass",
+            "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, response_value",
             "",
         ]
         seen: set[str] = set()
@@ -1092,16 +1097,31 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             signature = f"self, {names}" if names else "self"
             values = "{" + ", ".join(f"{p.name!r}: {p.name}" for p in parameters) + "}"
             mirror_name = f"{source.generated_name}Mirror"
+            field_maps = projected_python_fields.get(source.canonical_id, {})
             lines.extend(
                 [
                     "",
                     f"class {mirror_name}(SVMirror):",
                     f"    \"\"\"Executable Python base view of {source.symbol}.\"\"\"",
                     f"    __svx_foreign_class_id__ = {source.canonical_id!r}",
+                    f"    __svx_projected_fields_by_class_id__ = {field_maps!r}",
                     "",
                     "    def __init_subclass__(cls, **kwargs):",
                     "        super().__init_subclass__(**kwargs)",
-                    f"        register_python_subclass({source.canonical_id!r}, cls)",
+                    # A later alternating mirror may be combined with an
+                    # earlier Python class as ``class D(CMirror, B)``.  Its
+                    # MRO reaches AMirror, but D is not a legal constructor
+                    # target for a standalone A object. Register only a
+                    # direct extension of this exact mirror portion.
+                    f"        if {mirror_name} in cls.__bases__:",
+                    f"            register_python_subclass({source.canonical_id!r}, cls)",
+                    "",
+                    "    def _svx_bind_active_projected_fields(self):",
+                    "        declaration = getattr(type(self), '__svx_inheritance_class__', {})",
+                    "        class_id = declaration.get('canonical_id') if isinstance(declaration, dict) else None",
+                    "        field_ids = self.__svx_projected_fields_by_class_id__.get(class_id)",
+                    "        if field_ids:",
+                    "            self._svx_bind_projected_fields(field_ids)",
                     "",
                     "    @classmethod",
                     "    def __svx_create_from_sv__(cls, remote_object_id, *args):",
@@ -1110,8 +1130,10 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                     "        instance._svx_bind_remote_object(remote_object_id)",
                     "        bind_instance(remote_object_id, instance)",
                     "        try:",
+                    "            instance._svx_bind_active_projected_fields()",
                     "            cls.__init__(instance, *args)",
                     "        except BaseException:",
+                    "            instance._svx_release_projected_fields()",
                     "            from svx.inheritance import unbind_instance",
                     "            unbind_instance(remote_object_id)",
                     "            raise",
@@ -1120,17 +1142,35 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                     f"    def __init__({signature}):",
                     "        if self._svx_remote_object_id is not None:",
                     "            return",
-                    "        super().__init__()",
+                    # Do not traverse a preceding Python portion here. In an
+                    # alternating class such as D(CMirror, B), B.__init__
+                    # would reach AMirror and incorrectly allocate a second
+                    # standalone A object. The generated mirror initializes
+                    # only the common SvTypes/SVMirror base, then constructs
+                    # its complete SV target below.
+                    "        SVMirror.__init__(self)",
                     f"        object_id = _native.inheritance_create_sv({source.canonical_id!r}, encode_constructor({source.canonical_id!r}, {values}))",
                     "        self._svx_bind_remote_object(object_id)",
                     "        try:",
                     "            bind_instance(object_id, self)",
+                    "            self._svx_bind_active_projected_fields()",
                     "        except BaseException:",
+                    "            self._svx_release_projected_fields()",
                     "            _native.inheritance_close(object_id)",
                     "            raise",
                 ]
             )
             for method in source.methods:
+                if method.is_static:
+                    lines.extend(
+                        [
+                            "",
+                            "    @staticmethod",
+                            f"    def {method.name}({_python_static_request_parameter_list(method)}):",
+                            f"        return invoke_sv_static({source.canonical_id!r}, {method.canonical_id!r}, {_request_values_repr(method)})",
+                        ]
+                    )
+                    continue
                 lines.extend(
                     [
                         "",
@@ -1138,6 +1178,16 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                         f"        return invoke_sv(self._svx_remote_object_id, {method.canonical_id!r}, {_request_values_repr(method)})",
                     ]
                 )
+            for method in source.methods:
+                if _response_parameters(method) or method.return_type is not None:
+                    response_name = f"{source.generated_name}{method.name[0].upper()}{method.name[1:]}Response"
+                    lines.extend(
+                        [
+                            "",
+                            f"def {response_name}(**values):",
+                            f"    return response_value({method.canonical_id!r}, values)",
+                        ]
+                    )
             lines.append("")
         emitted[path] = "\n".join(lines).rstrip() + "\n"
 
@@ -1191,10 +1241,7 @@ def _sv_parameters(method: Method) -> str:
     if not method.parameters:
         return ""
     def render(parameter: Parameter) -> str:
-        direction = parameter.direction
-        if direction == "ref" and parameter.ref_access == "readonly":
-            direction = "const ref"
-        return f"{direction} {parameter.type_binding.sv} {parameter.name}"
+        return f"{parameter.direction} {parameter.type_binding.sv} {parameter.name}"
 
     return ", ".join(render(parameter) for parameter in method.parameters)
 
@@ -1414,7 +1461,7 @@ def _emit_sv_field_dispatch_cases(cls: ForeignClass, field: Field) -> list[str]:
 
     field_id = f"{cls.canonical_id}.{field.name}"
     packer = field.type_binding.sv_packer
-    return [
+    lines = [
         f"        {json.dumps(field_id + '@svx_field_read')}: begin",
         "          if (bytes.size() != 0) begin",
         "            ok = 0;",
@@ -1438,6 +1485,319 @@ def _emit_sv_field_dispatch_cases(cls: ForeignClass, field: Field) -> list[str]:
         '          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
         "        end",
     ]
+    lines.extend(_emit_sv_field_operation_case(cls, field))
+    return lines
+
+
+def _field_operation_profile(binding: TypeBinding) -> tuple[str, str | None, str | None, str | None, str | None]:
+    """Return generated-SV reflection needed for one public SvTypes field.
+
+    The manifest gives the root declaration directly.  Child lvalues are only
+    needed for addressed external storage operations, so resolve them from the
+    same concrete SvTypes codec used to validate the manifest's descriptor.
+    """
+
+    try:
+        import svtypes
+        from svtypes import Array, AssocArray, DynArray, Queue
+
+        codec = _codec_from_spec(binding.runtime_spec())
+        if isinstance(codec, Queue):
+            return (
+                "queue",
+                svtypes.sv_type_expression(codec._elem_template),
+                svtypes.sv_packer_expression(codec._elem_template),
+                None,
+                None,
+            )
+        if isinstance(codec, DynArray):
+            return (
+                "dyn_array",
+                svtypes.sv_type_expression(codec._elem_template),
+                svtypes.sv_packer_expression(codec._elem_template),
+                None,
+                None,
+            )
+        if isinstance(codec, Array):
+            return (
+                "fixed_array",
+                svtypes.sv_type_expression(codec._elem_template),
+                svtypes.sv_packer_expression(codec._elem_template),
+                None,
+                None,
+            )
+        if isinstance(codec, AssocArray):
+            return (
+                "assoc_array",
+                svtypes.sv_type_expression(codec._val_template),
+                svtypes.sv_packer_expression(codec._val_template),
+                svtypes.sv_type_expression(codec._key_template),
+                svtypes.sv_packer_expression(codec._key_template),
+            )
+    except (ImportError, AttributeError, NotImplementedError) as error:
+        raise SVXInheritanceError(
+            f"cannot generate addressed field operations for {binding.unified_type_name}"
+        ) from error
+    return ("scalar", None, None, None, None)
+
+
+def _emit_sv_field_operation_success() -> list[str]:
+    return [
+        "            ok = 1;",
+        '            error = "";',
+        '            response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+    ]
+
+
+def _emit_sv_field_operation_case(cls: ForeignClass, field: Field) -> list[str]:
+    """Emit addressed SvTypes field operations without whole-field writeback."""
+
+    field_id = f"{cls.canonical_id}.{field.name}"
+    root_packer = field.type_binding.sv_packer
+    kind, element_type, element_packer, key_type, key_packer = _field_operation_profile(
+        field.type_binding
+    )
+    lines = [
+        f"        {json.dumps(field_id + '@svx_field_operation')}: begin",
+        "          svx_field_operation operation;",
+        "          int field_offset;",
+        "          if (!svx_field_operation_unpack(bytes, operation, error)) begin",
+        "            ok = 0;",
+        "          end else begin",
+        "            bytes.delete();",
+        "            case (operation.code)",
+        "              0: begin",  # read
+        "                if (operation.path_kind.size() == 0) begin",
+        f"                  {root_packer}::pack({field.name}, bytes);",
+        *["                  " + line.strip() for line in _emit_sv_field_operation_success()],
+        "                end",
+    ]
+    if kind in {"queue", "dyn_array", "fixed_array"}:
+        assert element_packer is not None
+        lines.extend(
+            [
+                "                else if (operation.path_kind.size() == 1 && operation.path_kind[0] == 2 &&",
+                f"                         operation.path_index[0] < {field.name}.size()) begin",
+                f"                  {element_packer}::pack({field.name}[operation.path_index[0]], bytes);",
+                *["                  " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                end else begin",
+                "                  ok = 0;",
+                '                  error = "unsupported or out-of-range indexed field read";',
+                "                end",
+            ]
+        )
+    elif kind == "assoc_array":
+        assert key_type is not None and key_packer is not None and element_packer is not None
+        lines.extend(
+            [
+                "                else if (operation.path_kind.size() == 1 && operation.path_kind[0] == 3) begin",
+                f"                  {key_type} field_key;",
+                "                  field_offset = 0;",
+                f"                  {key_packer}::unpack(field_key, operation.path_key[0], field_offset);",
+                f'                  svx_require_unpacked_all("{field_id}", "field key", "field key", field_offset, operation.path_key[0].size());',
+                f"                  if (!{field.name}.exists(field_key)) begin",
+                "                    ok = 0;",
+                '                    error = "missing associative field key";',
+                "                  end else begin",
+                f"                    {element_packer}::pack({field.name}[field_key], bytes);",
+                *["                    " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                  end",
+                "                end else begin",
+                "                  ok = 0;",
+                '                  error = "unsupported associative field read";',
+                "                end",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "                else begin",
+                "                  ok = 0;",
+                '                  error = "field path extends a scalar value";',
+                "                end",
+            ]
+        )
+
+    lines.extend(
+        [
+            "              end",
+            "              1: begin",  # set
+            "                if (!operation.has_payload) begin",
+            "                  ok = 0;",
+            '                  error = "field set requires payload bytes";',
+            "                end else if (operation.path_kind.size() == 0) begin",
+            "                  field_offset = 0;",
+            f"                  {root_packer}::unpack({field.name}, operation.payload, field_offset);",
+            f'                  svx_require_unpacked_all("{field_id}", "field write", "field value", field_offset, operation.payload.size());',
+            *["                  " + line.strip() for line in _emit_sv_field_operation_success()],
+            "                end",
+        ]
+    )
+    if kind in {"queue", "dyn_array", "fixed_array"}:
+        assert element_packer is not None and element_type is not None
+        lines.extend(
+            [
+                "                else if (operation.path_kind.size() == 1 && operation.path_kind[0] == 2 &&",
+                f"                         operation.path_index[0] < {field.name}.size()) begin",
+                f"                  {element_type} field_value;",
+                "                  field_offset = 0;",
+                f"                  {element_packer}::unpack(field_value, operation.payload, field_offset);",
+                f'                  svx_require_unpacked_all("{field_id}", "field write", "field element", field_offset, operation.payload.size());',
+                f"                  {field.name}[operation.path_index[0]] = field_value;",
+                *["                  " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                end else begin",
+                "                  ok = 0;",
+                '                  error = "unsupported or out-of-range indexed field write";',
+                "                end",
+            ]
+        )
+    elif kind == "assoc_array":
+        assert key_type is not None and key_packer is not None and element_type is not None and element_packer is not None
+        lines.extend(
+            [
+                "                else if (operation.path_kind.size() == 1 && operation.path_kind[0] == 3) begin",
+                f"                  {key_type} field_key;",
+                f"                  {element_type} field_value;",
+                "                  field_offset = 0;",
+                f"                  {key_packer}::unpack(field_key, operation.path_key[0], field_offset);",
+                f'                  svx_require_unpacked_all("{field_id}", "field key", "field key", field_offset, operation.path_key[0].size());',
+                "                  field_offset = 0;",
+                f"                  {element_packer}::unpack(field_value, operation.payload, field_offset);",
+                f'                  svx_require_unpacked_all("{field_id}", "field write", "field value", field_offset, operation.payload.size());',
+                f"                  {field.name}[field_key] = field_value;",
+                *["                  " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                end else begin",
+                "                  ok = 0;",
+                '                  error = "unsupported associative field write";',
+                "                end",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "                else begin",
+                "                  ok = 0;",
+                '                  error = "field path extends a scalar value";',
+                "                end",
+            ]
+        )
+    lines.extend(["              end"])
+
+    if kind in {"queue", "dyn_array"}:
+        assert element_type is not None and element_packer is not None
+        lines.extend(
+            [
+                "              2, 4: begin",  # insert, append
+                "                if (!operation.has_payload) begin",
+                "                  ok = 0;",
+                '                  error = "sequence insertion requires payload bytes";',
+                "                end else begin",
+                f"                  {element_type} field_value;",
+                "                  field_offset = 0;",
+                f"                  {element_packer}::unpack(field_value, operation.payload, field_offset);",
+                f'                  svx_require_unpacked_all("{field_id}", "field update", "field element", field_offset, operation.payload.size());',
+                "                  if (operation.code == 4 && operation.path_kind.size() == 0) begin",
+            ]
+        )
+        if kind == "queue":
+            lines.append(f"                    {field.name}.push_back(field_value);")
+        else:
+            lines.extend(
+                [
+                    f"                    {element_type} field_resize[];",
+                    f"                    field_resize = new[{field.name}.size() + 1]({field.name});",
+                    f"                    field_resize[{field.name}.size()] = field_value;",
+                    f"                    {field.name} = field_resize;",
+                ]
+            )
+        lines.extend(
+            [
+                *["                    " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                  end else if (operation.code == 2 && operation.path_kind.size() == 1 &&",
+                "                               operation.path_kind[0] == 2 && operation.path_index[0] <= " + field.name + ".size()) begin",
+            ]
+        )
+        if kind == "queue":
+            lines.append(f"                    {field.name}.insert(operation.path_index[0], field_value);")
+        else:
+            lines.extend(
+                [
+                    f"                    {element_type} field_insert[];",
+                    f"                    field_insert = new[{field.name}.size() + 1];",
+                    f"                    for (int i = 0; i < operation.path_index[0]; i++) field_insert[i] = {field.name}[i];",
+                    "                    field_insert[operation.path_index[0]] = field_value;",
+                    f"                    for (int i = operation.path_index[0]; i < {field.name}.size(); i++) field_insert[i + 1] = {field.name}[i];",
+                    f"                    {field.name} = field_insert;",
+                ]
+            )
+        lines.extend(
+            [
+                *["                    " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                  end else begin",
+                "                    ok = 0;",
+                '                    error = "unsupported sequence insertion path";',
+                "                  end",
+                "                end",
+                "              end",
+                "              3, 5: begin",  # delete, pop
+                "                if (operation.path_kind.size() != 1 || operation.path_kind[0] != 2 ||",
+                f"                    operation.path_index[0] >= {field.name}.size()) begin",
+                "                  ok = 0;",
+                '                  error = "unsupported or out-of-range sequence removal";',
+                "                end else begin",
+            ]
+        )
+        if kind == "queue":
+            lines.append(f"                  {field.name}.delete(operation.path_index[0]);")
+        else:
+            lines.extend(
+                [
+                    f"                  {element_type} field_delete[];",
+                    f"                  field_delete = new[{field.name}.size() - 1];",
+                    "                  for (int i = 0; i < operation.path_index[0]; i++) field_delete[i] = " + field.name + "[i];",
+                    "                  for (int i = operation.path_index[0] + 1; i < " + field.name + ".size(); i++) field_delete[i - 1] = " + field.name + "[i];",
+                    f"                  {field.name} = field_delete;",
+                ]
+            )
+        lines.extend([*["                  " + line.strip() for line in _emit_sv_field_operation_success()], "                end", "              end"])
+
+    if kind == "assoc_array":
+        assert key_type is not None and key_packer is not None
+        lines.extend(
+            [
+                "              3, 5: begin",
+                "                if (operation.path_kind.size() != 1 || operation.path_kind[0] != 3) begin",
+                "                  ok = 0;",
+                '                  error = "associative removal requires a key path";',
+                "                end else begin",
+                f"                  {key_type} field_key;",
+                "                  field_offset = 0;",
+                f"                  {key_packer}::unpack(field_key, operation.path_key[0], field_offset);",
+                f'                  svx_require_unpacked_all("{field_id}", "field key", "field key", field_offset, operation.path_key[0].size());',
+                f"                  if (!{field.name}.exists(field_key)) begin",
+                "                    ok = 0;",
+                '                    error = "missing associative field key";',
+                "                  end else begin",
+                f"                    {field.name}.delete(field_key);",
+                *["                    " + line.strip() for line in _emit_sv_field_operation_success()],
+                "                  end",
+                "                end",
+                "              end",
+            ]
+        )
+
+    lines.extend(
+        [
+            "              default: begin",
+            "                ok = 0;",
+            '                error = "unsupported projected-field operation";',
+            "              end",
+            "            endcase",
+            "          end",
+            "        end",
+        ]
+    )
+    return lines
 
 
 def _emit_sv_projection_invoke(
@@ -1495,17 +1855,19 @@ def _emit_sv_projection_class(
     base_methods: tuple[Method, ...],
     dispatch_virtuals: tuple[Method, ...],
     delegate_unmatched_to_super: bool = False,
+    constructor_source: ForeignClass | None = None,
+    reuse_base_object_id: bool = False,
+    super_accepts_object_id: bool = False,
+    is_root_sv_mirror: bool = False,
 ) -> list[str]:
     """Emit an AMirror or BProxy portion without manufacturing user classes."""
 
-    lines = [
-        "",
-        f"  class {generated_name} extends {base_type} implements svx_dispatchable;",
-        "    longint unsigned __svx_remote_object_id;",
-    ]
+    lines = ["", f"  class {generated_name} extends {base_type} implements svx_dispatchable;"]
+    if not reuse_base_object_id:
+        lines.append("    longint unsigned __svx_remote_object_id;")
     for field in cls.fields:
-        lines.append(f"    {field.type_binding.sv} {field.name};")
-    constructor = cls.constructor
+        lines.append(f"    {_sv_field_declaration(field)};")
+    constructor = constructor_source.constructor if constructor_source is not None else cls.constructor
     constructor_parameters = (
         ", ".join(f"input {p.type_binding.sv} {p.name}" for p in constructor.parameters)
         if constructor is not None
@@ -1514,7 +1876,85 @@ def _emit_sv_projection_class(
     constructor_arguments = (
         ", ".join(p.name for p in constructor.parameters) if constructor is not None else ""
     )
-    if constructor is not None and constructor.initiator == "sv":
+    constructor_parameters_with_optional_id = ", ".join(
+        item
+        for item in (
+            constructor_parameters,
+            "input longint unsigned object_id = 0",
+        )
+        if item
+    )
+    constructor_arguments_with_id = ", ".join(
+        item for item in (constructor_arguments, "object_id") if item
+    )
+    if is_root_sv_mirror:
+        lines.extend(
+            [
+                "",
+                f"    function new({constructor_parameters_with_optional_id});",
+                "      bit ok;",
+                "      chandle request;",
+                "      string error;",
+                "      byte unsigned bytes[$];",
+                *(
+                    [
+                        f"      {_call_record_class_name(cls.canonical_id, 'request')} request_value;"
+                    ]
+                    if constructor is not None and constructor.parameters
+                    else []
+                ),
+                f"      super.new({constructor_arguments});",
+                "      if (object_id == 0) begin",
+                "        __svx_remote_object_id = svx_inheritance_registry::allocate_object_id();",
+                "        svx_inheritance_registry::register_object(__svx_remote_object_id, this);",
+            ]
+        )
+        if constructor is not None and constructor.parameters:
+            lines.append("        request_value = new();")
+            for parameter in constructor.parameters:
+                lines.append(f"        request_value.{parameter.name} = {parameter.name};")
+            lines.append("        request_value.pack(bytes);")
+        lines.extend(
+            [
+                '        request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+                f"        svx_inheritance_create_python({json.dumps(cls.canonical_id)}, __svx_remote_object_id, request, ok, error);",
+                "        svx_payload_destroy(request);",
+                "        if (!ok) begin",
+                "          svx_inheritance_registry::unbind(__svx_remote_object_id);",
+                f'          $fatal(2, "SVX AMirror construction {cls.canonical_id} failed: %s", error);',
+                "        end",
+                "      end else begin",
+                "        __svx_remote_object_id = object_id;",
+                "        svx_inheritance_registry::register_object(object_id, this);",
+                "      end",
+                "    endfunction",
+            ]
+        )
+    elif reuse_base_object_id:
+        if constructor is not None and constructor.initiator == "sv":
+            lines.extend(
+                [
+                    "",
+                    f"    function new({constructor_parameters_with_optional_id});",
+                    f"      super.new({constructor_arguments_with_id});",
+                    "    endfunction",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "",
+                    f"    function new({constructor_parameters_with_optional_id});",
+                    f"      super.new({constructor_arguments_with_id});",
+                    "    endfunction",
+                ]
+            )
+    elif constructor is not None and constructor.initiator == "sv":
+        if super_accepts_object_id:
+            raise SVXInheritanceError(
+                f"SV-initiated construction of {cls.canonical_id} after a Python-to-SV "
+                "projection requires an explicit generated constructor bridge"
+            )
         lines.extend(
             [
                 "",
@@ -1532,6 +1972,7 @@ def _emit_sv_projection_class(
                 ),
                 f"      super.new({constructor_arguments});",
                 "      __svx_remote_object_id = svx_inheritance_registry::allocate_object_id();",
+                "      svx_inheritance_registry::register_object(__svx_remote_object_id, this);",
             ]
         )
         if constructor.parameters:
@@ -1546,18 +1987,26 @@ def _emit_sv_projection_class(
                 f"      svx_inheritance_create_python({json.dumps(cls.canonical_id)}, __svx_remote_object_id, request, ok, error);",
                 "      svx_payload_destroy(request);",
                 "      if (!ok) begin",
+                "        svx_inheritance_registry::unbind(__svx_remote_object_id);",
                 f'        $fatal(2, "SVX AMirror construction {cls.canonical_id} failed: %s", error);',
                 "      end",
-                "      svx_inheritance_registry::register_object(__svx_remote_object_id, this);",
                 "    endfunction",
             ]
         )
     else:
+        super_arguments = ", ".join(
+            value
+            for value in (
+                "object_id" if super_accepts_object_id else "",
+                constructor_arguments,
+            )
+            if value
+        )
         lines.extend(
             [
                 "",
                 f"    function new(longint unsigned object_id{', ' if constructor_parameters else ''}{constructor_parameters});",
-                f"      super.new({constructor_arguments});",
+                f"      super.new({super_arguments});",
                 "      __svx_remote_object_id = object_id;",
                 "      svx_inheritance_registry::register_object(object_id, this);",
                 "    endfunction",
@@ -1565,14 +2014,117 @@ def _emit_sv_projection_class(
         )
     for method in dispatch_virtuals:
         lines.extend(_emit_sv_outbound_method(method))
+    static_methods = tuple(method for method in cls.methods if method.is_static)
+    if static_methods:
+        lines.extend(
+            [
+                "",
+                "    static task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                "      byte unsigned bytes[$];",
+                "      int offset;",
+                "      response = null;",
+                "      svx_payload_to_byte_queue(request, bytes);",
+                "      offset = 0;",
+                "      case (method_id)",
+            ]
+        )
+        for method in static_methods:
+            lines.extend(_emit_sv_dispatch_case(method, f"{_sv_class_reference(cls)}::"))
+        lines.extend(
+            [
+                "        default: begin",
+                "          ok = 0;",
+                '          error = {"unsupported static member: ", method_id};',
+                "        end",
+                "      endcase",
+                "    endtask",
+            ]
+        )
     lines.extend(
         _emit_sv_projection_invoke(
             cls,
-            base_methods=base_methods,
+            base_methods=tuple(method for method in base_methods if not method.is_static),
             delegate_unmatched_to_super=delegate_unmatched_to_super,
         )
     )
     lines.append(f"  endclass : {generated_name}")
+    return lines
+
+
+def _sv_field_declaration(field: Field) -> str:
+    """Render a field declaration from its concrete public SvTypes codec.
+
+    A manifest's ``sv`` type expression is suitable for parameters, while an
+    unpacked collection dimension follows the member name in a declaration.
+    Delegating the latter to SvTypes preserves its normal SV spelling.
+    """
+
+    try:
+        import svtypes
+
+        codec = _codec_from_spec(field.type_binding.runtime_spec())
+        declaration = svtypes.sv_declaration(codec, field.name)
+    except (AttributeError, ImportError) as error:
+        raise SVXInheritanceError(
+            f"cannot render projected field {field.name} from its public SvTypes declaration"
+        ) from error
+    if not isinstance(declaration, str) or not declaration:
+        raise SVXInheritanceError(f"SvTypes emitted an invalid declaration for projected field {field.name}")
+    return declaration.strip().rstrip(";")
+
+
+def _emit_sv_static_gateway(
+    source: ForeignClass,
+    *,
+    gateway_name: str,
+    dispatcher_name: str,
+) -> list[str]:
+    """Emit a class-owned static dispatch gateway without allocating ``source``.
+
+    The gateway extends the source only so qualified calls can legally reach
+    protected static members. It is never instantiated. A separate lightweight
+    dispatcher instance is what the registry owns.
+    """
+
+    static_methods = tuple(method for method in source.methods if method.is_static)
+    if not static_methods:
+        return []
+    lines = [
+        "",
+        f"  virtual class {gateway_name} extends {_sv_class_reference(source)};",
+        "    static task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+        "      byte unsigned bytes[$];",
+        "      int offset;",
+        "      response = null;",
+        "      svx_payload_to_byte_queue(request, bytes);",
+        "      offset = 0;",
+        "      case (method_id)",
+    ]
+    for method in static_methods:
+        lines.extend(_emit_sv_dispatch_case(method, f"{_sv_class_reference(source)}::"))
+    lines.extend(
+        [
+            "        default: begin",
+            "          ok = 0;",
+            '          error = {"unsupported static member: ", method_id};',
+            "        end",
+            "      endcase",
+            "    endtask",
+            f"  endclass : {gateway_name}",
+            "",
+            f"  class {dispatcher_name} implements svx_static_dispatchable;",
+            "    function new();",
+            f"      svx_inheritance_registry::register_static({json.dumps(source.canonical_id)}, this);",
+            "    endfunction",
+            "",
+            "    virtual task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+            f"      {gateway_name}::svx_invoke_static(method_id, request, ok, response, error);",
+            "    endtask",
+            f"  endclass : {dispatcher_name}",
+            "",
+            f"  {dispatcher_name} {source.generated_name}_static_dispatcher = new();",
+        ]
+    )
     return lines
 
 
@@ -1607,7 +2159,7 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str) -> list[
                 "      offset = 0;",
                 "      constructor_request.unpack(bytes, offset);",
                 f'      svx_require_unpacked_all("{source.canonical_id}", "constructor request", "call request", offset, bytes.size());',
-                f"      instance = new(object_id, {', '.join('constructor_request.' + p.name for p in parameters)});",
+                f"      instance = new({', '.join('constructor_request.' + p.name for p in parameters)}{', ' if parameters else ''}object_id);",
             ]
         )
     else:
@@ -1627,6 +2179,25 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str) -> list[
         ]
     )
     return lines
+
+
+def _projection_helper_package(source: ForeignClass, kind: str) -> str:
+    """Name one helper package per projected class portion.
+
+    Alternating lineages can cross the same user SV package more than once
+    (for example A and C both live in ``drivers``).  One package per helper
+    keeps their required source-order anchors independently includable.
+    """
+
+    if kind == "mirror":
+        stem = "_".join(source.symbol.split("::")[:-1])
+        helper = f"{source.generated_name}Mirror"
+    elif kind == "proxy":
+        stem = "_".join(source.symbol.split(".")[:-1])
+        helper = f"{source.generated_name}Proxy"
+    else:  # pragma: no cover - internal caller invariant
+        raise ValueError(f"unknown projection helper kind {kind!r}")
+    return "svx_projection_" + stem + "_" + helper + "_pkg"
 
 
 def _emit_sv_projection_helpers(
@@ -1655,14 +2226,12 @@ def _emit_sv_projection_helpers(
     packages: dict[str, list[str]] = {}
     dependencies: dict[str, set[str]] = {}
     for source, _child in mirrors.values():
-        package = "svx_projection_" + "_".join(source.symbol.split("::")[:-1]) + "_pkg"
+        package = _projection_helper_package(source, "mirror")
         packages.setdefault(package, []).append(source.canonical_id)
     for source, _mirror, _child in proxies.values():
-        package = "svx_projection_" + "_".join(source.symbol.split(".")[:-1]) + "_pkg"
+        package = _projection_helper_package(source, "proxy")
         packages.setdefault(package, []).append(source.canonical_id)
-        mirror_package = (
-            "svx_projection_" + "_".join(_mirror.symbol.split("::")[:-1]) + "_pkg"
-        )
+        mirror_package = _projection_helper_package(_mirror, "mirror")
         if mirror_package != package:
             dependencies.setdefault(package, set()).add(mirror_package)
 
@@ -1711,12 +2280,16 @@ def _emit_sv_projection_helpers(
                 lines.append(f"  import {source_package}::*;")
             if class_id in proxies:
                 _source, mirror_source, _child = proxies[class_id]
-                mirror_package = "svx_projection_" + "_".join(mirror_source.symbol.split("::")[:-1]) + "_pkg"
+                mirror_package = _projection_helper_package(mirror_source, "mirror")
                 if mirror_package != package:
                     lines.append(f"  import {mirror_package}::*;")
         for class_id in class_ids:
             if class_id in mirrors:
                 source, _child = mirrors[class_id]
+                super_accepts_object_id = any(
+                    child.canonical_id == source.canonical_id
+                    for _proxy_source, _mirror_source, child in proxies.values()
+                )
                 lines.extend(
                     _emit_sv_projection_class(
                         f"{source.generated_name}Mirror",
@@ -1724,8 +2297,31 @@ def _emit_sv_projection_helpers(
                         source,
                         base_methods=source.methods,
                         dispatch_virtuals=tuple(method for method in source.methods if method.virtual),
+                        delegate_unmatched_to_super=super_accepts_object_id,
+                        super_accepts_object_id=super_accepts_object_id,
+                        reuse_base_object_id=super_accepts_object_id,
+                        is_root_sv_mirror=not super_accepts_object_id,
                     )
                 )
+                static_methods = tuple(method for method in source.methods if method.is_static)
+                if static_methods:
+                    dispatcher_name = f"{source.generated_name}StaticDispatcher"
+                    lines.extend(
+                        [
+                            "",
+                            f"  class {dispatcher_name} implements svx_static_dispatchable;",
+                            "    function new();",
+                            f"      svx_inheritance_registry::register_static({json.dumps(source.canonical_id)}, this);",
+                            "    endfunction",
+                            "",
+                            "    virtual task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                            f"      {source.generated_name}Mirror::svx_invoke_static(method_id, request, ok, response, error);",
+                            "    endtask",
+                            f"  endclass : {dispatcher_name}",
+                            "",
+                            f"  {dispatcher_name} {source.generated_name}_static_dispatcher = new();",
+                        ]
+                    )
                 lines.extend(_emit_sv_projection_factory(source, f"{source.generated_name}Mirror"))
             if class_id in proxies:
                 source, mirror_source, _child = proxies[class_id]
@@ -1737,6 +2333,8 @@ def _emit_sv_projection_helpers(
                         base_methods=mirror_source.methods,
                         dispatch_virtuals=tuple(method for method in source.methods if method.virtual),
                         delegate_unmatched_to_super=True,
+                        constructor_source=mirror_source,
+                        reuse_base_object_id=True,
                     )
                 )
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
@@ -1831,17 +2429,133 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             lines.append(f"  endclass : {proxy_name}")
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
 
+    # A standalone Python mirror may expose static SV members without having a
+    # downstream Python-derived target, hence no AMirror package. Give those
+    # classes their own no-instance gateway rather than silently omitting the
+    # static method from the generated Python API.
+    mirrored_sources: set[str] = set()
+    for plan in projection_plans(manifest):
+        for index, current in enumerate(plan.lineage[:-1]):
+            if plan.lineage[index + 1].language == "python" and current.language == "sv":
+                mirrored_sources.add(current.canonical_id)
+    for source in _all_manifest_classes(manifest):
+        if (
+            source.language != "sv"
+            or source.canonical_id in mirrored_sources
+            or not any(method.is_static for method in source.methods)
+        ):
+            continue
+        package = "svx_static_" + "_".join(source.symbol.split("::")[:-1]) + "_" + source.generated_name + "_pkg"
+        guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
+        source_package = source.symbol.split("::")[0]
+        lines.extend(
+            [
+                "",
+                f"`ifndef {guard}",
+                f"`define {guard}",
+                "",
+                f"package {package};",
+                "  import svx_pkg::*;",
+                "  import svtypes_pkg::*;",
+                *record_import,
+                f"  import {source_package}::*;",
+            ]
+        )
+        lines.extend(
+            _emit_sv_static_gateway(
+                source,
+                gateway_name=f"{source.generated_name}StaticGateway",
+                dispatcher_name=f"{source.generated_name}StaticDispatcher",
+            )
+        )
+        lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
+
     lines.extend(_emit_sv_projection_helpers(manifest, has_call_records=bool(record_types)))
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _projection_stage_filename(position: str, canonical_id: str) -> str:
+    """Return a deterministic include filename for one source-order anchor."""
+
+    stem = re.sub(r"[^A-Za-z0-9]+", "_", canonical_id).strip("_")
+    digest = hashlib.sha256(canonical_id.encode("utf-8")).hexdigest()[:10]
+    return f"{position}_{stem}_{digest}.svh"
+
+
+def emit_sv_mirror_stages(manifest: Manifest) -> dict[str, str]:
+    """Split generated projection helpers at their required SV source anchors.
+
+    A single generated source is sufficient for a one-boundary projection. An
+    alternating lineage is different: ``BProxy`` must be visible before a user
+    declaration ``class C extends BProxy``, while ``CMirror extends C`` cannot
+    be parsed until after that declaration.  SystemVerilog does not permit a
+    forward base class in this situation.  This function leaves ordinary
+    generated declarations in ``common.svh`` and emits each helper package at
+    the exact ``before`` or ``after`` class anchor required by its lineage.
+
+    The returned paths are relative names suitable for one generated directory.
+    A caller includes ``common.svh`` once, then includes each anchor file at the
+    corresponding global source position.  Conflicting anchors for a generated
+    package are rejected rather than producing order-dependent SV source.
+    """
+
+    package_anchors: dict[str, tuple[str, str]] = {}
+
+    def record_anchor(package: str, anchor: tuple[str, str]) -> None:
+        existing = package_anchors.setdefault(package, anchor)
+        if existing != anchor:
+            raise SVXInheritanceError(
+                "one generated SystemVerilog projection package requires "
+                f"incompatible source anchors {existing!r} and {anchor!r}"
+            )
+
+    for plan in projection_plans(manifest):
+        for index, current in enumerate(plan.lineage[:-1]):
+            child = plan.lineage[index + 1]
+            if current.language == "sv" and child.language == "python":
+                package = _projection_helper_package(current, "mirror")
+                record_anchor(package, ("after", current.canonical_id))
+            elif current.language == "python" and child.language == "sv":
+                package = _projection_helper_package(current, "proxy")
+                record_anchor(package, ("before", child.canonical_id))
+
+    combined = emit_sv_mirrors(manifest)
+    common = combined
+    staged: dict[str, list[str]] = {}
+    for package, (position, canonical_id) in sorted(package_anchors.items()):
+        guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
+        begin = f"`ifndef {guard}\n"
+        end = f"`endif // {guard}"
+        start = common.find(begin)
+        if start < 0:
+            raise SVXInheritanceError(
+                f"generated projection package {package!r} is missing from SV output"
+            )
+        finish = common.find(end, start)
+        if finish < 0:
+            raise SVXInheritanceError(
+                f"generated projection package {package!r} has no closing include guard"
+            )
+        finish += len(end)
+        block = common[start:finish].strip() + "\n"
+        common = common[:start] + common[finish:]
+        filename = _projection_stage_filename(position, canonical_id)
+        staged.setdefault(filename, []).append(block)
+
+    result = {"common.svh": common.rstrip() + "\n"}
+    for filename, blocks in sorted(staged.items()):
+        result[filename] = "\n".join(blocks)
+    return result
 
 
 def artifact_manifest(
     manifest: Manifest,
     python_sources: dict[PurePosixPath, str],
-    sv_source: str,
+    sv_source: str | None = None,
     *,
     python_path_prefix: str = "",
     sv_path: str = "mirrors.sv",
+    sv_sources: dict[PurePosixPath, str] | None = None,
 ) -> dict[str, Any]:
     """Describe generated inheritance artifacts for startup compatibility checks."""
 
@@ -1858,12 +2572,17 @@ def artifact_manifest(
         }
         for path, source in sorted(python_sources.items(), key=lambda item: item[0].as_posix())
     ]
-    artifacts.append(
+    if sv_sources is None:
+        if sv_source is None:
+            raise TypeError("artifact_manifest requires sv_source or sv_sources")
+        sv_sources = {PurePosixPath(sv_path): sv_source}
+    artifacts.extend(
         {
             "language": "systemverilog",
-            "path": sv_path,
-            "sha256": hashlib.sha256(sv_source.encode("utf-8")).hexdigest(),
+            "path": path.as_posix(),
+            "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
         }
+        for path, source in sorted(sv_sources.items(), key=lambda item: item[0].as_posix())
     )
 
     def record_metadata(
@@ -1943,7 +2662,6 @@ def artifact_manifest(
                         {
                             "name": parameter.name,
                             "direction": parameter.direction,
-                            "ref_access": parameter.ref_access,
                             "unified_type_name": parameter.type_binding.unified_type_name,
                         }
                         for parameter in _request_parameters(method)
@@ -1952,7 +2670,6 @@ def artifact_manifest(
                         {
                             "name": parameter.name,
                             "direction": parameter.direction,
-                            "ref_access": parameter.ref_access,
                             "unified_type_name": parameter.type_binding.unified_type_name,
                         }
                         for parameter in _response_parameters(method)
@@ -2078,6 +2795,30 @@ def call_sv(object_id: int, method_id: str, request: bytes = b"") -> bytes:
         raise SVXRemoteError(object_id, method_id, message, code=code) from error
 
 
+def call_sv_static(class_id: str, method_id: str, request: bytes = b"") -> bytes:
+    """Call a generated static SV adapter without creating an object instance."""
+
+    if not isinstance(class_id, str) or not class_id:
+        raise ValueError("SVX inheritance class_id must be a non-empty string")
+    if not isinstance(method_id, str) or not method_id:
+        raise ValueError("SVX inheritance method_id must be a non-empty string")
+    if not isinstance(request, bytes):
+        raise TypeError("SVX inheritance request must be bytes")
+    from . import _native
+
+    try:
+        return _native.inheritance_call_sv_static(class_id, method_id, request)
+    except RuntimeError as error:
+        message = str(error)
+        code = "remote_error"
+        if message.startswith("SVX1|"):
+            parts = message.split("|", 4)
+            if len(parts) == 5:
+                _, code, _remote_object_id, remote_method_id, message = parts
+                method_id = remote_method_id
+        raise SVXRemoteError(0, method_id, message, code=code) from error
+
+
 @dataclass
 class _CallContract:
     request_fields: tuple[tuple[str, dict[str, Any]], ...]
@@ -2115,9 +2856,7 @@ def _shutdown_python_state() -> None:
     _python_subclasses.clear()
 
 
-def register_contract(
-    contract: dict[str, dict[str, tuple[tuple[str, dict[str, Any]], ...]]]
-) -> None:
+def register_contract(contract: dict[str, dict[str, Any]]) -> None:
     """Register generated method signatures used by the Python dispatch adapter.
 
     Each type is a declarative public SvTypes reference plus its immutable wire
@@ -2498,6 +3237,28 @@ def response_type(method_id: str) -> type:
     return schema.value_type
 
 
+def response_value(method_id: str, values: dict[str, Any]) -> Any:
+    """Build one generated response value through the method's SvTypes contract.
+
+    Generated record classes preserve SvTypes descriptor semantics and are not
+    required to accept Python keyword arguments themselves. This public helper
+    supplies the stable, normalized construction path used by generated mirror
+    response factories.
+    """
+
+    if not isinstance(values, dict):
+        raise TypeError("generated response values must be a dictionary")
+    contract = _method_contracts.get(method_id)
+    if not isinstance(contract, _CallContract):
+        raise SVXInheritanceError(
+            f"no generated response record contract registered for {method_id}"
+        )
+    schema = _contract_schema(contract, method_id, "response")
+    if schema is None:
+        raise SVXInheritanceError(f"method {method_id} has a void response")
+    return _record_value(schema, contract.response_fields, values)
+
+
 def invoke_sv(object_id: int, method_id: str, values: dict[str, Any]):
     """Invoke an SV method using its generated SvTypes request/response records."""
 
@@ -2517,6 +3278,39 @@ def invoke_sv(object_id: int, method_id: str, values: dict[str, Any]):
             _record_value(request_schema, contract.request_fields, values),
         )
     payload = call_sv(object_id, method_id, request)
+    response_schema = _contract_schema(contract, method_id, "response")
+    if response_schema is None:
+        if payload:
+            raise SVXInheritanceError(
+                f"void inheritance method {method_id} returned a payload"
+            )
+        return None
+    response = _unpack_call_record(response_schema, payload)
+    _validate_record_fields(response, contract.response_fields)
+    if len(contract.response_fields) == 1 and contract.response_fields[0][0] == "result":
+        return _record_field(response, "result")
+    return response
+
+
+def invoke_sv_static(class_id: str, method_id: str, values: dict[str, Any]):
+    """Invoke a static SV method through generated SvTypes call records."""
+
+    contract = _method_contracts.get(method_id)
+    if not isinstance(contract, _CallContract):
+        raise SVXInheritanceError(
+            f"no generated call-record contract registered for {method_id}"
+        )
+    request_schema = _contract_schema(contract, method_id, "request")
+    if request_schema is None:
+        if values:
+            raise TypeError(f"method {method_id} has a void request")
+        request = b""
+    else:
+        request = _pack_call_record(
+            request_schema,
+            _record_value(request_schema, contract.request_fields, values),
+        )
+    payload = call_sv_static(class_id, method_id, request)
     response_schema = _contract_schema(contract, method_id, "response")
     if response_schema is None:
         if payload:
@@ -2576,7 +3370,11 @@ def dispatch_python_call(object_id: int, method_id: str, payload: bytes) -> byte
             _record_field(request, name) for name, _ in contract.request_fields
         )
     foreign_dispatch = getattr(instance, "__svx_dispatch_foreign__", None)
-    result = foreign_dispatch(method_name, *arguments) if foreign_dispatch else getattr(instance, method_name)(*arguments)
+    result = (
+        foreign_dispatch(method_name, *arguments)
+        if foreign_dispatch
+        else getattr(instance, method_name)(*arguments)
+    )
     response_schema = _contract_schema(contract, method_id, "response")
     if response_schema is None:
         if result is not None:

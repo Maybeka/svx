@@ -15,7 +15,7 @@ endpackage
 module tb;
   import amirror_pkg::*;
   import svx_pkg::*;
-  import svx_projection_amirror_pkg_pkg::*;
+  import svx_projection_amirror_pkg_BaseMirror_pkg::*;
 
   initial begin
     BaseMirror driver;

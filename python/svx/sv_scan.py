@@ -21,6 +21,7 @@ class SVClassFact:
     symbol: str
     direct_base: str | None
     virtual_methods: frozenset[str]
+    static_methods: frozenset[str]
 
 
 def _pyslang():
@@ -47,6 +48,13 @@ def _method_name(item: object) -> str | None:
 def _is_virtual(item: object) -> bool:
     return any(
         str(qualifier).strip() == "virtual"
+        for qualifier in getattr(item, "qualifiers", ())
+    )
+
+
+def _is_static(item: object) -> bool:
+    return any(
+        str(qualifier).strip() == "static"
         for qualifier in getattr(item, "qualifiers", ())
     )
 
@@ -94,11 +102,18 @@ def scan_sv_sources(paths: Iterable[Path]) -> dict[str, SVClassFact]:
                     for item in getattr(member, "items", ())
                     if _is_virtual(item) and (name := _method_name(item)) is not None
                 )
+                static_methods = frozenset(
+                    name
+                    for item in getattr(member, "items", ())
+                    if _is_static(item) and (name := _method_name(item)) is not None
+                )
                 if symbol in facts:
                     raise SVXInheritanceError(
                         f"duplicate SystemVerilog class definition {symbol}"
                     )
-                facts[symbol] = SVClassFact(symbol, direct_base, virtual_methods)
+                facts[symbol] = SVClassFact(
+                    symbol, direct_base, virtual_methods, static_methods
+                )
         if not package_count:
             raise SVXInheritanceError(
                 f"SystemVerilog source {path} must contain a package declaration"
@@ -134,11 +149,16 @@ def validate_sv_declarations(
                             f"but source extends {fact.direct_base or '<none>'}"
                         )
         for method in declaration.get("methods", []):
-            if not isinstance(method, dict) or not method.get("virtual", False):
+            if not isinstance(method, dict):
                 continue
             name = method.get("name")
-            if name not in fact.virtual_methods:
+            if method.get("virtual", False) and name not in fact.virtual_methods:
                 raise SVXInheritanceError(
                     f"SV declaration {symbol}.{name} is virtual in the manifest "
+                    "but not in source"
+                )
+            if method.get("static", False) and name not in fact.static_methods:
+                raise SVXInheritanceError(
+                    f"SV declaration {symbol}.{name} is static in the manifest "
                     "but not in source"
                 )

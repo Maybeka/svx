@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 import inspect
 import json
 from pathlib import Path
+import sys
 from types import ModuleType
 from typing import Any, Callable, Iterable
 
@@ -20,11 +22,79 @@ from .inheritance import (
 )
 from .sv_scan import validate_sv_declarations
 
+import svtypes
 from svtypes import SvObject
 
 
 SV_DECLARATION_SCHEMA_URI = "https://svx.dev/schema/sv-inheritance-declarations/v1"
 SV_DECLARATION_SCHEMA_VERSION = "1.0.0"
+
+
+def _declared_svtypes_fields(cls: type) -> list[dict[str, Any]]:
+    """Render only fields declared directly by one Python inheritance class.
+
+    SvTypes descriptors are instances rather than annotations.  Preserve the
+    exact concrete descriptor through a private module-level zero-argument
+    factory so the manifest remains data-only while nested types do not need
+    to be expressed as executable JSON constructor arguments.
+    """
+
+    try:
+        from svtypes.base import TypeBase
+        from svtypes.object import ObjectDescriptor
+    except ImportError as error:  # pragma: no cover - package prerequisite
+        raise SVXInheritanceError("SvTypes is required to discover inheritance fields") from error
+
+    direct = [
+        (name, descriptor)
+        for name, descriptor in cls.__dict__.items()
+        if isinstance(descriptor, (TypeBase, ObjectDescriptor))
+    ]
+    if not direct:
+        return []
+    module = sys.modules.get(cls.__module__)
+    if module is None:
+        raise SVXInheritanceError(f"cannot locate module for inheritance class {cls.__name__}")
+    fields: list[dict[str, Any]] = []
+    for name, descriptor in direct:
+        factory_name = f"__svx_declared_codec_{cls.__name__}_{name}"
+        existing = getattr(module, factory_name, None)
+        if existing is None:
+            # Bind the descriptor as a default rather than closing over the
+            # loop variable. Each resolution must receive a fresh codec.
+            def factory(template=descriptor):
+                return copy.deepcopy(template)
+
+            factory.__name__ = factory_name
+            factory.__qualname__ = factory_name
+            setattr(module, factory_name, factory)
+        elif not callable(existing):
+            raise SVXInheritanceError(
+                f"inheritance codec factory name {cls.__module__}.{factory_name} is unavailable"
+            )
+        try:
+            fields.append(
+                {
+                    "name": name,
+                    "type": {
+                        "unified_type_name": svtypes.unified_type_name(descriptor),
+                        "python": {
+                            "module": cls.__module__,
+                            "symbol": factory_name,
+                            "args": [],
+                            "kwargs": {},
+                        },
+                        "sv": svtypes.sv_type_expression(descriptor),
+                        "sv_packer": svtypes.sv_packer_expression(descriptor),
+                        "encoding_descriptor": svtypes.encoding_descriptor(descriptor).to_dict(),
+                    },
+                }
+            )
+        except Exception as error:
+            raise SVXInheritanceError(
+                f"cannot render SvTypes field {cls.__name__}.{name}: {error}"
+            ) from error
+    return fields
 
 
 class SVMirror(SvObject):
@@ -140,23 +210,18 @@ def inheritance_parameter(
     type_binding: dict[str, Any],
     *,
     direction: str = "input",
-    ref_access: str = "readwrite",
 ) -> dict[str, Any]:
     """Declare one ordered inheritance parameter."""
 
     if not isinstance(name, str) or not name.isidentifier():
         raise ValueError("inheritance parameter name must be an identifier")
-    if direction not in {"input", "output", "inout", "ref"}:
+    if direction in {"ref", "const ref"}:
+        raise ValueError("SVX inheritance does not support ref or const ref parameters; use input, output, or inout")
+    if direction not in {"input", "output", "inout"}:
         raise ValueError("inheritance parameter direction is invalid")
-    if ref_access not in {"readwrite", "readonly"}:
-        raise ValueError("inheritance parameter ref_access is invalid")
-    if direction != "ref" and ref_access != "readwrite":
-        raise ValueError("inheritance parameter ref_access is valid only for ref")
     if not isinstance(type_binding, dict):
         raise TypeError("inheritance parameter type must be a declarative type binding")
     declaration = {"name": name, "type": type_binding, "direction": direction}
-    if direction == "ref" and ref_access != "readwrite":
-        declaration["ref_access"] = ref_access
     return declaration
 
 
@@ -228,7 +293,7 @@ def inheritance_class(
             request_names = [
                 parameter["name"]
                 for parameter in metadata["parameters"]
-                if parameter.get("direction", "input") in {"input", "inout", "ref"}
+                if parameter.get("direction", "input") in {"input", "inout"}
             ]
             actual_names = list(inspect.signature(member).parameters)
             if actual_names != ["self", *request_names]:
@@ -252,6 +317,7 @@ def inheritance_class(
                 "symbol": f"{cls.__module__}.{cls.__name__}",
                 "constructor": constructor,
                 "methods": methods,
+                "fields": _declared_svtypes_fields(cls),
                 "base_lineage": normalized_lineage,
                 "mirror_base_ids": mirror_bases,
                 **({"specialization": specialization} if specialization is not None else {}),
@@ -400,51 +466,42 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
                         "sv_packer": parameter.type_binding.sv_packer,
                     },
                     "direction": parameter.direction,
-                    **(
-                        {"ref_access": parameter.ref_access}
-                        if parameter.direction == "ref" and parameter.ref_access != "readwrite"
-                        else {}
-                    ),
                 }
                 for parameter in cls.constructor.parameters
             ],
         }
     for method in cls.methods:
-        declaration["methods"].append(
-            {
-                "canonical_id": method.canonical_id,
-                "name": method.name,
-                "parameters": [
-                    {
-                        "name": parameter.name,
-                        "type": parameter.type_binding.runtime_spec()
-                        | {
-                            "sv": parameter.type_binding.sv,
-                            "sv_packer": parameter.type_binding.sv_packer,
-                        },
-                        "direction": parameter.direction,
-                        **(
-                            {"ref_access": parameter.ref_access}
-                            if parameter.direction == "ref" and parameter.ref_access != "readwrite"
-                            else {}
-                        ),
-                    }
-                    for parameter in method.parameters
-                ],
-                "return_type": (
-                    method.return_type.runtime_spec()
+        method_declaration = {
+            "canonical_id": method.canonical_id,
+            "name": method.name,
+            "parameters": [
+                {
+                    "name": parameter.name,
+                    "type": parameter.type_binding.runtime_spec()
                     | {
-                        "sv": method.return_type.sv,
-                        "sv_packer": method.return_type.sv_packer,
-                    }
-                    if method.return_type is not None
-                    else "void"
-                ),
-                "timing": method.timing,
-                "virtual": method.virtual,
-                "pure_virtual": method.pure_virtual,
-            }
-        )
+                        "sv": parameter.type_binding.sv,
+                        "sv_packer": parameter.type_binding.sv_packer,
+                    },
+                    "direction": parameter.direction,
+                }
+                for parameter in method.parameters
+            ],
+            "return_type": (
+                method.return_type.runtime_spec()
+                | {
+                    "sv": method.return_type.sv,
+                    "sv_packer": method.return_type.sv_packer,
+                }
+                if method.return_type is not None
+                else "void"
+            ),
+            "timing": method.timing,
+            "virtual": method.virtual,
+            "pure_virtual": method.pure_virtual,
+        }
+        if method.is_static:
+            method_declaration["static"] = True
+        declaration["methods"].append(method_declaration)
     if cls.specialization is not None:
         declaration["specialization"] = {
             "arguments": [

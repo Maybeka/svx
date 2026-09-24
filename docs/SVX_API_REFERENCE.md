@@ -11,7 +11,7 @@ The following names exported from `svx` are stable:
   `fork_join_none`;
 - channels: `Payload`, `Channel`, `channel`, the typed role classes, and their
   corresponding factory functions;
-- inheritance lifecycle: `Ref` and `close_instance`;
+- inheritance lifecycle: `close_instance`;
 - inheritance declarations: `inheritance_type`, `inheritance_parameter`,
   `inheritance_method`, `inheritance_class`, `SVMirror`, `sv_mirror`, and
   `manifest_from_declarations`;
@@ -29,30 +29,28 @@ beginning with an underscore are private runtime ABI and may not be called by
 user code.
 
 Generated Python mirrors keep the foreign class and method names. Their task
-signatures contain `input` and `inout` values plus `svx.Ref[T]` objects for
-declared readwrite `ref` parameters; pure `output` values are not call
-arguments. A task `const ref` accepts an ordinary value for Python-to-SV calls
-and supplies a read-only `Ref[T]` for SV-to-Python callbacks.
-`Ref.value` is the only public ref accessor. During a Python-to-SV call it is
-bound to a typed temporary `svx_ref_argument.value`; during an SV-to-Python
-callback it is bound to a generated portal that directly reads/writes the
-original SV `ref` actual. It becomes stale when that call ends or unwinds. A
-method with only a function result returns that result directly. A method with
-any copy-out value returns its generated SvTypes response value, exported by
-the generated module as `<Class><Method>Response`; its fields are the declared
-`output`, `inout`, and final `ref` values followed by `result` when present.
-Field values use normal SvTypes generated object access, including `.value` for
-scalar descriptors. Inheritance callbacks must be synchronous ordinary Python
-functions; coroutine functions and awaitable results are rejected fatally.
-For a manifest `function` formal declared `ref`, the generated API emits
-`SVXW_FUNCTION_REF_AS_INOUT` and exposes that formal as an ordinary input value
-with a completion-time response value, rather than as `Ref[T]`.
-A manifest `function const ref` emits `SVXW_FUNCTION_CONST_REF_AS_INPUT` and
-is input-only at the cross-language boundary.
+signatures contain `input` and `inout` values; pure `output` values are not call
+arguments. A method with only a function result returns that result directly. A
+Python-to-SV mirror call with copy-out values returns its decoded SvTypes response object.
+For an SV-to-Python callback, the generated AMirror module exports a
+`<Class><Method>Response(**values)` factory; the Python override returns that
+factory result, with exactly the declared `output` and `inout` values followed
+by `result` when present. The factory normalizes values through
+the registered SvTypes contract instead of relying on a record constructor's
+keyword-argument behavior. Field values use normal SvTypes generated object
+access, including `.value` for scalar descriptors. Inheritance callbacks must
+be synchronous ordinary Python functions; coroutine functions and awaitable
+results are rejected fatally.
 
-`SVXReadonlyRefError` reports assignment through a callback `const ref`.
-`SVXStaleRefError` reports access to a borrowed task `Ref` after its callback
-portal has closed. Both derive from `SVXInheritanceError`.
+Inheritance manifests reject `ref` and `const ref`; SVX does not expose a
+cross-language lvalue-alias capability. Use an explicit SvTypes object or
+getter/setter API when an application needs mutable behavior across the boundary.
+
+An SV source method marked `"static": true` is exposed as an AMirror Python
+`@staticmethod`. It uses a generated class dispatcher, has no object ID, and
+calls the qualified SV static implementation. Static and `virtual` are mutually
+exclusive; a Python subclass may shadow the name locally but cannot override
+the SV static member across the boundary.
 
 ## Stable CLI
 

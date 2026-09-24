@@ -289,9 +289,7 @@ The manifest MUST contain:
 - generator/runtime capability requirements.
 
 `base_lineage` contains full declarations for ancestors but is not itself a
-generation request: only top-level `classes` are emitted. Each `ref` formal
-also records `ref_access` as `readwrite` (the default) or `readonly`; the
-latter represents SystemVerilog `const ref`. A parameterized SV class is a
+generation request: only top-level `classes` are emitted. A parameterized SV class is a
 distinct target only after all parameters are closed: its manifest carries an
 ordered `specialization` whose type arguments are full concrete SvTypes type
 bindings and whose value arguments are normalized JSON literals with their SV
@@ -345,57 +343,18 @@ canonical class/method ID, lifecycle state, and structured error metadata. The
 request and response data classes and their bytes are owned by SvTypes.
 
 The generated request/response mapping MUST support declared `input`, `output`,
-`inout`, and `ref`, plus a function result. `output` and `inout` are
-completion-time copy-out. A readwrite task `ref` uses `svx.Ref[T]`; a bare
-Python value is not an acceptable actual. `Ref.value` is the only public
-read/write surface. A readonly task `const ref` accepts an ordinary SvTypes
-value for Python-to-SV calls and provides a read-only Ref for SV-to-Python
-callbacks. Function ref has the warned compatibility rule defined below.
+and `inout`, plus a function result. `output` and `inout` are completion-time
+copy-out encoded through SvTypes. A manifest MUST reject `ref` and `const ref`:
+the inheritance protocol does not transport SV lvalue aliases. A member that
+requires SV ref semantics remains entirely in handwritten SystemVerilog.
+Applications may define an explicit mutable protocol with SvTypes objects or
+getter/setter methods, but it is not an SVX ref facility.
 
-For Python-to-SV readwrite `ref`, the generated SV wrapper creates one typed
-`svx_ref_argument#(T)` per distinct Python Ref object and passes its `value` as
-the target's real SV `ref` actual. While the call is active, `Ref.value` is
-bound synchronously to that helper value through the generated native ABI. On
-return, the final helper value is encoded into the response and retained by the
-Ref. Reusing one Ref for multiple formals maps to one helper and preserves
-intra-call aliasing.
-
-For Python-to-SV `const ref`, the wrapper initializes one typed temporary
-lvalue from the ordinary SvTypes value and performs no copy-out. For
-SV-to-Python `const ref`, Python receives a call-scoped read-only `Ref[T]`:
-reading `.value` reaches the original formal and assignment raises
-`SVXReadonlyRefError`. For SV-to-Python readwrite `ref`, the same internal
-`svx_ref_argument#(T)` is a
-call-scoped portal rather than a copied value container. Its generated service
-task retains the original SV `ref` formal for the callback lifetime. A bound
-Python `Ref.value` read or write synchronously reaches that formal through the
-portal, so it observes and changes the real caller lvalue. The portal closes
-when the callback returns or is unwound; every retained Ref then becomes stale.
-Generated code MUST reject a ref operation after close, a descriptor mismatch,
-or concurrent reuse of one Ref by incompatible active calls. The same logical
-ref passed to multiple Python-to-SV formals uses one helper. SV-to-Python
-portals preserve the behavior of aliased SV lvalues without promising Python
-wrapper identity. The portal protocol and all values use only the declared
-SvTypes descriptor; it is not a second value system.
-
-Each `Ref.value` read or write is synchronous at the current simulator
-scheduling point. A compound Python expression such as `ref.value += 1` is a
-separate read followed by a write and is not an SVX atomic operation; ordinary
-SystemVerilog scheduling and race rules apply. A Ref is call-scoped capability,
-not a retainable object reference: it MUST NOT be used after its binding closes.
-
-A SystemVerilog function may legally declare `ref` parameters. That language
-fact does not provide a portable cross-language alias: a function may not use a
-`fork...join_none` child to retain and access its ref formal after return. For
-a cross-language function, SVX therefore emits
-`SVXW_FUNCTION_REF_AS_INOUT` and transports each readwrite `ref` formal as an
-`inout` value: request-time copy-in and completion-time copy-out in declared
-formal order. A `const ref` emits `SVXW_FUNCTION_CONST_REF_AS_INPUT` and is
-transported as input only. Python receives ordinary SvTypes values, not `Ref`,
-for either function form. The original SV signature remains `ref` or `const
-ref`; these warnings record that the cross-language body cannot observe a live
-formal during the call. This is an SVX transport restriction, not a claim that
-SystemVerilog itself rejects a function ref formal.
+An SV source method declared as static MUST be represented by a generated
+Python `@staticmethod` and a class-level SV dispatcher. The dispatcher MUST
+not allocate a foreign object or require an object ID. Static and `virtual` are
+mutually exclusive; Python name shadowing remains ordinary local Python lookup
+and MUST NOT alter the SV static implementation.
 
 Generated Python APIs MUST expose a documented response data class when
 copy-out values exist; generated SV APIs retain declared SV directions and

@@ -248,6 +248,19 @@ bool svx_invoke_object(std::uint64_t object_id, const char *method_id,
   return ok != 0;
 }
 
+bool svx_invoke_static(const char *class_id, const char *method_id,
+                       void *request, void **response, std::string *error) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(const char *, const char *, void *, unsigned char *, void **,
+                          const char **);
+  unsigned char ok = 0;
+  const char *message = "";
+  resolve_symbol<func_t>("svx_invoke_static")(class_id, method_id, request, &ok,
+                                                response, &message);
+  if (error != nullptr) *error = message ? message : "";
+  return ok != 0;
+}
+
 void svx_release_object(std::uint64_t object_id) {
   ScopedDpiScope scope;
   using func_t = void (*)(std::uint64_t);

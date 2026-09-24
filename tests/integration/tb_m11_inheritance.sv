@@ -13,8 +13,17 @@ class SvCounter extends svx_projection_tests_integration_m11_base_pkg::BaseMonit
     calls++;
     return super.sample() + 25;
   endfunction
+  virtual function int calculate(input int source, inout int changed, output int observed);
+    changed += source;
+    observed = changed + seed;
+    return observed + 1;
+  endfunction
   virtual task notify();
     super.notify();
+  endtask
+  virtual task transfer(input int source, inout int changed, output int observed);
+    changed += source;
+    observed = changed + seed;
   endtask
 endclass
 

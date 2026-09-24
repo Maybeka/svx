@@ -60,6 +60,10 @@ def inheritance_call_sv(object_id: int, method_id: str, request: bytes) -> bytes
     return _native().inheritance_call_sv(object_id, method_id, request)
 
 
+def inheritance_call_sv_static(class_id: str, method_id: str, request: bytes) -> bytes:
+    return _native().inheritance_call_sv_static(class_id, method_id, request)
+
+
 def inheritance_create_sv(class_id: str, request: bytes) -> int:
     return int(_native().inheritance_create_sv(class_id, request))
 
@@ -71,6 +75,7 @@ def inheritance_stats() -> tuple[int, int]:
 
 def inheritance_stats_reset() -> None:
     _native().inheritance_stats_reset()
+
 
 
 def signal_declare(

@@ -53,9 +53,35 @@
           "virtual": true
         },
         {
+          "canonical_id": "py://tests/integration/m11_base/BaseMonitor#calculate",
+          "name": "calculate",
+          "parameters": [
+            {"name": "source", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+            {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+            {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+          ],
+          "pure_virtual": false,
+          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "timing": "function",
+          "virtual": true
+        },
+        {
           "canonical_id": "py://tests/integration/m11_base/BaseMonitor#notify",
           "name": "notify",
           "parameters": [],
+          "pure_virtual": false,
+          "return_type": "void",
+          "timing": "task",
+          "virtual": true
+        },
+        {
+          "canonical_id": "py://tests/integration/m11_base/BaseMonitor#transfer",
+          "name": "transfer",
+          "parameters": [
+            {"name": "source", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+            {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+            {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+          ],
           "pure_virtual": false,
           "return_type": "void",
           "timing": "task",

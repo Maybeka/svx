@@ -8,7 +8,7 @@ and simulator-visible concurrency.
 ## Supported Contract
 
 - Python: 3.11 or newer.
-- SvTypes: `>=1.2.0,<2.0.0`.
+- SvTypes: `>=1.3.0,<2.0.0`.
 - Simulator: a SystemVerilog simulator with the DPI and VPI C interfaces used
   by SVX, including resumable calls through exported DPI tasks.
 - Runtime model: SystemVerilog owns clocks, resets, drivers, monitors, UVM

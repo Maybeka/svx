@@ -52,6 +52,46 @@
               }
             },
             {
+              "name": "changed",
+              "direction": "inout",
+              "type": {
+                "unified_type_name": "svtypes.Int",
+                "python": {
+                  "args": [],
+                  "kwargs": {},
+                  "module": "svtypes",
+                  "symbol": "Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "unified_type_name": "svtypes.Int",
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+                }
+              }
+            },
+            {
+              "name": "observed",
+              "direction": "output",
+              "type": {
+                "unified_type_name": "svtypes.Int",
+                "python": {
+                  "args": [],
+                  "kwargs": {},
+                  "module": "svtypes",
+                  "symbol": "Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "unified_type_name": "svtypes.Int",
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+                }
+              }
+            },
+            {
               "name": "label",
               "type": {
                 "unified_type_name": "svtypes.String[encoding=utf-8]",
@@ -94,6 +134,38 @@
           "return_type": "void",
           "timing": "task",
           "virtual": true
+        },
+        {
+          "canonical_id": "sv://tb_pkg/BaseDriver#calculate",
+          "name": "calculate",
+          "parameters": [
+            {"name": "source", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+            {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+            {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+          ],
+          "pure_virtual": false,
+          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "timing": "function",
+          "virtual": true
+        },
+        {
+          "canonical_id": "sv://tb_pkg/BaseDriver#base_value",
+          "name": "base_value",
+          "parameters": [],
+          "pure_virtual": false,
+          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "timing": "function",
+          "virtual": false
+        },
+        {
+          "canonical_id": "sv://tb_pkg/BaseDriver#static_value",
+          "name": "static_value",
+          "parameters": [],
+          "pure_virtual": false,
+          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "static": true,
+          "timing": "function",
+          "virtual": false
         }
       ],
       "symbol": "tb_pkg::BaseDriver"
@@ -119,6 +191,8 @@
               "name": "drive",
               "parameters": [
                 {"name": "address", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+                {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+                {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
                 {"name": "label", "type": {"unified_type_name": "svtypes.String[encoding=utf-8]", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "String"}, "sv": "string", "sv_packer": "string_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.String[encoding=utf-8]", "encoding_fingerprint": "c7759ce31743de2e7c0e52aaa1ddffe107f481be421202023d356340f95f200a"}}},
                 {"name": "packet", "type": {"unified_type_name": "integration.Packet", "python": {"args": [], "kwargs": {}, "module": "tests.integration.m10_object_types", "symbol": "Packet"}, "sv": "m10_object_types_pkg::Packet", "sv_packer": "svtypes_pkg::object_packer#(m10_object_types_pkg::Packet)", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "integration.Packet", "encoding_fingerprint": "fd937a126db0b1203c444b1e68990aab8f89c585ab5e4cafead2659ad971bd1a"}}}
               ],
@@ -126,6 +200,38 @@
               "return_type": "void",
               "timing": "task",
               "virtual": true
+            },
+            {
+              "canonical_id": "sv://tb_pkg/BaseDriver#calculate",
+              "name": "calculate",
+              "parameters": [
+                {"name": "source", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+                {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
+                {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+              ],
+              "pure_virtual": false,
+              "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+              "timing": "function",
+              "virtual": true
+            },
+            {
+              "canonical_id": "sv://tb_pkg/BaseDriver#base_value",
+              "name": "base_value",
+              "parameters": [],
+              "pure_virtual": false,
+              "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+              "timing": "function",
+              "virtual": false
+            },
+            {
+              "canonical_id": "sv://tb_pkg/BaseDriver#static_value",
+              "name": "static_value",
+              "parameters": [],
+              "pure_virtual": false,
+              "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+              "static": true,
+              "timing": "function",
+              "virtual": false
             }
           ],
           "symbol": "tb_pkg::BaseDriver"

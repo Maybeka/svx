@@ -1,6 +1,13 @@
 `ifndef SVX_DEFS__SVH
 `define SVX_DEFS__SVH
 
+// Source-discovery marker for a generated Python-to-SV proxy. The generated
+// staged include supplies the actual class definition at the required source
+// anchor, so the marker deliberately has no runtime expansion.
+`ifndef SVX_PY_PROXY
+`define SVX_PY_PROXY(PROXY_NAME, PYTHON_CLASS_ID, SV_BASE_NAME)
+`endif
+
 typedef enum int {
   FINISHED,
   RUNNING,

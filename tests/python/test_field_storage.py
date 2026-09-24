@@ -1,6 +1,6 @@
 import pytest
 
-from svtypes import Int, SvObject, svobj
+from svtypes import Int, Queue, SvObject, svobj
 
 from svx import SVXInheritanceError
 from svx.field_storage import (
@@ -14,6 +14,7 @@ from svx.field_storage import (
 class FieldOwner(SvObject):
     count = Int()
     local = Int()
+    history = Queue(Int())
 
 
 class RecordingTransport:
@@ -55,3 +56,20 @@ def test_projected_field_identity_rejects_unknown_or_shadowed_names():
     owner = FieldOwner()
     with pytest.raises(SVXInheritanceError, match="no unique declaring class"):
         projected_field_identities(owner, {"missing": "py://checks/B.missing"})
+
+
+def test_projected_queue_keeps_svtypes_local_operation_paths():
+    owner = FieldOwner()
+    transport = RecordingTransport()
+    ids = projected_field_identities(owner, {"history": "py://checks/B.history"})
+    bind_projected_fields(owner, 91, ids, storage=SVXFieldStorage(transport))
+
+    owner.history.value.append(3)
+    owner.history.value.insert(0, 2)
+    owner.history.value[0] = 4
+
+    assert [(write[3], write[4]) for write in transport.writes] == [
+        ("[]", "append"),
+        ('[{"kind":"index","index":0}]', "insert"),
+        ('[{"kind":"index","index":0}]', "set"),
+    ]

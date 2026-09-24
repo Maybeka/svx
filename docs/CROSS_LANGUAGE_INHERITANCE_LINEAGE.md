@@ -94,9 +94,12 @@ only through a legal gateway emitted inside `SV::AMirror extends A`.
   explicit path to A. An SV call compiled against A remains A's ordinary
   non-virtual call and never dispatches to B.
 - A static member is handled the same way as a non-virtual member, except its
-  generated endpoint calls `A::method` and has no object ID. A Python subclass
-  may define its own static member under normal Python rules; it does not alter
-  the A static member or introduce a class-level cross-language dispatcher.
+  generated endpoint calls `A::method` and has no object ID. The generated SV
+  AMirror package registers one class-level dispatcher for A; it carries no A
+  instance and only decodes the SvTypes request, calls the qualified static SV
+  implementation, and encodes the response. A Python subclass may define its
+  own static member under normal Python rules; that does not alter A's static
+  implementation or turn static dispatch into virtual dispatch.
 
 Method parameters, function returns, `output` parameters, and `inout`
 parameters use SvTypes exclusively. A call encodes each input once. Its result
@@ -105,79 +108,20 @@ record contains the optional function return plus named encoded updates for all
 before returning to its caller. This is ordinary copy-in/copy-out behavior, so
 `inout` requires no alias protocol.
 
-For a **Python-to-SV task** call with a declared `const ref T` parameter,
-Python supplies an ordinary SvTypes value. The generated wrapper uses a typed
-temporary lvalue as the actual and does not copy a value back. A readwrite
-`ref T` instead requires `svx.Ref[T]`, not a bare Python value. `Ref.value` is
-its only public access surface. The generated SV wrapper constructs one temporary
-`svx_ref_argument#(T)` per distinct Python Ref object, initializes its `value`
-from the SvTypes request, and invokes the target with `ref_arg.value` as the
-SV `ref` actual:
+For an SV-to-Python callback with copy-out values, the generated AMirror module
+exports a `<Class><Method>Response(**values)` factory. The Python override
+returns this factory result rather than constructing an implementation-specific
+SvTypes record class directly. The factory validates and normalizes every named
+field through the generated method contract. Conversely, a Python-to-SV mirror
+call returns the decoded SvTypes response object; scalar fields use `.value`.
 
-```systemverilog
-svx_ref_argument#(T) ref_arg = new();
-ref_arg.value = decoded_request.value;
-target.method(ref_arg.value);  // formal direction is ref T
-response.value = ref_arg.value;
-```
-
-While the target call is active, the Ref is bound to the helper and every
-`Ref.value` read/write synchronously reads/writes `ref_arg.value` through the
-generated native ABI. The final value is encoded into the response and retained
-by the Python Ref after the call. Reusing the same Python Ref for two `ref`
-formals must reuse one temporary helper, preserving aliasing between those
-formals during the SV call. This is a real SV `ref` call to the target, while
-necessarily being a call-scoped temporary from Python's perspective: ordinary
-Python values are not SV lvalues. A Python caller needing an existing SV member
-as the actual uses a separate manifest-exposed member-reference capability.
-
-Generated `output` and `inout` calls use the same helper shape. An `output`
-helper is left at the SV type's normal default before the call, whereas an
-`inout` helper is initialized from its request value. Both are packed only after
-the target returns. This keeps post-call handling explicit and ensures that
-every returned value follows its declared SvTypes descriptor.
-
-For an **SV-to-Python task** callback with `const ref T value`, Python receives
-a read-only `svx.Ref[T]`: `.value` reads the live formal and assignment raises
-`SVXReadonlyRefError`. For a readwrite `ref T value`, the helper remains one
-internal `svx_ref_argument#(T)` object but has portal mode rather than copied
-container mode. The generated SV gateway starts its service task with the real
-lexical formal, `serve(ref value)`, before dispatching Python. The portal
-receives synchronous read/write requests for its call ID and directly accesses
-that formal. Python receives a bound `svx.Ref[T]`, so ordinary code is simply:
-
-```python
-def update(self, value: svx.Ref[Int]) -> None:
-    value.value += 1
-```
-
-There is no cached Python copy and no notification protocol: every `.value`
-read observes the current SV formal and every write changes it. On normal
-return, exception, `kill`, `disable`, or shutdown, SVX closes the portal,
-invalidates its generation, and rejects all later Ref access. The service task
-is an SV implementation necessity--a class data member cannot permanently
-alias a task `ref` formal--not a second public `Ref` or session API.
-
-Each `.value` read or write is one synchronous operation at the current SV
-scheduling point. A compound Python expression such as `value.value += 1` is a
-read followed by a write, not an atomic transaction; normal SystemVerilog race
-rules apply. Ref identity is call-scoped. If two SV `ref` formals happen to name
-the same lvalue, their portals must preserve the lvalue's read/write behavior,
-but object identity between the two Python Ref wrappers is not part of the API.
-
-SystemVerilog functions may legally declare `ref` parameters, but that does
-not make the formal persistable by a `fork...join_none` child after function
-return. A class member cannot retain the formal as an alias either. Therefore,
-for a cross-language function SVX emits `SVXW_FUNCTION_REF_AS_INOUT` for a
-readwrite ref and degrades that boundary formal explicitly to `inout`: it
-encodes the initial value, invokes Python with an ordinary SvTypes value rather
-than `Ref`, and assigns the returned value to the original formal after the
-callback completes. A `const ref` emits `SVXW_FUNCTION_CONST_REF_AS_INPUT` and
-degrades to `input`, with no copy-out. If several readwrite degraded formals
-alias the same SV actual, copy-out occurs in their manifest declaration order;
-callers must not rely on true ref alias behavior in this warned form. The SV
-declaration remains `ref` or `const ref`; the warning is a transport
-limitation, not a SystemVerilog syntax restriction.
+Cross-language inheritance methods accept only `input`, `output`, and `inout`
+parameters. A manifest with `ref` or `const ref` is rejected during generation.
+`inout` is ordinary SvTypes copy-in/copy-out, not an SV lvalue alias. A member
+requiring SV ref semantics must remain wholly in user SystemVerilog. An
+application may instead define an explicit mutable protocol with SvTypes
+objects or getter/setter methods; that protocol is application-owned and is not
+an SVX ref facility.
 
 Users retain responsibility for choosing `task` versus `function` consistently
 with their implementation. SVX records the calling context; while executing a
@@ -358,13 +302,21 @@ public storage binding, never as a second user-facing field system.
 **Implementation status (current branch).** The public SvTypes owner binding
 is now integrated: `SVXFieldStorage` uses the public
 `ExternalFieldStorage` protocol, resolves selected fields to public
-`FieldIdentity` values, and binds them to an SVX object ID. The generated SV
-helpers currently implement empty-path whole-field `read` and `set` endpoints
-through the existing inheritance dispatcher. Container paths and operations
-(`insert`, `delete`, `append`, `pop`, and `resize`), native object-operation
-ABI endpoints, automatic generated-Python AMirror construction, and teardown
-integration remain implementation work in the order recorded below. They are
-design requirements, not claims about the current executable surface.
+`FieldIdentity` values, and binds them to an SVX object ID. For an
+`A(SV) -> B(Python) -> C(SV)` target, generated `AMirror`/`BProxy` code binds
+B's selected fields before `B.__init__`; its VCS regression verifies that a
+Python initialization write is immediately observed through the BProxy field.
+The generated SV helpers implement empty-path whole-field `read` and `set`,
+plus typed one-level collection paths through the existing inheritance
+dispatcher. Queues and dynamic arrays support indexed `read`/`set`, `insert`,
+`append`, `delete`, and `pop`; associative arrays support keyed `read`/`set`,
+`delete`, and `pop`. The VCS field-projection regression exercises queue and
+associative operations without a whole-field writeback. `svx_release_object`,
+Python `close_instance`, and runtime shutdown retire a bound mirror's external
+field storage before dropping either-side object bindings. Nested object and
+nested-collection paths, dynamic-sequence `resize`, and the direct native
+object-operation ABI endpoints remain implementation work. They are design
+requirements, not claims about the current executable surface.
 
 `SVXFieldStorage` is SVX's implementation of SvTypes'
 `ExternalFieldStorage` protocol. It is one internal service per active SVX
@@ -459,21 +411,22 @@ corresponding SvTypes contract. SVX must reject a manifest that claims direct
 projection of such an inaccessible member rather than generating an invalid or
 implicitly privileged access path.
 
-The current implementation verifies a narrower path: an A-derived SV proxy can
-have ordinary intermediate SV subclasses and still dispatch calls to a bound
-Python override. The manifest parser and declaration frontend now retain
-`ref_access`, closed concrete specializations, and a target-only projection
-plan. The runtime does not yet generate the class-specific `BProxy` and
-`CMirror` stack, projected state fields, live `Ref` portals, or lineage-aware
-qualified base calls across every boundary. The remote regression covers the
-narrower path only; the remaining pieces are implementation work, not existing
-behavior.
+The implementation now emits the class-specific AMirror/BProxy stack for each
+selected alternating lineage. A BProxy shares its AMirror object ID rather than
+manufacturing a second companion object; downstream SV subclasses therefore
+inherit both the SV base state and B's projected state. Its generated base
+gateway keeps Python `super()` on the qualified SV base path, while virtual
+calls continue through the bound Python override. The VCS suite covers both
+inheritance directions, intermediate SV subclasses, qualified `super()`,
+projected scalar fields, queue paths, associative-key paths, construction and
+explicit release.
 
-The first field-storage adapter is now present in Python and uses the existing
-generic object dispatcher for manifest-declared root-field reads and `set`
-writes. Path-aware container operations, automatic mirror-owner binding during
-construction, and BProxy/CMirror projection emission remain incomplete; they
-must fail explicitly rather than fall back to cached Python state.
+The field-storage adapter uses the existing object dispatcher with a versioned
+field-operation envelope. It binds selected mirror owners before Python
+initialization, rejects stale accesses after release, and never maintains a
+second mutable Python cache. Direct and one-level collection operations are
+implemented as described in the lifecycle section; deeper nested paths remain
+explicit implementation work rather than a hidden whole-field fallback.
 
 ## Construction
 
@@ -489,7 +442,9 @@ use SvTypes codecs; source parsing never infers a competing codec.
 
 Python declarations are opt-in through `@inheritance_class` and
 `@inheritance_method`; only decorated classes are top-level generation targets.
-The decorator is declaration metadata, not a Python inheritance mechanism.
+The decorator collects direct SvTypes field descriptors from the class body,
+including concrete nested collection descriptors, into its declaration
+metadata. It is declaration metadata, not a Python inheritance mechanism.
 `base_lineage=` accepts the explicit expanded ancestor objects; the resolved
 lineage determines which generated foreign mirror is the actual Python base.
 
@@ -595,15 +550,21 @@ class C extends BProxy;
 endclass
 ```
 
-The marker is resolved by the manifest generator into one generated include
-that defines the complete `class BProxy extends AMirror`: selected B SvTypes
-fields, typed field operations, virtual overrides, qualified base-call gateways,
-and the factory. It is emitted only when B has a downstream SV inheritor.
-Normal SV compilation includes that generated file before compiling classes such
-as C. A discovery/lint command may materialize the same generated include in a
-temporary output directory; an empty handwritten BProxy stub is not a supported
-source form because it cannot provide valid member types or virtual method
-bodies.
+The marker is an optional source-level assertion of the manifest's B-to-C
+projection edge. It expands to no class at compilation time; the manifest
+generator remains the authority that emits the complete
+`class BProxy extends AMirror`: selected B SvTypes fields, typed field
+operations, virtual overrides, qualified base-call gateways, and the factory.
+It is emitted only when B has a downstream SV inheritor. A one-boundary chain
+may use one generated include. An alternating chain instead uses source-order
+includes from `inheritance-gen --sv-stage-dir`: `common.svh` is included once,
+an `after_*A*.svh` file follows A, a `before_*C*.svh` file precedes
+`class C extends BProxy`, and an `after_*C*.svh` file follows C to define
+`CMirror extends C`. This is required because SystemVerilog does not allow a
+class to extend a not-yet-declared base. The generated filenames carry a stable
+canonical-ID hash and are covered by the generated-artifact manifest. An empty
+handwritten BProxy stub is not supported because it cannot provide valid member
+types or virtual method bodies.
 
 The two declaration forms have different lifecycles:
 
@@ -680,10 +641,14 @@ wrong base implementation or manufacture a partial companion object.
 The runtime records this as `ALLOCATED`, `SV_CONSTRUCTED`, `BOUND`,
 `PY_INITIALIZED`, and `ACTIVE`. Python-origin construction allocates the ID,
 constructs the final SV projection, binds it, then runs the Python initializer.
-SV-origin construction uses an explicit generated `svx_post_construct()` call
-at the end of the marked construction path to bind and initialize the Python
-companion; there is no portable way to intercept completion of arbitrary
-handwritten `new C(...)`. A failure unbinds external field storage first,
+SV-origin construction uses the generated AMirror constructor path to allocate
+and bind B when `new C(...)` omits its optional internal object-ID argument.
+For a C portion that may also be created through `CMirror`, the marked C
+constructor accepts that trailing optional ID and forwards it to BProxy; a
+nonzero value reuses the already allocated cross-language object instead of
+constructing another B. There is no portable way to intercept completion of
+arbitrary handwritten `new C(...)` outside the marked construction path. A
+failure unbinds external field storage first,
 removes registry entries, and marks the ID `ABORTED`.
 
 Python-origin pairs own the Python object and their internal SV companion.
@@ -703,12 +668,16 @@ associated call frames and bindings before releasing the Python/SV objects.
 
 **Implementation status (current branch).** Manifest parsing validates complete
 flat lineage, computes the minimal projection plan, and emits ordered SV
-`AMirror`/`BProxy` helper packages. The BProxy base gateway delegates to the
-AMirror gateway so a Python `super()` call reaches A's SV implementation rather
-than recursively dispatching into the Python override. The emitted helpers and
-root field endpoints have Python regression coverage. Full generated Python
-AMirror lifecycle code, factory registration for alternating constructors, and
-end-to-end A/B/C/D runtime qualification are still pending.
+`AMirror`/`BProxy`/`CMirror` helper packages. Each helper owns a distinct
+generated package, so source-order include fragments can be placed around user
+SV declarations without package collisions. BProxy and a downstream CMirror
+reuse the AMirror object ID; CMirror delegates inherited BProxy operations to
+its base gateway. Generated Python mirrors bind projected B fields before D
+initialization and register only direct projection subclasses, so
+`class D(CMirror, B)` does not replace B as the constructor target for an
+ordinary A instance. The remote integration suite qualifies both Python-created
+D and directly SV-created C for `A -> B -> C -> D`, including B field storage,
+Python-to-C calls, and C-to-B virtual dispatch.
 
 The frontend scans declared Python mirrors/classes and marked SV proxy/classes,
 then resolves the complete logical lineage before output. For

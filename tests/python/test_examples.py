@@ -57,7 +57,7 @@ def test_cross_language_inheritance_example_artifacts_are_current():
     )
     testbench = (EXAMPLES / "cross_language_inheritance" / "tb.sv").read_text()
     assert "BaseDriverMirror" in testbench
-    assert "svx_projection_example_driver_pkg_pkg" in testbench
+    assert "svx_projection_example_driver_pkg_BaseDriverMirror_pkg" in testbench
     assert "svx_shutdown" in testbench
 
 

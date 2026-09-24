@@ -1,0 +1,88 @@
+{
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0",
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1",
+    "svtypes.external-field-storage.v1"
+  ],
+  "classes": [
+    {
+      "canonical_id": "py://tests/integration/alternating_chain/D",
+      "language": "python",
+      "symbol": "tests.integration.alternating_chain_test.D",
+      "constructor": {"initiator": "python", "parameters": []},
+      "methods": [],
+      "base_lineage": [
+        {
+          "canonical_id": "sv://chain_pkg/A",
+          "language": "sv",
+          "symbol": "chain_pkg::A",
+          "constructor": {"initiator": "python", "parameters": []},
+          "methods": [
+            {
+              "canonical_id": "sv://chain_pkg/A#base_check",
+              "name": "base_check",
+              "parameters": [],
+              "return_type": "void",
+              "timing": "task",
+              "virtual": true,
+              "pure_virtual": false
+            }
+          ]
+        },
+        {
+          "canonical_id": "py://tests/integration/alternating_chain/B",
+          "language": "python",
+          "symbol": "tests.integration.alternating_chain_test.B",
+          "fields": [
+            {
+              "name": "retry",
+              "type": {
+                "unified_type_name": "svtypes.Int",
+                "python": {"module": "svtypes", "symbol": "Int", "args": [], "kwargs": {}},
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "unified_type_name": "svtypes.Int",
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
+                }
+              }
+            }
+          ],
+          "methods": []
+        },
+        {
+          "canonical_id": "sv://chain_user_pkg/C",
+          "language": "sv",
+          "symbol": "chain_user_pkg::C",
+          "constructor": {"initiator": "python", "parameters": []},
+          "methods": [
+            {
+              "canonical_id": "sv://chain_user_pkg/C#c_check",
+              "name": "c_check",
+              "parameters": [],
+              "return_type": "void",
+              "timing": "task",
+              "virtual": false,
+              "pure_virtual": false
+            },
+            {
+              "canonical_id": "sv://chain_user_pkg/C#trigger_base_check",
+              "name": "trigger_base_check",
+              "parameters": [],
+              "return_type": "void",
+              "timing": "task",
+              "virtual": false,
+              "pure_virtual": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -5,11 +5,11 @@ from io import StringIO
 
 import pytest
 import svtypes
+import svx.inheritance as inheritance
 from svtypes import Int, String, encoding_descriptor, unified_type_name
 
 from svx import SVXInheritanceError
 from svx import SVXRemoteError
-from svx import SVXReadonlyRefError, SVXStaleRefError
 from svx.cli import main
 from svx.inheritance import (
     SCHEMA_URI,
@@ -17,12 +17,12 @@ from svx.inheritance import (
     dispatch_python_call,
     emit_python_mirrors,
     emit_sv_mirrors,
+    emit_sv_mirror_stages,
     encode_constructor,
     invoke_sv,
     migrate_manifest,
     parse_manifest,
     projection_plan,
-    Ref,
     register_contract,
     register_constructor,
     register_python_subclass,
@@ -165,7 +165,7 @@ def test_manifest_rejects_cross_language_contract_errors():
 
     invalid = manifest_data()
     invalid["classes"][0]["methods"][0]["parameters"][0]["direction"] = "const"
-    with pytest.raises(SVXInheritanceError, match="must be input, output, inout, or ref"):
+    with pytest.raises(SVXInheritanceError, match="must be input, output, or inout"):
         parse_manifest(invalid)
 
     valid = manifest_data()
@@ -241,7 +241,101 @@ def test_sv_generation_implements_completion_time_copy_out():
         )
     ]
     assert "def drive(self, source, changed):" in python_text
+    assert "def BaseDriverDriveResponse(**values):" in python_text
+    assert "return response_value('sv://tb_pkg/BaseDriver#drive', values)" in python_text
     compile(python_text, "generated/tb_pkg.py", "exec")
+
+
+@pytest.mark.parametrize("direction", ["ref", "const ref"])
+def test_manifest_rejects_ref_parameters(direction):
+    data = manifest_data()
+    method = data["classes"][0]["methods"][0]
+    method["timing"] = "function"
+    method["return_type"] = INT
+    method["parameters"] = [{"name": "value", "direction": direction, "type": INT}]
+    with pytest.raises(SVXInheritanceError, match="ref and const ref are not supported"):
+        parse_manifest(data)
+
+
+def test_static_sv_member_uses_a_class_dispatcher_not_an_instance():
+    data = manifest_data()
+    source = data["classes"][0]
+    source["methods"].append(
+        {
+            "canonical_id": "sv://tb_pkg/BaseDriver#static_value",
+            "name": "static_value",
+            "parameters": [],
+            "return_type": INT,
+            "timing": "function",
+            "virtual": False,
+            "pure_virtual": False,
+            "static": True,
+        }
+    )
+    data["classes"].append(
+        {
+            "canonical_id": "py://checks/PythonDriver",
+            "language": "python",
+            "symbol": "checks.PythonDriver",
+            "methods": [],
+            "base_lineage": [source],
+        }
+    )
+
+    manifest = parse_manifest(data)
+    python_text = emit_python_mirrors(manifest)[
+        next(path for path in emit_python_mirrors(manifest) if str(path) == "svx_mirrors/tb_pkg.py")
+    ]
+    assert "@staticmethod" in python_text
+    assert "def static_value():" in python_text
+    assert "invoke_sv_static('sv://tb_pkg/BaseDriver'" in python_text
+    assert "self._svx_remote_object_id" not in python_text.split("def static_value():", 1)[1].split("\n\n", 1)[0]
+
+    sv_text = emit_sv_mirrors(manifest)
+    assert "static task svx_invoke_static" in sv_text
+    assert "BaseDriver::static_value()" in sv_text
+    assert "class BaseDriverStaticDispatcher implements svx_static_dispatchable;" in sv_text
+    assert "register_static(\"sv://tb_pkg/BaseDriver\"" in sv_text
+
+
+def test_manifest_rejects_static_virtual_method():
+    data = manifest_data()
+    data["classes"][0]["methods"][0]["static"] = True
+    with pytest.raises(SVXInheritanceError, match="static methods cannot be virtual"):
+        parse_manifest(data)
+
+
+def test_standalone_sv_mirror_exposes_static_member_through_a_gateway():
+    data = manifest_data()
+    data["classes"] = [data["classes"][0]]
+    data["classes"][0]["methods"] = [
+        {
+            "canonical_id": "sv://tb_pkg/BaseDriver#static_value",
+            "name": "static_value",
+            "parameters": [],
+            "return_type": INT,
+            "timing": "function",
+            "virtual": False,
+            "pure_virtual": False,
+            "static": True,
+        }
+    ]
+    manifest = parse_manifest(data)
+
+    python_text = emit_python_mirrors(manifest)[
+        next(path for path in emit_python_mirrors(manifest) if str(path) == "svx_sv/tb_pkg.py")
+    ]
+    assert "@staticmethod" in python_text
+    assert "invoke_sv_static('sv://tb_pkg/BaseDriver'" in python_text
+
+    sv_text = emit_sv_mirrors(manifest)
+    assert "package svx_static_tb_pkg_BaseDriver_pkg;" in sv_text
+    assert "virtual class BaseDriverStaticGateway extends BaseDriver;" in sv_text
+    assert "BaseDriverStaticGateway::svx_invoke_static" in sv_text
+
+    from svx.declarations import manifest_dict
+
+    assert manifest_dict(manifest)["classes"][0]["methods"][0]["static"] is True
 
 
 def test_manifest_rejects_generated_sv_name_collision():
@@ -256,6 +350,44 @@ def test_manifest_rejects_generated_sv_name_collision():
     )
     with pytest.raises(SVXInheritanceError, match="generated SystemVerilog name"):
         parse_manifest(data)
+
+
+def test_closed_parameterized_sv_class_emits_a_specialized_mirror():
+    data = manifest_data()
+    base = data["classes"][0]
+    base["specialization"] = {
+        "arguments": [
+            {"kind": "type", "type": INT},
+            {"kind": "value", "sv_type": "int", "value": 16},
+        ]
+    }
+    data["classes"].append(
+        {
+            "canonical_id": "py://checks/ParameterizedChild",
+            "language": "python",
+            "symbol": "checks.ParameterizedChild",
+            "methods": [],
+            "base_lineage": [base],
+        }
+    )
+    manifest = parse_manifest(data)
+    text = emit_sv_mirrors(manifest)
+    assert "class BaseDriver__svx_" in text
+    assert "extends BaseDriver#(int, 16)" in text
+
+    duplicate = manifest_data()
+    duplicate["classes"][0]["specialization"] = base["specialization"]
+    duplicate["classes"].append(
+        {
+            "canonical_id": "sv://other_pkg/BaseDriver",
+            "language": "sv",
+            "symbol": "tb_pkg::BaseDriver",
+            "specialization": base["specialization"],
+            "methods": [],
+        }
+    )
+    with pytest.raises(SVXInheritanceError, match="collides"):
+        parse_manifest(duplicate)
 
 
 def test_alternating_lineage_generates_only_required_mirror_and_proxy():
@@ -365,6 +497,9 @@ def test_alternating_lineage_generates_only_required_mirror_and_proxy():
     # the AMirror virtual override and re-entering B.check().
     bproxy = text.split("class BProxy", 1)[1].split("endclass : BProxy", 1)[0]
     assert "default: super.svx_invoke(method_id, request, ok, response, error);" in bproxy
+    assert "longint unsigned __svx_remote_object_id;" not in bproxy
+    assert "function new(input longint unsigned object_id = 0);" in bproxy
+    assert "super.new(object_id);" in bproxy
     assert "class CMirror" not in text
     assert "A_python_proxy" not in text
     assert "virtual class B implements" not in text
@@ -374,33 +509,89 @@ def test_alternating_lineage_generates_only_required_mirror_and_proxy():
     assert "class AMirror(SVMirror):" in python_mirror
     assert "register_python_subclass('sv://drivers/A', cls)" in python_mirror
     assert "inheritance_create_sv('sv://drivers/A'" in python_mirror
+    assert "__svx_projected_fields_by_class_id__" in python_mirror
+    assert "'py://checks/B': {'retry': 'py://checks/B.retry'}" in python_mirror
+    assert "instance._svx_bind_active_projected_fields()" in python_mirror
     compile(python_mirror, "generated/svx_mirrors/drivers.py", "exec")
 
 
-def test_ref_enforces_readonly_and_borrowed_lifetime():
-    value = Ref(3)
-    assert value.value == 3
-    value.value = 4
-    assert value.value == 4
+def test_four_segment_lineage_binds_early_python_fields_at_final_mirror():
+    """A -> B -> C -> D binds BProxy fields while constructing D via CMirror."""
 
-    readonly = Ref(1)
+    data = {
+        "schema_uri": SCHEMA_URI,
+        "schema_version": SCHEMA_VERSION,
+        "generator_abi_version": 2,
+        "required_runtime_capabilities": [
+            "svtypes.checked-encoding-descriptor.v1",
+            "svtypes.codec-context.v1",
+            "svtypes.record-schema.v1",
+            "svtypes.remote-reference.v1",
+            "svtypes.external-field-storage.v1",
+        ],
+        "classes": [
+            {
+                "canonical_id": "py://checks/D",
+                "language": "python",
+                "symbol": "checks.D",
+                "methods": [],
+                "base_lineage": [
+                    {
+                        "canonical_id": "sv://drivers/A",
+                        "language": "sv",
+                        "symbol": "drivers::A",
+                        "methods": [],
+                    },
+                    {
+                        "canonical_id": "py://checks/B",
+                        "language": "python",
+                        "symbol": "checks.B",
+                        "fields": [{"name": "retry", "type": INT}],
+                        "methods": [],
+                    },
+                    {
+                        "canonical_id": "sv://drivers/C",
+                        "language": "sv",
+                        "symbol": "drivers::C",
+                        "methods": [],
+                    },
+                ],
+            }
+        ],
+    }
+    manifest = parse_manifest(data)
+    plan = projection_plan(manifest.classes[0])
+    assert [(step.kind, step.generated_name) for step in plan.steps] == [
+        ("sv_mirror", "AMirror"),
+        ("sv_proxy", "BProxy"),
+        ("sv_mirror", "CMirror"),
+    ]
 
-    class Endpoint:
-        def read(self):
-            return 1
+    sv_text = emit_sv_mirrors(manifest)
+    assert "class AMirror extends A implements svx_dispatchable;" in sv_text
+    assert "class BProxy extends AMirror implements svx_dispatchable;" in sv_text
+    assert "class CMirror extends C implements svx_dispatchable;" in sv_text
+    assert "class DProxy" not in sv_text
 
-        def write(self, value):
-            raise AssertionError("must not write through const ref")
+    python_files = emit_python_mirrors(manifest)
+    mirror_path = next(path for path in python_files if str(path) == "svx_mirrors/drivers.py")
+    python_mirror = python_files[mirror_path]
+    cmirror = python_mirror.split("class CMirror(SVMirror):", 1)[1]
+    assert "'py://checks/D': {'retry': 'py://checks/B.retry'}" in cmirror
+    assert "self._svx_bind_active_projected_fields()" in cmirror
+    compile(python_mirror, "generated/svx_mirrors/drivers.py", "exec")
 
-    readonly._bind(Endpoint(), readonly=True)
-    with pytest.raises(SVXReadonlyRefError):
-        readonly.value = 2
-
-    borrowed = Ref()
-    borrowed._bind(Endpoint(), borrowed=True)
-    borrowed._close(retain_value=False)
-    with pytest.raises(SVXStaleRefError):
-        _ = borrowed.value
+    stages = emit_sv_mirror_stages(manifest)
+    assert "common.svh" in stages
+    assert "class AMirror" not in stages["common.svh"]
+    assert "class BProxy" not in stages["common.svh"]
+    assert "class CMirror" not in stages["common.svh"]
+    after_a = next(name for name in stages if name.startswith("after_sv_drivers_A_"))
+    before_c = next(name for name in stages if name.startswith("before_sv_drivers_C_"))
+    after_c = next(name for name in stages if name.startswith("after_sv_drivers_C_"))
+    assert "class AMirror extends A" in stages[after_a]
+    assert "class BProxy extends AMirror" in stages[before_c]
+    assert "class CMirror extends C" in stages[after_c]
 
 
 def test_inheritance_gen_cli_writes_mirrors(tmp_path):
@@ -507,6 +698,50 @@ def test_inheritance_gen_cli_writes_mirrors(tmp_path):
             ],
             out=StringIO(),
         )
+
+
+def test_inheritance_gen_cli_writes_source_order_stages(tmp_path):
+    manifest_path = tmp_path / "inheritance.json"
+    manifest_path.write_text(json.dumps(manifest_data()))
+    python_out = tmp_path / "python"
+    stage_out = tmp_path / "stages"
+    artifacts_out = tmp_path / "artifacts.json"
+
+    assert main(
+        [
+            "inheritance-gen",
+            "--manifest",
+            str(manifest_path),
+            "--python-out",
+            str(python_out),
+            "--sv-stage-dir",
+            str(stage_out),
+            "--artifact-manifest",
+            str(artifacts_out),
+        ],
+        out=StringIO(),
+    ) == 0
+    assert (stage_out / "common.svh").is_file()
+    artifacts = json.loads(artifacts_out.read_text())
+    assert any(
+        item["language"] == "systemverilog" and item["path"].endswith("stages/common.svh")
+        for item in artifacts["artifacts"]
+    )
+    assert main(
+        [
+            "inheritance-gen",
+            "--manifest",
+            str(manifest_path),
+            "--python-out",
+            str(python_out),
+            "--sv-stage-dir",
+            str(stage_out),
+            "--artifact-manifest",
+            str(artifacts_out),
+            "--check",
+        ],
+        out=StringIO(),
+    ) == 0
 
 
 def test_remote_error_preserves_dispatch_identity(monkeypatch):
@@ -673,6 +908,19 @@ def test_generated_call_records_cover_result_and_copyout(monkeypatch):
     copyout = invoke_sv(4, copyout_method, {"changed": 7})
     assert isinstance(copyout, response_type(copyout_method))
     assert (copyout.changed, copyout.observed) == (8, 19)
+
+
+def test_runtime_rejects_legacy_ref_call_contracts():
+    with pytest.raises(SVXInheritanceError, match="must contain request and response"):
+        register_contract(
+            {
+                "sv://codec/Target#legacy_ref": {
+                    "request": (("value", INT),),
+                    "response": (("value", INT),),
+                    "refs": (("value", "readwrite"),),
+                }
+            }
+        )
 
 
 def test_python_callback_requires_generated_copyout_response(monkeypatch):

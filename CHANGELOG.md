@@ -5,11 +5,17 @@ All notable changes to SVX are documented in this file.
 ## Unreleased
 
 - Updates the SvTypes integration to the 1.2 public `Bit` and `Logic` codecs.
+- Requires SvTypes 1.3 for public SystemVerilog declaration and packer
+  rendering used by automatic projected-field manifest discovery.
 - Keeps constrained randomization, coverage collection, and UCIS handling in
   SvTypes; SVX transports explicitly prepared typed values without implicitly
   randomizing or sampling them.
 - Reorganizes example documentation around current adoption paths and adds
   generated cross-language inheritance and hierarchical signal-access examples.
+- Adds manifest-declared SV static-member mirrors with class-level dispatch
+  that does not allocate or require a foreign object ID.
+- Narrows cross-language inheritance parameters to `input`, `output`, and
+  `inout`; `ref` and `const ref` are explicitly outside the SVX ABI.
 
 ## 1.0.0 - 2026-08-14
 

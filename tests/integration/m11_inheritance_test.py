@@ -12,3 +12,10 @@ def run():
     assert monitor.sample() == 42
     monitor.notify()
     assert monitor.notified
+    response = monitor.transfer(5, 10)
+    assert response.changed.value == 15
+    assert response.observed.value == 24
+    response = monitor.calculate(4, 10)
+    assert response.changed.value == 14
+    assert response.observed.value == 23
+    assert response.result.value == 24

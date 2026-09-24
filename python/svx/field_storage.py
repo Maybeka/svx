@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 import json
+import struct
 from typing import Protocol
 
 from .errors import SVXInheritanceError
@@ -86,13 +87,80 @@ def _path_wire(path: object) -> str:
     return json.dumps(segments, separators=(",", ":"))
 
 
+_FIELD_OPERATION_CODES = {
+    "read": 0,
+    "set": 1,
+    "insert": 2,
+    "delete": 3,
+    "append": 4,
+    "pop": 5,
+    "resize": 6,
+}
+
+
+def _field_operation_wire(path: str, operation: str, payload: bytes | None) -> bytes:
+    """Encode an internal, versioned envelope around public SvTypes metadata.
+
+    SvTypes remains the value contract: its path segments, operation names and
+    already-packed leaf bytes are copied without reinterpretation.  This small
+    envelope is only the SVX native dispatcher framing needed to select a
+    generated, concrete SystemVerilog lvalue.
+    """
+
+    try:
+        segments = json.loads(path)
+    except json.JSONDecodeError as error:  # pragma: no cover - _path_wire owns input
+        raise SVXInheritanceError("invalid internal SVX field path encoding") from error
+    if operation not in _FIELD_OPERATION_CODES:
+        raise SVXInheritanceError(f"unsupported SvTypes field operation {operation!r}")
+
+    data = bytearray(b"SVXF")
+    data.append(1)
+    data.append(_FIELD_OPERATION_CODES[operation])
+    data.extend(struct.pack("<I", len(segments)))
+    for segment in segments:
+        kind = segment.get("kind") if isinstance(segment, dict) else None
+        if kind == "member":
+            value = segment.get("name")
+            if not isinstance(value, str):
+                raise SVXInheritanceError("invalid SvTypes member path segment")
+            encoded = value.encode("utf-8")
+            data.append(1)
+        elif kind == "index":
+            value = segment.get("index")
+            if not isinstance(value, int) or value < 0:
+                raise SVXInheritanceError("invalid SvTypes index path segment")
+            encoded = struct.pack("<Q", value)
+            data.append(2)
+        elif kind == "key":
+            value = segment.get("encoded")
+            if not isinstance(value, str):
+                raise SVXInheritanceError("invalid SvTypes key path segment")
+            try:
+                encoded = base64.b64decode(value, validate=True)
+            except ValueError as error:
+                raise SVXInheritanceError("invalid SvTypes encoded key path segment") from error
+            data.append(3)
+        else:
+            raise SVXInheritanceError("unsupported SvTypes field path segment")
+        data.extend(struct.pack("<I", len(encoded)))
+        data.extend(encoded)
+    data.append(0 if payload is None else 1)
+    if payload is not None:
+        data.extend(struct.pack("<I", len(payload)))
+        data.extend(payload)
+    return bytes(data)
+
+
 class _NativeFieldTransport:
     def read_field(self, object_id: int, field_id: str, descriptor: str, path: str) -> bytes:
         from . import _native
 
         if path != "[]":
-            raise SVXInheritanceError(
-                "generated SVX field path endpoints are not available for this field"
+            return _native.inheritance_call_sv(
+                object_id,
+                f"{field_id}@svx_field_operation",
+                _field_operation_wire(path, "read", None),
             )
         # Reuse the manifest dispatcher rather than creating a second C->SV
         # route. The generated endpoint validates the concrete field identity.
@@ -109,13 +177,16 @@ class _NativeFieldTransport:
     ) -> bytes | None:
         from . import _native
 
-        if path != "[]" or operation != "set":
-            raise SVXInheritanceError(
-                "generated SVX field path endpoints are not available for this operation"
-            )
-        if payload is None:
-            raise SVXInheritanceError("SVX field set requires SvTypes payload bytes")
-        _native.inheritance_call_sv(object_id, f"{field_id}@svx_field_set", payload)
+        if path == "[]" and operation == "set":
+            if payload is None:
+                raise SVXInheritanceError("SVX field set requires SvTypes payload bytes")
+            _native.inheritance_call_sv(object_id, f"{field_id}@svx_field_set", payload)
+            return None
+        _native.inheritance_call_sv(
+            object_id,
+            f"{field_id}@svx_field_operation",
+            _field_operation_wire(path, operation, payload),
+        )
         return None
 
 
