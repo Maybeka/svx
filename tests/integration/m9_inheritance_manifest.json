@@ -8,20 +8,18 @@
           {
             "name": "seed",
             "type": {
-              "unified_type_name": "svtypes.Int",
-              "python": {
-                "args": [],
-                "kwargs": {},
-                "module": "svtypes",
-                "symbol": "Int"
+              "encoding_descriptor": {
+                "binary_format_version": 1,
+                "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                "unified_type_name": "svtypes.Int"
               },
               "sv": "int",
               "sv_packer": "int_packer",
-              "encoding_descriptor": {
-                "binary_format_version": 1,
-                "unified_type_name": "svtypes.Int",
-                "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
-              }
+              "svtypes": {
+                "kind": "scalar",
+                "name": "Int"
+              },
+              "unified_type_name": "svtypes.Int"
             }
           }
         ]
@@ -35,98 +33,89 @@
             {
               "name": "address",
               "type": {
-                "unified_type_name": "svtypes.Int",
-                "python": {
-                  "args": [],
-                  "kwargs": {},
-                  "module": "svtypes",
-                  "symbol": "Int"
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
                 },
                 "sv": "int",
                 "sv_packer": "int_packer",
-                "encoding_descriptor": {
-                  "binary_format_version": 1,
-                  "unified_type_name": "svtypes.Int",
-                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
-                }
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
               }
             },
             {
-              "name": "changed",
               "direction": "inout",
+              "name": "changed",
               "type": {
-                "unified_type_name": "svtypes.Int",
-                "python": {
-                  "args": [],
-                  "kwargs": {},
-                  "module": "svtypes",
-                  "symbol": "Int"
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
                 },
                 "sv": "int",
                 "sv_packer": "int_packer",
-                "encoding_descriptor": {
-                  "binary_format_version": 1,
-                  "unified_type_name": "svtypes.Int",
-                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
-                }
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
               }
             },
             {
-              "name": "observed",
               "direction": "output",
+              "name": "observed",
               "type": {
-                "unified_type_name": "svtypes.Int",
-                "python": {
-                  "args": [],
-                  "kwargs": {},
-                  "module": "svtypes",
-                  "symbol": "Int"
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
                 },
                 "sv": "int",
                 "sv_packer": "int_packer",
-                "encoding_descriptor": {
-                  "binary_format_version": 1,
-                  "unified_type_name": "svtypes.Int",
-                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"
-                }
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
               }
             },
             {
               "name": "label",
               "type": {
-                "unified_type_name": "svtypes.String[encoding=utf-8]",
-                "python": {
-                  "args": [],
-                  "kwargs": {},
-                  "module": "svtypes",
-                  "symbol": "String"
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "c7759ce31743de2e7c0e52aaa1ddffe107f481be421202023d356340f95f200a",
+                  "unified_type_name": "svtypes.String[encoding=utf-8]"
                 },
                 "sv": "string",
                 "sv_packer": "string_packer",
-                "encoding_descriptor": {
-                  "binary_format_version": 1,
-                  "unified_type_name": "svtypes.String[encoding=utf-8]",
-                  "encoding_fingerprint": "c7759ce31743de2e7c0e52aaa1ddffe107f481be421202023d356340f95f200a"
-                }
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "String"
+                },
+                "unified_type_name": "svtypes.String[encoding=utf-8]"
               }
             },
             {
               "name": "packet",
               "type": {
-                "unified_type_name": "integration.Packet",
-                "python": {
-                  "args": [],
-                  "kwargs": {},
-                  "module": "tests.integration.m10_object_types",
-                  "symbol": "Packet"
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "fd937a126db0b1203c444b1e68990aab8f89c585ab5e4cafead2659ad971bd1a",
+                  "unified_type_name": "integration.Packet"
                 },
                 "sv": "m10_object_types_pkg::Packet",
                 "sv_packer": "svtypes_pkg::object_packer#(m10_object_types_pkg::Packet)",
-                "encoding_descriptor": {
-                  "binary_format_version": 1,
-                  "unified_type_name": "integration.Packet",
-                  "encoding_fingerprint": "fd937a126db0b1203c444b1e68990aab8f89c585ab5e4cafead2659ad971bd1a"
-                }
+                "svtypes": {
+                  "kind": "object",
+                  "module": "tests.integration.m10_object_types",
+                  "qualname": "Packet"
+                },
+                "unified_type_name": "integration.Packet"
               }
             }
           ],
@@ -139,12 +128,75 @@
           "canonical_id": "sv://tb_pkg/BaseDriver#calculate",
           "name": "calculate",
           "parameters": [
-            {"name": "source", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-            {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-            {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+            {
+              "name": "source",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            },
+            {
+              "direction": "inout",
+              "name": "changed",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            },
+            {
+              "direction": "output",
+              "name": "observed",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            }
           ],
           "pure_virtual": false,
-          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+              "unified_type_name": "svtypes.Int"
+            },
+            "sv": "int",
+            "sv_packer": "int_packer",
+            "svtypes": {
+              "kind": "scalar",
+              "name": "Int"
+            },
+            "unified_type_name": "svtypes.Int"
+          },
           "timing": "function",
           "virtual": true
         },
@@ -153,7 +205,20 @@
           "name": "base_value",
           "parameters": [],
           "pure_virtual": false,
-          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+              "unified_type_name": "svtypes.Int"
+            },
+            "sv": "int",
+            "sv_packer": "int_packer",
+            "svtypes": {
+              "kind": "scalar",
+              "name": "Int"
+            },
+            "unified_type_name": "svtypes.Int"
+          },
           "timing": "function",
           "virtual": false
         },
@@ -162,7 +227,20 @@
           "name": "static_value",
           "parameters": [],
           "pure_virtual": false,
-          "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+              "unified_type_name": "svtypes.Int"
+            },
+            "sv": "int",
+            "sv_packer": "int_packer",
+            "svtypes": {
+              "kind": "scalar",
+              "name": "Int"
+            },
+            "unified_type_name": "svtypes.Int"
+          },
           "static": true,
           "timing": "function",
           "virtual": false
@@ -171,17 +249,29 @@
       "symbol": "tb_pkg::BaseDriver"
     },
     {
-      "canonical_id": "py://tests/integration/m9_inheritance/PythonDriver",
-      "language": "python",
-      "symbol": "tests.integration.m9_inheritance_test.PythonDriver",
-      "methods": [],
       "base_lineage": [
         {
           "canonical_id": "sv://tb_pkg/BaseDriver",
           "constructor": {
             "initiator": "sv",
             "parameters": [
-              {"name": "seed", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+              {
+                "name": "seed",
+                "type": {
+                  "encoding_descriptor": {
+                    "binary_format_version": 1,
+                    "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                    "unified_type_name": "svtypes.Int"
+                  },
+                  "sv": "int",
+                  "sv_packer": "int_packer",
+                  "svtypes": {
+                    "kind": "scalar",
+                    "name": "Int"
+                  },
+                  "unified_type_name": "svtypes.Int"
+                }
+              }
             ]
           },
           "language": "sv",
@@ -190,11 +280,94 @@
               "canonical_id": "sv://tb_pkg/BaseDriver#drive",
               "name": "drive",
               "parameters": [
-                {"name": "address", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-                {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-                {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-                {"name": "label", "type": {"unified_type_name": "svtypes.String[encoding=utf-8]", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "String"}, "sv": "string", "sv_packer": "string_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.String[encoding=utf-8]", "encoding_fingerprint": "c7759ce31743de2e7c0e52aaa1ddffe107f481be421202023d356340f95f200a"}}},
-                {"name": "packet", "type": {"unified_type_name": "integration.Packet", "python": {"args": [], "kwargs": {}, "module": "tests.integration.m10_object_types", "symbol": "Packet"}, "sv": "m10_object_types_pkg::Packet", "sv_packer": "svtypes_pkg::object_packer#(m10_object_types_pkg::Packet)", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "integration.Packet", "encoding_fingerprint": "fd937a126db0b1203c444b1e68990aab8f89c585ab5e4cafead2659ad971bd1a"}}}
+                {
+                  "name": "address",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "direction": "inout",
+                  "name": "changed",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "direction": "output",
+                  "name": "observed",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "name": "label",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "c7759ce31743de2e7c0e52aaa1ddffe107f481be421202023d356340f95f200a",
+                      "unified_type_name": "svtypes.String[encoding=utf-8]"
+                    },
+                    "sv": "string",
+                    "sv_packer": "string_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "String"
+                    },
+                    "unified_type_name": "svtypes.String[encoding=utf-8]"
+                  }
+                },
+                {
+                  "name": "packet",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "fd937a126db0b1203c444b1e68990aab8f89c585ab5e4cafead2659ad971bd1a",
+                      "unified_type_name": "integration.Packet"
+                    },
+                    "sv": "m10_object_types_pkg::Packet",
+                    "sv_packer": "svtypes_pkg::object_packer#(m10_object_types_pkg::Packet)",
+                    "svtypes": {
+                      "kind": "object",
+                      "module": "tests.integration.m10_object_types",
+                      "qualname": "Packet"
+                    },
+                    "unified_type_name": "integration.Packet"
+                  }
+                }
               ],
               "pure_virtual": false,
               "return_type": "void",
@@ -205,12 +378,75 @@
               "canonical_id": "sv://tb_pkg/BaseDriver#calculate",
               "name": "calculate",
               "parameters": [
-                {"name": "source", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-                {"name": "changed", "direction": "inout", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}},
-                {"name": "observed", "direction": "output", "type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}}}
+                {
+                  "name": "source",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "direction": "inout",
+                  "name": "changed",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "direction": "output",
+                  "name": "observed",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                }
               ],
               "pure_virtual": false,
-              "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              },
               "timing": "function",
               "virtual": true
             },
@@ -219,7 +455,20 @@
               "name": "base_value",
               "parameters": [],
               "pure_virtual": false,
-              "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              },
               "timing": "function",
               "virtual": false
             },
@@ -228,7 +477,20 @@
               "name": "static_value",
               "parameters": [],
               "pure_virtual": false,
-              "return_type": {"unified_type_name": "svtypes.Int", "python": {"args": [], "kwargs": {}, "module": "svtypes", "symbol": "Int"}, "sv": "int", "sv_packer": "int_packer", "encoding_descriptor": {"binary_format_version": 1, "unified_type_name": "svtypes.Int", "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d"}},
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              },
               "static": true,
               "timing": "function",
               "virtual": false
@@ -236,7 +498,11 @@
           ],
           "symbol": "tb_pkg::BaseDriver"
         }
-      ]
+      ],
+      "canonical_id": "py://tests/integration/m9_inheritance/PythonDriver",
+      "language": "python",
+      "methods": [],
+      "symbol": "tests.integration.m9_inheritance_test.PythonDriver"
     }
   ],
   "generator_abi_version": 2,

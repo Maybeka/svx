@@ -2,8 +2,8 @@ from svtypes import Int
 
 import svx
 from svx import inheritance_class
-from svx_mirrors.chain_pkg import AMirror
-from svx_mirrors.chain_user_pkg import CMirror
+from svx_mirror.chain_pkg import A
+from svx_mirror.chain_user_pkg import C
 
 
 base_callbacks = 0
@@ -13,7 +13,7 @@ base_callbacks = 0
     canonical_id="py://tests/integration/alternating_chain/B",
     constructor_initiator="python",
 )
-class B(AMirror):
+class B(A):
     retry = Int()
 
     def base_check(self):
@@ -25,7 +25,7 @@ class B(AMirror):
     canonical_id="py://tests/integration/alternating_chain/D",
     constructor_initiator="python",
 )
-class D(CMirror, B):
+class D(C, B):
     def __init__(self):
         super().__init__()
         self.retry.value = 23

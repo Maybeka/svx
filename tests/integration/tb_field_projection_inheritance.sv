@@ -9,9 +9,9 @@ endpackage
 `include ".tmp/field_projection_inheritance/mirrors.sv"
 
 package field_user_pkg;
-  import svx_projection_tests_integration_field_projection_inheritance_test_PythonLayerProxy_pkg::*;
+  import svx_proxy_field_projection_inheritance_test::*;
 
-  class Final extends PythonLayerProxy;
+  class Final extends PythonLayer;
     function new();
       super.new();
     endfunction

@@ -350,7 +350,7 @@ def inject_fault():
 
 ## 7. 跨语言继承一：Python 派生 SV 类
 
-**配图：** [Python 派生 SV 图](architecture/inheritance_python_extends_sv.excalidraw)。其中 `A -> AMirror -> B` 是本节的类层次；`object_id`、对象表、Schema/codec 和 `ExternalFieldStorage` 是两侧保持同一实例语义的支撑机制。
+**配图：** [Python 派生 SV 图](architecture/inheritance_python_extends_sv.excalidraw)。其中公开 Python 类型为 `svx_mirror.<sv_package>.A`，SV 实现 bridge 为 `svx_mirror_sv_<sv_package>_A::A`；`object_id`、对象表、Schema/codec 和 `ExternalFieldStorage` 是两侧保持同一实例语义的支撑机制。
 
 对应 `inheritance_python_extends_sv.excalidraw`。适用情况是：现有 SV 环境已经围绕一个 virtual 基类工作，希望将某个具体实现迁移到 Python，但仍让 SV 通过原有基类 handle 调用它。
 
@@ -360,10 +360,10 @@ def inject_fault():
 SV: A (真实基类)
       ^
       |  generated
-SV: AMirror extends A  <---- object_id ---->  Python: AMirror
+SV: svx_mirror_sv_<pkg>_A::A extends A  <---- object_id ---->  Python: svx_mirror.<pkg>.A
                                                 ^
                                                 |
-                                      Python: B(AMirror)
+                                      Python: B(A)
 ```
 
 SV 侧保留真实基类：
@@ -412,9 +412,9 @@ Python 只继承生成的 mirror，并覆盖 manifest 中声明的方法：
 ```python
 # verification/python_driver.py
 import svx
-from svx_mirrors.driver_pkg import BaseDriverMirror
+from svx_mirror.driver_pkg import BaseDriver
 
-class PythonDriver(BaseDriverMirror):
+class PythonDriver(BaseDriver):
     def drive(self):
         svx.display("Python override")
         svx.delay(2, "ns")
@@ -423,12 +423,12 @@ class PythonDriver(BaseDriverMirror):
 SV 仍按原有基类使用它：
 
 ```systemverilog
-BaseDriverMirror driver;
+svx_mirror_sv_driver_pkg_BaseDriver::BaseDriver driver;
 
 svx_init();
 svx_load("verification.python_driver");
 driver = new();             // 生成路径分配并绑定同一个 object_id
-driver.drive();             // SV -> AMirror -> PythonDriver.drive()
+driver.drive();             // SV bridge -> PythonDriver.drive()
 svx_shutdown();
 ```
 
@@ -437,10 +437,10 @@ svx_shutdown();
 ### 7.2 运行时实际发生的事
 
 ```text
-1. SV 构造 generated AMirror。
+1. SV 构造 `svx_mirror_sv_driver_pkg_BaseDriver::BaseDriver` bridge。
 2. runtime 分配一个唯一 object_id，创建并绑定 Python B 实例。
 3. SV 调用 handle.drive()。
-4. AMirror 把“对象 ID + method ID + SvTypes request bytes”交给 libsvx。
+4. SV bridge 把“对象 ID + method ID + SvTypes request bytes”交给 libsvx。
 5. libsvx 以活动 execution context 调用 Python override。
 6. Python 返回 SvTypes response；SV 解码 copy-out/result 并继续执行。
 ```
@@ -449,7 +449,7 @@ SV 看到的是可赋值给 `BaseDriver` 的 SV 派生对象；Python 看到的�
 
 ## 8. 跨语言继承二：SV 派生 Python 类
 
-**配图：** [SV 派生 Python 图](architecture/inheritance_sv_extends_python.excalidraw)。该图应与上一节对照阅读：构造发起方从 SV 变为 Python，SV factory 和 `BProxy` 因而成为入口，而 Schema/codec、对象表、字段契约和循环拒绝保持一致。
+**配图：** [SV 派生 Python 图](architecture/inheritance_sv_extends_python.excalidraw)。该图应与上一节对照阅读：构造发起方从 SV 变为 Python，SV factory 和公开 proxy 因而成为入口，而 Schema/codec、对象表、字段契约和循环拒绝保持一致。
 
 对应 `inheritance_sv_extends_python.excalidraw`。适用情况是：Python 拥有可复用抽象基类或策略类，而项目希望由 SV 提供一个具体实现，且 Python 应像使用普通子类一样构造和调用它。
 
@@ -459,10 +459,10 @@ SV 看到的是可赋值给 `BaseDriver` 的 SV 派生对象；Python 看到的�
 Python: B (SvObject / Python 基类)
            ^
            | generated Python mirror/proxy
-SV: BProxy / AMirror
+SV: svx_proxy_<module>::B / SV bridge
            ^
            |
-SV: C extends BProxy
+SV: C extends svx_proxy_<module>::B
 ```
 
 Python 声明基类。装饰器是 manifest 前端元数据；实际 runtime contract 仍是规范化后的 manifest。
@@ -470,9 +470,7 @@ Python 声明基类。装饰器是 manifest 前端元数据；实际 runtime con
 ```python
 # verification/base_monitor.py
 from svtypes import Int
-from svx import Function, Task, inheritance_class, inheritance_method, inheritance_type
-
-INT = inheritance_type(Int, sv="int", sv_packer="int_packer")
+from svx import Function, Task, inheritance_class, inheritance_method
 
 @inheritance_class(canonical_id="py://verification/BaseMonitor")
 class BaseMonitor:
@@ -481,7 +479,7 @@ class BaseMonitor:
         self.notified = False
 
     @inheritance_method
-    def sample(self) -> Function[INT]:
+    def sample(self) -> Function[Int]:
         return 17
 
     @inheritance_method
@@ -492,7 +490,7 @@ class BaseMonitor:
 SV 实现具体派生类并继承生成的 proxy：
 
 ```systemverilog
-class SvCounter extends BaseMonitorProxy;
+class SvCounter extends svx_proxy_base_monitor::BaseMonitor;
   int calls;
 
   function new(longint unsigned object_id, int seed);
@@ -651,7 +649,7 @@ def fixed_window_check():
 | Python 等待仿真时间 | `svx.delay` | `time.sleep`、`asyncio` |
 | 请求/响应或监测事务 | SvTypes typed channel | 手写 byte payload、频繁 signal polling |
 | 小范围调试、setup、force/release | predeclared Signal API | 大规模 driver/monitor 数据通路 |
-| Python 替换 SV virtual 类实现 | SV-owned manifest + generated AMirror | 手写双对象同步或 raw object ID |
+| Python 替换 SV virtual 类实现 | SV-owned manifest + generated `svx_mirror.<pkg>.Class` | 手写双对象同步或 raw object ID |
 | SV 实现 Python 抽象基类 | Python-owned manifest + generated proxy + SV factory | Python 把普通 SV handle 强行包装成镜像 |
 | 传递跨语言对象 handle | manifest `RemoteRef` | 把 simulator handle 当整数/字符串传递 |
 

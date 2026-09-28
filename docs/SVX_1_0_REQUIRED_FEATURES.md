@@ -42,7 +42,8 @@ The SvTypes `runtime_capabilities()` capability names required by SVX 1.0 are:
 
 SVX MUST NOT:
 
-- evaluate arbitrary Python codec expressions from a manifest;
+- evaluate arbitrary Python codec expressions from a manifest; manifests use
+  canonical SvTypes type identities resolved through public SvTypes APIs;
 - inspect private SvTypes attributes or registries;
 - generate handwritten Python source merely to create data schemas;
 - reproduce SvTypes unified type names, encoding fingerprints, or binary formats;
@@ -302,7 +303,8 @@ lineage, MUST require `svtypes.external-field-storage.v1`. A methods-only
 inheritance manifest does not acquire that capability requirement.
 
 Manifests MUST refer to registered SvTypes schemas or unified type names. They
-MUST NOT contain executable codec expressions. Unknown fields, unsupported
+MUST NOT evaluate arbitrary source expressions: a type binding may name only a
+public SvTypes factory, its JSON values, and nested declarative bindings. Unknown fields, unsupported
 versions, duplicate identities, generated-name collisions, incompatible
 overrides, unavailable types, or capability mismatches MUST fail generation.
 
@@ -312,10 +314,29 @@ dispatch MUST never silently reinterpret an incompatible major version.
 ### 7.2 Generated mirrors and naming
 
 For an SV-owned class such as `XxxxClass`, SVX MUST be able to generate a
-Python mirror also named `XxxxClass` in an isolated generated module. For a
-Python-owned class, it MUST generate an SV mirror with the same simple name in
-an isolated generated package. Runtime lookup always uses canonical IDs, never
-the simple name.
+same-name Python view in an isolated generated module. For a Python-owned
+class, it MUST generate a same-name SV view in an isolated generated package.
+
+The public generated names are fixed:
+
+- `sv_pkg::XxxxClass` becomes Python `svx_mirror.sv_pkg.XxxxClass`.
+- Python `project.agent.XxxxClass` becomes SV
+  `svx_proxy_agent::XxxxClass`; `agent` is the final Python module component.
+
+The generated Python mirror and SV proxy themselves own construction and
+dispatch; SVX MUST NOT insert an additional public `XxxxMirror` or
+`XxxxProxy` type layer. An SV-owned source still requires an SVX-owned SV
+subclass to override virtual members. It is internal to the SV implementation
+namespace and is named
+`svx_mirror_sv_<sv_package>_<class>::<class>`. Runtime lookup always uses
+canonical IDs, never the simple name.
+
+If two Python classes would request the same
+`svx_proxy_<final_module>::<class>` type, generation MUST fail. A later
+manifest extension may provide an explicit readable public package override;
+SVX MUST NOT resolve this collision with a hash or an order-dependent suffix.
+The generated artifact manifest MUST record the canonical ID to public Python
+or SystemVerilog full-type-name mapping.
 
 A normal local subclass of the mirror MUST be able to:
 
@@ -356,8 +377,9 @@ not allocate a foreign object or require an object ID. Static and `virtual` are
 mutually exclusive; Python name shadowing remains ordinary local Python lookup
 and MUST NOT alter the SV static implementation.
 
-Generated Python APIs MUST expose a documented response data class when
-copy-out values exist; generated SV APIs retain declared SV directions and
+Generated Python APIs MUST preserve declared formal order. `output` and
+`inout` use documented mutable copy-out carriers; generated SvTypes response
+records remain private. Generated SV APIs retain declared SV directions and
 perform checked post-call extraction.
 
 Zero-data requests or responses use the SvTypes void contract. Primitive,
@@ -425,34 +447,29 @@ or execution context.
 
 ### 7.6 Construction and lifetime
 
-Each constructible pair has one declared initiator. Construction follows
-`ALLOCATED -> SV_CONSTRUCTED -> BOUND -> PY_INITIALIZED -> ACTIVE`; foreign
-virtual calls before `ACTIVE` are illegal. A generated factory MUST allocate
-the SVX object ID, construct both sides, bind both registry entries, and run
-the Python initialization hook atomically. For an SV-originated construction,
-the generated constructor/template performs ordinary SV construction and calls
-`svx_post_construct()` at the explicit end of that construction path; SVX
-cannot safely infer the end of an arbitrary handwritten `new C(...)`.
-Failure before `ACTIVE` unbinds projected fields and both SVX registry entries,
-marks the ID aborted, and invalidates all generated views. It does not claim to
-destroy a user-owned SV handle for which SystemVerilog has no deterministic
-destructor hook.
+Each constructible pair has one declared initiator and MUST use its generated
+constructor or factory. The generator allocates one object ID, constructs the
+required SV portion, registers the ID, binds the Python companion, then runs
+the Python initializer. Foreign virtual calls before registration and binding
+complete are rejected. A construction failure unbinds projected fields and
+removes both registry entries; no partially bound object remains callable.
 
 The initiating side owns explicit close. A Python-initiated pair owns its
-Python object and its internal SV companion; an SV-originated `new C` remains
-owned by the SV caller and has a borrowed Python companion. `RemoteRef` never
-transfers ownership. An existing unbound SV handle may become a mirror only by
-an explicit `svx.adopt_instance(target, handle)` operation, which binds an
-uninitialized mirror view without calling Python `__init__`; automatic dynamic
-type guessing is forbidden. Close MUST reject new calls, define the treatment
-of in-flight calls, remove both bindings, release retained Python references,
-and make all proxies stale. Python garbage collection MUST NOT be the
-correctness mechanism for a live SV proxy. Shutdown performs deterministic
-registry cleanup and reports unclosed pairs.
+Python object and its internal SV companion; an SV-originated generated
+construction remains owned by the SV caller and has a borrowed Python
+companion. `RemoteRef` never transfers ownership. SVX 1.0 does not adopt an
+arbitrary pre-existing SV class handle and does not expose `svx_post_construct()`
+or `svx.adopt_instance()`: without a generated construction path, it cannot
+reliably discover object lifetime or dynamic type. Close rejects new calls,
+removes both bindings, releases retained Python references, and makes all
+proxies stale. Python garbage collection is not the correctness mechanism for
+a live SV proxy. Shutdown performs deterministic registry cleanup and reports
+unclosed pairs.
 
 `1.0.0` supports a single linear inheritance chain with repeated alternating
 language boundaries, for example `A(SV) -> B(Python) -> C(SV) -> D(Python)`.
-It emits only required `AMirror`, `BProxy`, `CMirror`, and `DProxy` portions;
+It emits only required SV bridges and public same-name projections for the
+actual language boundaries;
 it never generates every ancestor just because it appears in lineage context.
 Cross-language multiple inheritance, Python mixins in a generated lineage,
 method overloads, undeclared members, field hiding, open parameterized classes,
@@ -474,10 +491,11 @@ validation. Dynamic declaration, lazy first-use lookup, wildcards, and hierarchy
 enumeration are not supported.
 
 Each declaration binds one path to a public SvTypes encoding descriptor. SVX MUST
-validate width, signedness, state domain, and supported VPI object kind. Reads
-and writes MUST use the SvTypes codec without a parallel scalar format. If the
-declared codec cannot represent an observed `X` or `Z`, the operation MUST fail;
-it MUST NOT coerce the value to two-state data.
+validate width, signedness, and supported VPI object kind during initialization.
+State domain is enforced by the codec at operation time: if a declared codec
+cannot represent an observed `X` or `Z`, the operation MUST fail; it MUST NOT
+coerce the value to two-state data. Reads and writes MUST use the SvTypes codec
+without a parallel scalar format.
 
 The Python binding calls the native C/C++ VPI service directly while already
 inside a simulator-owned DPI context. The service is built as part of the
@@ -676,7 +694,7 @@ path.
 ### Stage 4: Inheritance completion
 
 - Add manifest generation from supported Python and SV declaration front ends.
-- Complete all parameter directions and generated response APIs.
+- Complete all parameter directions and private generated response transport.
 - Add `RemoteRef` arguments/results and declared derived-type validation.
 - Qualify construction rollback, base calls, timed calls, nested calls, cycles,
   close, and shutdown in both inheritance directions.

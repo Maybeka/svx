@@ -2,7 +2,7 @@ from svtypes import AssocArray, Int, Queue
 
 import svx
 from svx import inheritance_class
-from svx_mirrors.field_pkg import BaseMirror
+from svx_mirror.field_pkg import Base
 from tests.integration.field_projection_types import queue_of_int
 
 released = False
@@ -12,10 +12,10 @@ released = False
     canonical_id="py://tests/integration/field_projection/PythonLayer",
     constructor_initiator="sv",
 )
-class PythonLayer(BaseMirror):
+class PythonLayer(Base):
     retry = Int()
-    history = Queue(Int())
-    mapping = AssocArray(Int(), Int())
+    history = Queue[Int]()
+    mapping = AssocArray[Int, Int]()
 
     def __init__(self):
         super().__init__()

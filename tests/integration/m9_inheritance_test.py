@@ -1,17 +1,13 @@
 import svx
-from svx_mirrors.tb_pkg import (
-    BaseDriverCalculateResponse,
-    BaseDriverDriveResponse,
-    BaseDriverMirror,
-)
+from svx_mirror.tb_pkg import BaseDriver
 
 
-class PythonDriver(BaseDriverMirror):
+class PythonDriver(BaseDriver):
     def __init__(self, seed):
         if seed != 9:
             raise AssertionError(f"expected factory seed 9, got {seed}")
 
-    def drive(self, address, changed, label, packet):
+    def drive(self, address, changed, observed, label, packet):
         if address != 37:
             raise AssertionError(f"expected address 37, got {address}")
         if label != "factory-driver":
@@ -20,22 +16,22 @@ class PythonDriver(BaseDriverMirror):
             raise AssertionError("SvTypes object payload did not round-trip")
         if self.base_value() != 91:
             raise AssertionError("Python non-virtual override did not use normal Python lookup")
-        if BaseDriverMirror.base_value(self) != 18:
+        if BaseDriver.base_value(self) != 18:
             raise AssertionError("non-virtual SV base call did not reach BaseDriver")
         if self.static_value() != 91:
             raise AssertionError("Python static override did not use normal Python lookup")
-        if BaseDriverMirror.static_value() != 71:
+        if BaseDriver.static_value() != 71:
             raise AssertionError("static SV base call did not reach BaseDriver")
         svx.display("M10 Python integral argument decoded")
         svx.delay(2, "ns")
-        return BaseDriverDriveResponse(changed=changed + 1, observed=address + 20)
+        changed.value += 1
+        observed.value = address + 20
+        return None
 
-    def calculate(self, source, changed):
-        return BaseDriverCalculateResponse(
-            changed=changed + source,
-            observed=changed + source + 30,
-            result=changed + source + 31,
-        )
+    def calculate(self, source, changed, observed):
+        changed.value += source
+        observed.value = changed.value + 30
+        return changed.value + 31
 
     def base_value(self):
         return 91

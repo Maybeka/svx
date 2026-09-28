@@ -8,7 +8,7 @@
       "canonical_id": "sv://example_driver_pkg/BaseDriver",
       "language": "sv",
       "symbol": "example_driver_pkg::BaseDriver",
-      "constructor": {"initiator": "sv", "parameters": []},
+      "constructor": {"initiator": "python", "parameters": []},
       "methods": [{"canonical_id": "sv://example_driver_pkg/BaseDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}]
     },
     {
@@ -16,7 +16,7 @@
       "language": "python",
       "symbol": "examples.cross_language_inheritance.python_checks.PythonDriver",
       "methods": [{"canonical_id": "py://examples/cross_language_inheritance/python_checks/PythonDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}],
-      "base_lineage": [{"canonical_id": "sv://example_driver_pkg/BaseDriver", "language": "sv", "symbol": "example_driver_pkg::BaseDriver", "constructor": {"initiator": "sv", "parameters": []}, "methods": [{"canonical_id": "sv://example_driver_pkg/BaseDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}]}]
+      "base_lineage": [{"canonical_id": "sv://example_driver_pkg/BaseDriver", "language": "sv", "symbol": "example_driver_pkg::BaseDriver", "constructor": {"initiator": "python", "parameters": []}, "methods": [{"canonical_id": "sv://example_driver_pkg/BaseDriver#drive", "name": "drive", "parameters": [], "return_type": "void", "timing": "task", "virtual": true, "pure_virtual": false}]}]
     }
   ]
 }

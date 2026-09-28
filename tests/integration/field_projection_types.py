@@ -4,8 +4,8 @@ from svtypes import AssocArray, Int, Queue
 
 
 def queue_of_int():
-    return Queue(Int())
+    return Queue[Int]()
 
 
 def int_to_int():
-    return AssocArray(Int(), Int())
+    return AssocArray[Int, Int]()

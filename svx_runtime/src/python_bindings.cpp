@@ -463,6 +463,28 @@ PyObject *py_inheritance_create_sv(PyObject *, PyObject *args) {
   return PyLong_FromUnsignedLongLong(object_id);
 }
 
+PyObject *py_inheritance_publish(PyObject *, PyObject *args) {
+  const char *name = nullptr;
+  unsigned long long object_id = 0;
+  if (!PyArg_ParseTuple(args, "sK", &name, &object_id)) return nullptr;
+  if (!require_context("svx.publish_object()")) return nullptr;
+  if (object_id == 0) {
+    PyErr_SetString(PyExc_ValueError, "SVX inheritance object id 0 is reserved");
+    return nullptr;
+  }
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
+  try {
+    svx::dpi::svx_publish_object(name, object_id);
+  } catch (const std::exception &exception) {
+    svx::ExecutionContext::restore(thread_state);
+    PyErr_SetString(PyExc_RuntimeError, exception.what());
+    return nullptr;
+  }
+  svx::ExecutionContext::restore(thread_state);
+  Py_RETURN_NONE;
+}
+
 PyObject *py_signal_declare(PyObject *, PyObject *args) {
   const char *path = nullptr;
   int width = 0;
@@ -780,6 +802,8 @@ PyMethodDef methods[] = {
      "Invoke a registered static SystemVerilog inheritance adapter"},
     {"inheritance_create_sv", py_inheritance_create_sv, METH_VARARGS,
      "Create a registered SystemVerilog inheritance implementation"},
+    {"inheritance_publish", py_inheritance_publish, METH_VARARGS,
+     "Publish a bound inheritance object for explicit SystemVerilog handoff"},
     {"signal_declare", py_signal_declare, METH_VARARGS,
      "Register a startup signal declaration"},
     {"signal_read", py_signal_read, METH_VARARGS, "Read a declared HDL signal"},

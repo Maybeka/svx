@@ -12,7 +12,7 @@ endpackage
 `include ".tmp/m8_inheritance/mirrors.sv"
 
 module tb;
-  import svx_projection_checks_pkg::*;
+  import svx_proxy_checks::*;
   import svx_static_tb_pkg_BaseDriver_pkg::*;
 
   initial begin

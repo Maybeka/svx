@@ -2,11 +2,13 @@
 
 [English](README.md)
 
+编译本示例前，先遵循通用的[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 此示例展示相反的所有权方向：Python 声明 base class 并拥有构造，
 SystemVerilog 提供具体 derived class。
 
-`BaseMonitor` 是普通 Python base class，生成的 `BaseMonitorProxy` 是它的 SV
-projection。`SvCounter` 从该 proxy 派生，重载一个 nonblocking function 和一个
+`BaseMonitor` 是普通 Python base class；其生成的 SV projection 是
+`svx_proxy_base_monitor::BaseMonitor`。`SvCounter` 从该类型派生，重载一个 nonblocking function 和一个
 timed task，并在两个方向调用 `super()`。Python 构造 `BaseMonitor(9)` 后，SVX
 请求已注册的 `SvCounterFactory` 用相同 constructor 参数创建并绑定 SV partner。
 
@@ -23,6 +25,13 @@ PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
 使用生成 mirror 编译 `tb.sv`。确保仿真进程既能导入
 `examples.python_owned_inheritance.python_test`，也能导入生成的 `svx_py`
 package。
+
+manifest 的 top-level target 是 Python `BaseMonitor`，而不是 `SvCounter`。
+`tb.sv` 中的用户代码负责让 `SvCounter` 继承生成的
+`svx_proxy_base_monitor::BaseMonitor`，实现
+`svx_pkg::svx_factory`，并以 `BaseMonitor` 的 canonical ID 注册该 factory。
+factory 使用生成 projection 的 constructor-request decoder 将 `seed` 传入
+`SvCounter.new(object_id, seed)`；应用代码不应手动分配 object ID。
 
 ## 验证内容
 

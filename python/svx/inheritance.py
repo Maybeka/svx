@@ -40,25 +40,34 @@ class TypeBinding:
     """One immutable public SvTypes declaration and generated SV adapter."""
 
     unified_type_name: str
-    python_module: str
-    python_symbol: str
-    python_args: tuple[Any, ...]
-    python_kwargs: tuple[tuple[str, Any], ...]
     sv: str
     sv_packer: str
     encoding_descriptor: tuple[tuple[str, Any], ...]
+    # New manifests retain only SvTypes' canonical, JSON-compatible type
+    # identity. Legacy factory references remain readable for old manifests
+    # and descriptor-backed fields, but are never emitted for method types.
+    svtypes_identity_json: str | None = None
+    python_module: str | None = None
+    python_symbol: str | None = None
+    python_args: tuple[Any, ...] = ()
+    python_kwargs: tuple[tuple[str, Any], ...] = ()
 
     def runtime_spec(self) -> dict[str, Any]:
-        return {
+        result = {
             "unified_type_name": self.unified_type_name,
-            "python": {
+            "encoding_descriptor": dict(self.encoding_descriptor),
+        }
+        if self.svtypes_identity_json is not None:
+            result["svtypes"] = json.loads(self.svtypes_identity_json)
+        else:
+            assert self.python_module is not None and self.python_symbol is not None
+            result["python"] = {
                 "module": self.python_module,
                 "symbol": self.python_symbol,
                 "args": list(self.python_args),
                 "kwargs": dict(self.python_kwargs),
-            },
-            "encoding_descriptor": dict(self.encoding_descriptor),
-        }
+            }
+        return result
 
 
 @dataclass(frozen=True)
@@ -130,14 +139,14 @@ class ForeignClass:
 
     @property
     def generated_name(self) -> str:
-        """Stable helper name; concrete specializations cannot collide."""
+        """Public generated types always preserve the source simple name.
 
-        if self.specialization is None:
-            return self.name
-        digest = hashlib.sha256(
-            json.dumps(_specialization_dict(self.specialization), sort_keys=True).encode("utf-8")
-        ).hexdigest()[:12]
-        return f"{self.name}__svx_{digest}"
+        Multiple closed specializations of one source class cannot occupy the
+        same public package/module in one artifact set.  Name validation
+        rejects that request instead of introducing a hash suffix.
+        """
+
+        return self.name
 
 
 @dataclass(frozen=True)
@@ -200,6 +209,18 @@ def _identifier(value: str, where: str) -> str:
 def _codec_from_spec(spec: dict[str, Any]):
     """Construct a codec from a non-executable public declaration reference."""
 
+    identity = spec.get("svtypes")
+    if identity is not None:
+        try:
+            import svtypes
+
+            annotation = svtypes.type_spec_from_identity(identity, location="SVX manifest type")
+            return svtypes.materialize_type_spec(annotation, location="SVX manifest type")
+        except Exception as error:
+            raise SVXInheritanceError(
+                f"SvTypes declaration identity cannot be materialized: {error}"
+            ) from error
+
     python = spec.get("python")
     if not isinstance(python, dict):
         raise SVXInheritanceError("SvTypes declaration is missing its Python reference")
@@ -260,14 +281,74 @@ def _legacy_expression_spec(expression: str) -> dict[str, Any]:
         raise SVXInheritanceError(
             f"SvTypes migration accepts only JSON-like literal arguments: {expression!r}"
         ) from error
-    return {
-        "python": {
-            "module": module_name,
-            "symbol": symbol,
-            "args": args,
-            "kwargs": kwargs,
+    try:
+        module = importlib.import_module(module_name)
+        factory = getattr(module, symbol)
+        if module_name == "svtypes" and symbol in {"Bit", "Logic", "Reg"}:
+            if not args:
+                raise TypeError(f"{symbol} requires a width")
+            annotation = factory[args[0]]
+            codec = annotation(**kwargs)
+        elif module_name == "svtypes" and symbol in {"RemoteRef", "Object"}:
+            if not args:
+                raise TypeError(f"{symbol} requires a target")
+            annotation = factory[args[0]]
+            codec = annotation(**kwargs)
+        elif module_name == "svtypes" and symbol in {"Array", "DynArray", "Queue", "AssocArray"}:
+            raise TypeError("legacy collection declarations require manual migration to bracket syntax")
+        else:
+            annotation = factory
+            codec = factory(*args, **kwargs)
+        import svtypes
+
+        return {
+            "svtypes": svtypes.type_spec_identity(annotation, location="legacy manifest migration"),
         }
-    }
+    except Exception as error:
+        raise SVXInheritanceError(
+            f"cannot migrate SvTypes expression {expression!r}: {error}"
+        ) from error
+
+
+def _legacy_python_spec(value: dict[str, Any], where: str) -> dict[str, Any]:
+    """Turn a legacy factory reference into one SvTypes public type identity."""
+
+    module_name = value.get("module")
+    symbol = value.get("symbol")
+    args = value.get("args", [])
+    kwargs = value.get("kwargs", {})
+    if not isinstance(module_name, str) or not isinstance(symbol, str):
+        raise _error(where, "legacy Python reference requires string module and symbol")
+    if not isinstance(args, list) or not isinstance(kwargs, dict):
+        raise _error(where, "legacy Python reference requires list args and object kwargs")
+    try:
+        module = importlib.import_module(module_name)
+        factory = getattr(module, symbol)
+        if module_name == "svtypes" and symbol in {"Bit", "Logic", "Reg"}:
+            if kwargs or not args:
+                raise TypeError(f"{symbol} migration requires exactly one positional shape")
+            annotation = factory[tuple(args) if len(args) > 1 else args[0]]
+        elif module_name == "svtypes" and symbol in {"RemoteRef", "Object"}:
+            if kwargs or len(args) != 1:
+                raise TypeError(f"{symbol} migration requires exactly one target argument")
+            annotation = factory[args[0]]
+        elif args or kwargs:
+            raise TypeError(
+                "legacy factory references with arguments require an explicit bracket-style SvTypes declaration"
+            )
+        else:
+            annotation = factory
+        import svtypes
+
+        return {
+            "svtypes": svtypes.type_spec_identity(
+                annotation, location="legacy manifest migration"
+            ),
+        }
+    except Exception as error:
+        raise SVXInheritanceError(
+            f"cannot migrate legacy Python declaration {module_name}:{symbol}: {error}"
+        ) from error
 
 
 def _migrate_type_binding(value: Any, where: str) -> Any:
@@ -275,18 +356,26 @@ def _migrate_type_binding(value: Any, where: str) -> Any:
         return value
     if isinstance(value, str) and value in _LEGACY_TYPES:
         value = _LEGACY_TYPES[value]
-    if not isinstance(value, dict) or "svtypes" not in value:
+    if not isinstance(value, dict):
         return value
-    expression = value.get("svtypes")
-    if not isinstance(expression, str):
-        raise _error(where, "legacy svtypes expression must be a string")
-    spec = _legacy_expression_spec(expression)
+    if "svtypes" in value:
+        expression = value.get("svtypes")
+        if not isinstance(expression, str):
+            return value
+        spec = _legacy_expression_spec(expression)
+    elif "python" in value:
+        python = value.get("python")
+        if not isinstance(python, dict):
+            raise _error(where, "legacy Python declaration must be an object")
+        spec = _legacy_python_spec(python, where)
+    else:
+        return value
     codec = _codec_from_spec(spec)
     import svtypes
 
     return {
         "unified_type_name": svtypes.unified_type_name(codec),
-        "python": spec["python"],
+        "svtypes": spec["svtypes"],
         "sv": value.get("sv"),
         "sv_packer": value.get("sv_packer"),
         "encoding_descriptor": svtypes.encoding_descriptor(codec).to_dict(),
@@ -299,47 +388,67 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
     raw = _object(value, where)
     _reject_unknown(
         raw,
-        {"unified_type_name", "python", "sv", "sv_packer", "encoding_descriptor"},
+        {"unified_type_name", "svtypes", "python", "sv", "sv_packer", "encoding_descriptor"},
         where,
     )
-    python = _object(raw.get("python"), f"{where}.python")
-    _reject_unknown(python, {"module", "symbol", "args", "kwargs"}, f"{where}.python")
-    args = python.get("args", [])
-    kwargs = python.get("kwargs", {})
-    if not isinstance(args, list):
-        raise _error(f"{where}.python.args", "must be a JSON list")
-    if not isinstance(kwargs, dict) or any(not isinstance(key, str) for key in kwargs):
-        raise _error(f"{where}.python.kwargs", "must be a JSON object with string keys")
+    identity = raw.get("svtypes")
+    python = raw.get("python")
+    if (identity is None) == (python is None):
+        raise _error(where, "must contain exactly one of 'svtypes' or legacy 'python'")
     descriptor = _object(raw.get("encoding_descriptor"), f"{where}.encoding_descriptor")
     _reject_unknown(
         descriptor,
         {"unified_type_name", "encoding_fingerprint", "binary_format_version"},
         f"{where}.encoding_descriptor",
     )
-    binding = TypeBinding(
-        _required_string(raw, "unified_type_name", where),
-        _required_string(python, "module", f"{where}.python"),
-        _identifier(
-            _required_string(python, "symbol", f"{where}.python"),
-            f"{where}.python.symbol",
-        ),
-        tuple(args),
-        tuple(sorted(kwargs.items())),
-        _required_string(raw, "sv", where),
-        _required_string(raw, "sv_packer", where),
-        tuple(sorted(descriptor.items())),
-    )
+    common = {
+        "unified_type_name": _required_string(raw, "unified_type_name", where),
+        "sv": _required_string(raw, "sv", where),
+        "sv_packer": _required_string(raw, "sv_packer", where),
+        "encoding_descriptor": tuple(sorted(descriptor.items())),
+    }
+    if identity is not None:
+        if not isinstance(identity, dict):
+            raise _error(f"{where}.svtypes", "must be a canonical SvTypes identity object")
+        try:
+            identity_json = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError) as error:
+            raise _error(f"{where}.svtypes", "must be JSON-compatible") from error
+        binding = TypeBinding(**common, svtypes_identity_json=identity_json)
+    else:
+        assert isinstance(python, dict)
+        python = _object(python, f"{where}.python")
+        _reject_unknown(python, {"module", "symbol", "args", "kwargs"}, f"{where}.python")
+        args = python.get("args", [])
+        kwargs = python.get("kwargs", {})
+        if not isinstance(args, list):
+            raise _error(f"{where}.python.args", "must be a JSON list")
+        if not isinstance(kwargs, dict) or any(not isinstance(key, str) for key in kwargs):
+            raise _error(f"{where}.python.kwargs", "must be a JSON object with string keys")
+        binding = TypeBinding(
+            **common,
+            python_module=_required_string(python, "module", f"{where}.python"),
+            python_symbol=_identifier(
+                _required_string(python, "symbol", f"{where}.python"),
+                f"{where}.python.symbol",
+            ),
+            python_args=tuple(args),
+            python_kwargs=tuple(sorted(kwargs.items())),
+        )
     for field, content, grammar in (
         ("unified_type_name", binding.unified_type_name, r"[^\s]+"),
-        ("python.module", binding.python_module, r"[A-Za-z_][A-Za-z0-9_.]*"),
         # SvTypes collections use ordinary SV unpacked dimensions such as
         # ``int []`` and ``int [$]``.  Keep the grammar deliberately narrow
         # while permitting those generated declaration forms.
         ("sv", binding.sv, r"[$A-Za-z_][A-Za-z0-9_:$#() ,\[\]]*"),
-        ("sv_packer", binding.sv_packer, r"[A-Za-z_][A-Za-z0-9_:.$#() ,]*"),
+        ("sv_packer", binding.sv_packer, r"[A-Za-z_][A-Za-z0-9_:.$#() ,\[\]]*"),
     ):
         if not re.fullmatch(grammar, content):
             raise _error(f"{where}.{field}", "contains unsupported source characters")
+    if binding.python_module is not None and not re.fullmatch(
+        r"[A-Za-z_][A-Za-z0-9_.]*", binding.python_module
+    ):
+        raise _error(f"{where}.python.module", "contains unsupported source characters")
     try:
         codec = _codec_from_spec(binding.runtime_spec())
         import svtypes
@@ -462,7 +571,10 @@ def _sv_class_reference(cls: ForeignClass) -> str:
     """Render the source class type, including only closed manifest arguments."""
 
     if cls.specialization is None:
-        return cls.name
+        # Generated mirror classes deliberately retain the source simple name
+        # in a different package.  Always qualify the source base so
+        # ``class A extends pkg::A`` cannot resolve recursively to itself.
+        return cls.symbol
     arguments: list[str] = []
     for argument in cls.specialization.arguments:
         if argument.kind == "type":
@@ -470,7 +582,7 @@ def _sv_class_reference(cls: ForeignClass) -> str:
             arguments.append(argument.type_binding.sv)
         else:
             arguments.append(_sv_specialization_value(argument.value))
-    return f"{cls.name}#({', '.join(arguments)})"
+    return f"{cls.symbol}#({', '.join(arguments)})"
 
 
 def _parse_method(value: Any, cls_id: str, where: str) -> Method:
@@ -735,7 +847,11 @@ def projection_plan(target: ForeignClass) -> ProjectionPlan:
                 ProjectionStep(
                     kind="sv_mirror",
                     source_class_id=current.canonical_id,
-                    generated_name=f"{current.generated_name}Mirror",
+                    # The generated class keeps the foreign source's simple
+                    # name.  Its generated package/module describes the
+                    # boundary; ``Mirror`` is an implementation role, not a
+                    # public type-name suffix.
+                    generated_name=current.generated_name,
                     extends_class_id=current.canonical_id,
                 )
             )
@@ -746,7 +862,7 @@ def projection_plan(target: ForeignClass) -> ProjectionPlan:
                 ProjectionStep(
                     kind="sv_proxy",
                     source_class_id=current.canonical_id,
-                    generated_name=f"{current.generated_name}Proxy",
+                    generated_name=current.generated_name,
                     extends_class_id=current.canonical_id,
                 )
             )
@@ -793,19 +909,32 @@ def migrate_manifest(data: Any) -> dict[str, Any]:
     """Upgrade the executable v1 type syntax to the declarative v2 schema."""
 
     migrated = json.loads(json.dumps(data))
-    for cls in migrated.get("classes", []):
+    def migrate_class(cls: Any) -> None:
+        if not isinstance(cls, dict):
+            return
         constructor = cls.get("constructor")
         groups = [constructor.get("parameters", [])] if isinstance(constructor, dict) else []
         for method in cls.get("methods", []):
+            if not isinstance(method, dict):
+                continue
             groups.append(method.get("parameters", []))
             method["return_type"] = _migrate_type_binding(
                 method.get("return_type"), "method.return_type"
             )
         for parameters in groups:
+            if not isinstance(parameters, list):
+                continue
             for parameter in parameters:
+                if not isinstance(parameter, dict):
+                    continue
                 parameter["type"] = _migrate_type_binding(
                     parameter.get("type"), "parameter.type"
                 )
+        for base in cls.get("base_lineage", []):
+            migrate_class(base)
+
+    for cls in migrated.get("classes", []):
+        migrate_class(cls)
     migrated["schema_uri"] = SCHEMA_URI
     migrated["schema_version"] = SCHEMA_VERSION
     migrated["generator_abi_version"] = GENERATOR_ABI_VERSION
@@ -827,20 +956,42 @@ def load_manifest(path: Path) -> Manifest:
 
 
 def _python_module_for(cls: ForeignClass) -> str:
-    module = "svx_sv." + ".".join(cls.symbol.split("::")[:-1])
-    # Preserve the foreign simple class name while isolating concrete
-    # specializations in deterministic generated Python modules.
-    if cls.specialization is not None:
-        module += "__" + cls.generated_name.lower()
+    module = "svx_mirror." + ".".join(cls.symbol.split("::")[:-1])
     return module
 
 
 def _sv_package_for(cls: ForeignClass) -> str:
-    return "svx_py_" + "_".join(cls.symbol.split(".")[:-1]) + "_pkg"
+    # Public SV projections intentionally use only the final Python module
+    # component.  A collision is a manifest error rather than an opaque hash.
+    return "svx_proxy_" + cls.symbol.split(".")[-2]
 
 
 def _python_reverse_module_for(cls: ForeignClass) -> str:
     return "svx_py." + ".".join(cls.symbol.split(".")[:-1])
+
+
+def _public_python_type_for(cls: ForeignClass) -> str | None:
+    """Return the public generated Python type for an SV source class."""
+
+    if cls.language != "sv":
+        return None
+    return f"{_python_module_for(cls)}.{cls.generated_name}"
+
+
+def _public_sv_type_for(cls: ForeignClass) -> str | None:
+    """Return the public generated SV type for a Python source class."""
+
+    if cls.language != "python":
+        return None
+    return f"{_sv_package_for(cls)}::{cls.generated_name}"
+
+
+def _python_adapter_type_for(cls: ForeignClass) -> str | None:
+    """Return the generated Python runtime adapter for a Python source class."""
+
+    if cls.language != "python":
+        return None
+    return f"{_python_reverse_module_for(cls)}.{cls.generated_name}"
 
 
 def _validate_generated_names(classes: tuple[ForeignClass, ...]) -> None:
@@ -868,7 +1019,7 @@ def _python_parameter_list(method: Method) -> str:
 
 
 def _python_request_parameter_list(method: Method, *, include_self: bool = True) -> str:
-    parameters = [parameter.name for parameter in _request_parameters(method)]
+    parameters = [parameter.name for parameter in method.parameters]
     if include_self:
         parameters.insert(0, "self")
     return ", ".join(parameters)
@@ -903,7 +1054,12 @@ def _response_field_specs(method: Method) -> str:
 
 def _contract_repr(method: Method) -> str:
     return (
-        "{'request': "
+        "{'parameters': "
+        + repr(tuple(
+            (parameter.name, parameter.direction, parameter.type_binding.runtime_spec())
+            for parameter in method.parameters
+        ))
+        + ", 'request': "
         + _field_specs(_request_parameters(method))
         + ", 'response': "
         + _response_field_specs(method)
@@ -914,13 +1070,13 @@ def _contract_repr(method: Method) -> str:
 def _request_values_repr(method: Method) -> str:
     entries = ", ".join(
         f"{parameter.name!r}: {parameter.name}"
-        for parameter in _request_parameters(method)
+        for parameter in method.parameters
     )
     return "{" + entries + "}"
 
 
 def _python_static_request_parameter_list(method: Method) -> str:
-    return ", ".join(parameter.name for parameter in _request_parameters(method))
+    return ", ".join(parameter.name for parameter in method.parameters)
 
 
 def _request_parameters(method: Method) -> tuple[Parameter, ...]:
@@ -948,11 +1104,13 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
         if cls.language == "sv" and cls.canonical_id not in projected:
             modules.setdefault(_python_module_for(cls), []).append(cls)
 
-    emitted: dict[PurePosixPath, str] = {PurePosixPath("svx_sv/__init__.py"): "# Generated by svx inheritance-gen.\n"}
+    emitted: dict[PurePosixPath, str] = {}
+    if modules:
+        emitted[PurePosixPath("svx_mirror/__init__.py")] = "# Generated by svx inheritance-gen.\n"
     for module_name, classes in sorted(modules.items()):
         module_parts = module_name.split(".")
         path = PurePosixPath(*module_parts).with_suffix(".py")
-        lines = ["# Generated by svx inheritance-gen. Do not edit.", "from __future__ import annotations", "from svx import _native", "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, response_type, unbind_instance", ""]
+        lines = ["# Generated by svx inheritance-gen. Do not edit.", "from __future__ import annotations", "from svx import _native", "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, unbind_instance", ""]
         for cls in sorted(classes, key=lambda item: item.name):
             lines.append("register_contract({")
             for method in cls.methods:
@@ -998,11 +1156,6 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                     ]
                 )
             lines.append("")
-            for method in cls.methods:
-                if _response_parameters(method):
-                    response_name = f"{cls.name}{method.name[0].upper()}{method.name[1:]}Response"
-                    lines.append(f"{response_name} = response_type({method.canonical_id!r})")
-            lines.append("")
         emitted[path] = "\n".join(lines).rstrip() + "\n"
 
     # Python counterparts of SV AMirror portions.  They are emitted only for
@@ -1026,7 +1179,7 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             )
             if step.kind == "sv_mirror":
                 active_mirror = source
-                module = "svx_mirrors." + "_".join(source.symbol.split("::")[:-1])
+                module = "svx_mirror." + "_".join(source.symbol.split("::")[:-1])
                 projection_modules.setdefault(module, []).append(source)
             elif step.kind == "sv_proxy":
                 proxy_sources.append(source)
@@ -1070,7 +1223,7 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                         for field in source.fields
                     }
     if projection_modules:
-        emitted[PurePosixPath("svx_mirrors/__init__.py")] = "# Generated by svx inheritance-gen.\n"
+        emitted[PurePosixPath("svx_mirror/__init__.py")] = "# Generated by svx inheritance-gen.\n"
     for module, sources in sorted(projection_modules.items()):
         path = PurePosixPath(*module.split(".")).with_suffix(".py")
         lines = [
@@ -1078,7 +1231,7 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             "from __future__ import annotations",
             "from svx import _native",
             "from svx.declarations import SVMirror",
-            "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, response_value",
+            "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass",
             "",
         ]
         seen: set[str] = set()
@@ -1096,7 +1249,7 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
             names = ", ".join(parameter.name for parameter in parameters)
             signature = f"self, {names}" if names else "self"
             values = "{" + ", ".join(f"{p.name!r}: {p.name}" for p in parameters) + "}"
-            mirror_name = f"{source.generated_name}Mirror"
+            mirror_name = source.generated_name
             field_maps = projected_python_fields.get(source.canonical_id, {})
             lines.extend(
                 [
@@ -1178,16 +1331,6 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                         f"        return invoke_sv(self._svx_remote_object_id, {method.canonical_id!r}, {_request_values_repr(method)})",
                     ]
                 )
-            for method in source.methods:
-                if _response_parameters(method) or method.return_type is not None:
-                    response_name = f"{source.generated_name}{method.name[0].upper()}{method.name[1:]}Response"
-                    lines.extend(
-                        [
-                            "",
-                            f"def {response_name}(**values):",
-                            f"    return response_value({method.canonical_id!r}, values)",
-                        ]
-                    )
             lines.append("")
         emitted[path] = "\n".join(lines).rstrip() + "\n"
 
@@ -1195,10 +1338,11 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
     for cls in manifest.classes:
         if cls.language == "python" and cls.canonical_id not in projected:
             reverse_modules.setdefault(_python_reverse_module_for(cls), []).append(cls)
-    emitted[PurePosixPath("svx_py/__init__.py")] = "# Generated by svx inheritance-gen.\n"
+    if reverse_modules:
+        emitted[PurePosixPath("svx_py/__init__.py")] = "# Generated by svx inheritance-gen.\n"
     for module_name, classes in sorted(reverse_modules.items()):
         path = PurePosixPath(*module_name.split(".")).with_suffix(".py")
-        lines = ["# Generated by svx inheritance-gen. Do not edit.", "from __future__ import annotations", "from svx import _native", "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, register_constructor, register_contract, response_type", ""]
+        lines = ["# Generated by svx inheritance-gen. Do not edit.", "from __future__ import annotations", "from svx import _native", "from svx.inheritance import bind_instance, encode_constructor, invoke_sv, register_constructor, register_contract", ""]
         for cls in sorted(classes, key=lambda item: item.name):
             source_module = ".".join(cls.symbol.split(".")[:-1])
             lines.extend([f"from {source_module} import {cls.name} as _Foreign{cls.name}", ""])
@@ -1227,11 +1371,6 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                 lines.extend([f"class {cls.name}(_Foreign{cls.name}):", f"    \"\"\"Python view of an SV-derived {cls.symbol}.\"\"\"", f"    __svx_foreign_class_id__ = {cls.canonical_id!r}", "", "    def __init__(self, remote_object_id: int):", "        self._svx_remote_object_id = remote_object_id", "        bind_instance(remote_object_id, self)", "", "    def __svx_dispatch_foreign__(self, method_name: str, *args):", f"        return getattr(_Foreign{cls.name}, method_name)(self, *args)"])
             for method in cls.methods:
                 lines.extend(["", f"    def {method.name}({_python_request_parameter_list(method)}):", f"        return invoke_sv(self._svx_remote_object_id, {method.canonical_id!r}, {_request_values_repr(method)})"])
-            lines.append("")
-            for method in cls.methods:
-                if _response_parameters(method):
-                    response_name = f"{cls.name}{method.name[0].upper()}{method.name[1:]}Response"
-                    lines.append(f"{response_name} = response_type({method.canonical_id!r})")
             lines.append("")
         emitted[path] = "\n".join(lines).rstrip() + "\n"
     return emitted
@@ -2138,7 +2277,15 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str) -> list[
     record_name = _call_record_class_name(source.canonical_id, "request")
     factory_name = f"{helper_name}_factory"
     registration_name = f"register_{helper_name}_factory"
-    lines = ["", f"  class {factory_name} implements svx_factory;", "    virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);"]
+    lines = [
+        "",
+        f"  class {factory_name} implements svx_factory;",
+        "    function new();",
+        f"      svx_inheritance_registry::register_factory({json.dumps(source.canonical_id)}, this);",
+        "    endfunction",
+        "",
+        "    virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);",
+    ]
     if parameters:
         lines.extend(
             [
@@ -2176,13 +2323,15 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str) -> list[
             "    if (factory == null) factory = new();",
             f"    svx_inheritance_registry::register_factory({json.dumps(source.canonical_id)}, factory);",
             "  endfunction",
+            "",
+            f"  {factory_name} {helper_name}_factory_instance = new();",
         ]
     )
     return lines
 
 
 def _projection_helper_package(source: ForeignClass, kind: str) -> str:
-    """Name one helper package per projected class portion.
+    """Name the generated package for one projected class portion.
 
     Alternating lineages can cross the same user SV package more than once
     (for example A and C both live in ``drivers``).  One package per helper
@@ -2191,13 +2340,16 @@ def _projection_helper_package(source: ForeignClass, kind: str) -> str:
 
     if kind == "mirror":
         stem = "_".join(source.symbol.split("::")[:-1])
-        helper = f"{source.generated_name}Mirror"
+        # Mirror packages are SVX implementation packages.  Include the
+        # class name because two classes in one SV package can require source
+        # anchors at different positions.
+        return "svx_mirror_sv_" + stem + "_" + source.generated_name
     elif kind == "proxy":
-        stem = "_".join(source.symbol.split(".")[:-1])
-        helper = f"{source.generated_name}Proxy"
+        # This is the public SV type namespace.  Its class keeps the source
+        # Python class name; the package uses the final Python module name.
+        return _sv_package_for(source)
     else:  # pragma: no cover - internal caller invariant
         raise ValueError(f"unknown projection helper kind {kind!r}")
-    return "svx_projection_" + stem + "_" + helper + "_pkg"
 
 
 def _emit_sv_projection_helpers(
@@ -2222,6 +2374,17 @@ def _emit_sv_projection_helpers(
                         f"cannot project {current.canonical_id} into SV without a preceding SV mirror"
                     )
                 proxies.setdefault(current.canonical_id, (current, active_mirror, child))
+
+    # Python initiation is itself a request for one physical SV bridge.  It
+    # must not depend on a later Python-derived target being present: the
+    # generated Python mirror calls ``inheritance_create_sv`` in either case.
+    for cls in manifest.classes:
+        if (
+            cls.language == "sv"
+            and cls.constructor is not None
+            and cls.constructor.initiator == "python"
+        ):
+            mirrors.setdefault(cls.canonical_id, (cls, cls))
 
     packages: dict[str, list[str]] = {}
     dependencies: dict[str, set[str]] = {}
@@ -2292,7 +2455,7 @@ def _emit_sv_projection_helpers(
                 )
                 lines.extend(
                     _emit_sv_projection_class(
-                        f"{source.generated_name}Mirror",
+                        source.generated_name,
                         _sv_class_reference(source),
                         source,
                         base_methods=source.methods,
@@ -2315,20 +2478,20 @@ def _emit_sv_projection_helpers(
                             "    endfunction",
                             "",
                             "    virtual task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
-                            f"      {source.generated_name}Mirror::svx_invoke_static(method_id, request, ok, response, error);",
+                            f"      {source.generated_name}::svx_invoke_static(method_id, request, ok, response, error);",
                             "    endtask",
                             f"  endclass : {dispatcher_name}",
                             "",
                             f"  {dispatcher_name} {source.generated_name}_static_dispatcher = new();",
                         ]
                     )
-                lines.extend(_emit_sv_projection_factory(source, f"{source.generated_name}Mirror"))
+                lines.extend(_emit_sv_projection_factory(source, source.generated_name))
             if class_id in proxies:
                 source, mirror_source, _child = proxies[class_id]
                 lines.extend(
                     _emit_sv_projection_class(
-                        f"{source.generated_name}Proxy",
-                        f"{mirror_source.generated_name}Mirror",
+                        source.generated_name,
+                        mirror_source.generated_name,
                         source,
                         base_methods=mirror_source.methods,
                         dispatch_virtuals=tuple(method for method in source.methods if method.virtual),
@@ -2349,7 +2512,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
     for cls in manifest.classes:
         if cls.language == "python" and cls.canonical_id not in projected:
             packages.setdefault(
-                "svx_projection_" + "_".join(cls.symbol.split(".")[:-1]) + "_pkg",
+                _sv_package_for(cls),
                 [],
             ).append(cls)
 
@@ -2393,7 +2556,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
         lines.extend(["", f"`ifndef {guard}", f"`define {guard}", "", f"package {package};", "  import svx_pkg::*;", "  import svtypes_pkg::*;", *record_import])
         for cls in sorted(classes, key=lambda item: item.name):
-            proxy_name = f"{cls.generated_name}Proxy"
+            proxy_name = cls.generated_name
             lines.extend(["", f"  // Generated SV projection for {cls.canonical_id}", f"  virtual class {proxy_name} implements svx_dispatchable;", "    longint unsigned __svx_remote_object_id;"])
             for field in cls.fields:
                 lines.append(f"    {field.type_binding.sv} {field.name};")
@@ -2687,6 +2850,35 @@ def artifact_manifest(
                     ),
                 }
             )
+    projected = _projected_class_ids(manifest)
+    python_mirror_ids = {
+        step.source_class_id
+        for plan in projection_plans(manifest)
+        for step in plan.steps
+        if step.kind == "sv_mirror"
+    }
+    python_mirror_ids.update(
+        cls.canonical_id
+        for cls in manifest.classes
+        if cls.language == "sv" and cls.canonical_id not in projected
+    )
+    sv_proxy_ids = {
+        step.source_class_id
+        for plan in projection_plans(manifest)
+        for step in plan.steps
+        if step.kind == "sv_proxy"
+    }
+    sv_proxy_ids.update(
+        cls.canonical_id
+        for cls in manifest.classes
+        if cls.language == "python" and cls.canonical_id not in projected
+    )
+    python_adapter_ids = {
+        cls.canonical_id
+        for cls in manifest.classes
+        if cls.language == "python" and cls.canonical_id not in projected
+    }
+
     return {
         "schema_uri": "https://svx.dev/schema/generated-artifacts/v1",
         "schema_version": "1.0.0",
@@ -2703,6 +2895,32 @@ def artifact_manifest(
             "required_package_major": 1,
         },
         "classes": sorted(cls.canonical_id for cls in manifest.classes),
+        "generated_types": [
+            {
+                "canonical_class_id": cls.canonical_id,
+                **(
+                    {"python_fqn": _public_python_type_for(cls)}
+                    if cls.canonical_id in python_mirror_ids
+                    else {}
+                ),
+                **(
+                    {"systemverilog_fqn": _public_sv_type_for(cls)}
+                    if cls.canonical_id in sv_proxy_ids
+                    else {}
+                ),
+                **(
+                    {"python_adapter_fqn": _python_adapter_type_for(cls)}
+                    if cls.canonical_id in python_adapter_ids
+                    else {}
+                ),
+            }
+            for cls in sorted(manifest.classes, key=lambda item: item.canonical_id)
+            if (
+                cls.canonical_id in python_mirror_ids
+                or cls.canonical_id in sv_proxy_ids
+                or cls.canonical_id in python_adapter_ids
+            )
+        ],
         "constructors": sorted(
             constructors, key=lambda item: item["canonical_class_id"]
         ),
@@ -2821,6 +3039,7 @@ def call_sv_static(class_id: str, method_id: str, request: bytes = b"") -> bytes
 
 @dataclass
 class _CallContract:
+    parameters: tuple[tuple[str, str, dict[str, Any]], ...]
     request_fields: tuple[tuple[str, dict[str, Any]], ...]
     response_fields: tuple[tuple[str, dict[str, Any]], ...]
     request_schema: Any | None = None
@@ -2864,11 +3083,36 @@ def register_contract(contract: dict[str, dict[str, Any]]) -> None:
     """
 
     for method_id, signature in contract.items():
-        if not isinstance(signature, dict) or set(signature) != {"request", "response"}:
+        if not isinstance(signature, dict):
             raise SVXInheritanceError(
-                f"generated call contract {method_id} must contain request and response"
+                f"generated call contract {method_id} must contain parameters, request, and response"
+            )
+        # Generated artifacts from the response-record era did not retain the
+        # complete formal ordering. Keep them executable while all newly
+        # emitted artifacts use the full prototype contract below.
+        if set(signature) == {"request", "response"}:
+            request = signature["request"]
+            response = signature["response"]
+            if not isinstance(request, tuple) or not isinstance(response, tuple):
+                raise SVXInheritanceError(
+                    f"generated call contract {method_id} must contain tuple request and response fields"
+                )
+            request_names = {field[0] for field in request if isinstance(field, tuple) and field}
+            signature = {
+                "parameters": tuple(
+                    (name, "inout" if name in {item[0] for item in response if isinstance(item, tuple) and item} else "input", spec)
+                    for name, spec in request
+                )
+                + tuple((name, "output", spec) for name, spec in response if name != "result" and name not in request_names),
+                "request": request,
+                "response": response,
+            }
+        if set(signature) != {"parameters", "request", "response"}:
+            raise SVXInheritanceError(
+                f"generated call contract {method_id} must contain parameters, request, and response"
             )
         normalized = _CallContract(
+            _normalize_call_parameters(method_id, signature["parameters"]),
             _normalize_call_fields(method_id, "request", signature["request"]),
             _normalize_call_fields(method_id, "response", signature["response"]),
         )
@@ -2876,6 +3120,37 @@ def register_contract(contract: dict[str, dict[str, Any]]) -> None:
         if existing is not None and existing != normalized:
             raise SVXInheritanceError(f"conflicting SvTypes contract for {method_id}")
         _method_contracts[method_id] = normalized
+
+
+def _normalize_call_parameters(
+    method_id: str,
+    parameters: tuple[tuple[str, str, dict[str, Any]], ...],
+) -> tuple[tuple[str, str, dict[str, Any]], ...]:
+    if not isinstance(parameters, tuple):
+        raise SVXInheritanceError(
+            f"generated call {method_id} parameters must be a tuple"
+        )
+    normalized: list[tuple[str, str, dict[str, Any]]] = []
+    for index, parameter in enumerate(parameters):
+        if (
+            not isinstance(parameter, tuple)
+            or len(parameter) != 3
+            or not isinstance(parameter[0], str)
+            or not parameter[0]
+            or parameter[1] not in {"input", "output", "inout"}
+            or not isinstance(parameter[2], dict)
+        ):
+            raise SVXInheritanceError(
+                f"generated call {method_id} parameter {index} is invalid"
+            )
+        _svtypes_codec(parameter[2])
+        normalized.append(parameter)
+    names = [name for name, _, _ in normalized]
+    if len(names) != len(set(names)):
+        raise SVXInheritanceError(
+            f"generated call {method_id} contains duplicate parameter names"
+        )
+    return tuple(normalized)
 
 
 def _normalize_call_fields(
@@ -2986,6 +3261,7 @@ def register_constructor(
     fields: tuple[tuple[str, dict[str, Any]], ...],
 ) -> None:
     normalized = _CallContract(
+        (),
         _normalize_call_fields(class_id, "constructor", fields), ()
     )
     existing = _constructor_contracts.get(class_id)
@@ -3161,6 +3437,73 @@ def _validate_record_fields(
         _validate_remote_refs(_svtypes_codec(spec), _record_field(value, name))
 
 
+def _copyout_holder(direction: str, value: Any, *, where: str):
+    """Require the public mutable holder used for SV output/inout formals."""
+
+    from .declarations import Inout, Output
+
+    expected = Inout if direction == "inout" else Output
+    if not isinstance(value, expected):
+        raise TypeError(f"{where} requires svx.{expected.__name__}")
+    if direction == "inout" and not value._svx_copyout_is_set:
+        raise TypeError(f"{where} requires an initialized svx.Inout(value)")
+    return value
+
+
+def _call_values(
+    contract: _CallContract,
+    method_id: str,
+    values: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate a full Python prototype and extract its request payload."""
+
+    expected = {name for name, _, _ in contract.parameters}
+    supplied = set(values)
+    if supplied != expected:
+        missing = sorted(expected - supplied)
+        extra = sorted(supplied - expected)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if extra:
+            details.append("unexpected " + ", ".join(extra))
+        raise TypeError(f"invalid inheritance call {method_id} arguments: " + "; ".join(details))
+    request: dict[str, Any] = {}
+    holders: dict[str, Any] = {}
+    for name, direction, _ in contract.parameters:
+        value = values[name]
+        if direction == "input":
+            request[name] = value
+        elif direction == "inout":
+            holder = _copyout_holder("inout", value, where=f"inheritance argument {name}")
+            request[name] = holder.value
+            holders[name] = holder
+        else:
+            holders[name] = _copyout_holder("output", value, where=f"inheritance argument {name}")
+    return request, holders
+
+
+def _consume_call_response(
+    contract: _CallContract,
+    method_id: str,
+    response: Any,
+    holders: dict[str, Any],
+) -> Any:
+    result = None
+    for name, _ in contract.response_fields:
+        value = _record_field(response, name)
+        if name == "result":
+            result = value
+        else:
+            holder = holders.get(name)
+            if holder is None:
+                raise SVXInheritanceError(
+                    f"inheritance response {method_id} supplied unexpected copy-out {name!r}"
+                )
+            holder.value = value
+    return result
+
+
 def _pack_call_record(schema: Any, value: Any) -> bytes:
     import svtypes
     from .runtime import codec_session
@@ -3223,42 +3566,6 @@ def _release_record_identity(value: Any, session: Any) -> None:
         remove(object_id)
 
 
-def response_type(method_id: str) -> type:
-    """Return the generated SvTypes response value type for a method."""
-
-    contract = _method_contracts.get(method_id)
-    if not isinstance(contract, _CallContract):
-        raise SVXInheritanceError(
-            f"no generated response record contract registered for {method_id}"
-        )
-    schema = _contract_schema(contract, method_id, "response")
-    if schema is None:
-        raise SVXInheritanceError(f"method {method_id} has a void response")
-    return schema.value_type
-
-
-def response_value(method_id: str, values: dict[str, Any]) -> Any:
-    """Build one generated response value through the method's SvTypes contract.
-
-    Generated record classes preserve SvTypes descriptor semantics and are not
-    required to accept Python keyword arguments themselves. This public helper
-    supplies the stable, normalized construction path used by generated mirror
-    response factories.
-    """
-
-    if not isinstance(values, dict):
-        raise TypeError("generated response values must be a dictionary")
-    contract = _method_contracts.get(method_id)
-    if not isinstance(contract, _CallContract):
-        raise SVXInheritanceError(
-            f"no generated response record contract registered for {method_id}"
-        )
-    schema = _contract_schema(contract, method_id, "response")
-    if schema is None:
-        raise SVXInheritanceError(f"method {method_id} has a void response")
-    return _record_value(schema, contract.response_fields, values)
-
-
 def invoke_sv(object_id: int, method_id: str, values: dict[str, Any]):
     """Invoke an SV method using its generated SvTypes request/response records."""
 
@@ -3267,15 +3574,16 @@ def invoke_sv(object_id: int, method_id: str, values: dict[str, Any]):
         raise SVXInheritanceError(
             f"no generated call-record contract registered for {method_id}"
         )
+    request_values, holders = _call_values(contract, method_id, values)
     request_schema = _contract_schema(contract, method_id, "request")
     if request_schema is None:
-        if values:
+        if request_values:
             raise TypeError(f"method {method_id} has a void request")
         request = b""
     else:
         request = _pack_call_record(
             request_schema,
-            _record_value(request_schema, contract.request_fields, values),
+            _record_value(request_schema, contract.request_fields, request_values),
         )
     payload = call_sv(object_id, method_id, request)
     response_schema = _contract_schema(contract, method_id, "response")
@@ -3287,9 +3595,7 @@ def invoke_sv(object_id: int, method_id: str, values: dict[str, Any]):
         return None
     response = _unpack_call_record(response_schema, payload)
     _validate_record_fields(response, contract.response_fields)
-    if len(contract.response_fields) == 1 and contract.response_fields[0][0] == "result":
-        return _record_field(response, "result")
-    return response
+    return _consume_call_response(contract, method_id, response, holders)
 
 
 def invoke_sv_static(class_id: str, method_id: str, values: dict[str, Any]):
@@ -3300,15 +3606,16 @@ def invoke_sv_static(class_id: str, method_id: str, values: dict[str, Any]):
         raise SVXInheritanceError(
             f"no generated call-record contract registered for {method_id}"
         )
+    request_values, holders = _call_values(contract, method_id, values)
     request_schema = _contract_schema(contract, method_id, "request")
     if request_schema is None:
-        if values:
+        if request_values:
             raise TypeError(f"method {method_id} has a void request")
         request = b""
     else:
         request = _pack_call_record(
             request_schema,
-            _record_value(request_schema, contract.request_fields, values),
+            _record_value(request_schema, contract.request_fields, request_values),
         )
     payload = call_sv_static(class_id, method_id, request)
     response_schema = _contract_schema(contract, method_id, "response")
@@ -3320,9 +3627,7 @@ def invoke_sv_static(class_id: str, method_id: str, values: dict[str, Any]):
         return None
     response = _unpack_call_record(response_schema, payload)
     _validate_record_fields(response, contract.response_fields)
-    if len(contract.response_fields) == 1 and contract.response_fields[0][0] == "result":
-        return _record_field(response, "result")
-    return response
+    return _consume_call_response(contract, method_id, response, holders)
 
 
 def encode_constructor(class_id: str, values: dict[str, Any]) -> bytes:
@@ -3362,13 +3667,28 @@ def dispatch_python_call(object_id: int, method_id: str, payload: bytes) -> byte
             raise SVXInheritanceError(
                 f"void inheritance request {method_id} contains data"
             )
-        arguments = ()
+        request_values: dict[str, Any] = {}
     else:
         request = _unpack_call_record(request_schema, payload)
         _validate_record_fields(request, contract.request_fields)
-        arguments = tuple(
-            _record_field(request, name) for name, _ in contract.request_fields
-        )
+        request_values = {
+            name: _record_field(request, name) for name, _ in contract.request_fields
+        }
+    from .declarations import Inout, Output
+
+    arguments: list[Any] = []
+    holders: dict[str, Any] = {}
+    for name, direction, _ in contract.parameters:
+        if direction == "input":
+            arguments.append(request_values[name])
+        elif direction == "inout":
+            holder = Inout(request_values[name])
+            holders[name] = holder
+            arguments.append(holder)
+        else:
+            holder = Output()
+            holders[name] = holder
+            arguments.append(holder)
     foreign_dispatch = getattr(instance, "__svx_dispatch_foreign__", None)
     result = (
         foreign_dispatch(method_name, *arguments)
@@ -3382,19 +3702,21 @@ def dispatch_python_call(object_id: int, method_id: str, payload: bytes) -> byte
                 f"void inheritance method {method_id} returned a value"
             )
         return b""
-    if len(contract.response_fields) == 1 and contract.response_fields[0][0] == "result":
-        response = _record_value(
-            response_schema,
-            contract.response_fields,
-            {"result": result},
-        )
-    elif isinstance(result, response_schema.value_type):
-        response = result
-    else:
-        raise SVXInheritanceError(
-            f"inheritance method {method_id} must return "
-            f"{response_schema.value_type.__name__} for copy-out values"
-        )
+    response_values: dict[str, Any] = {}
+    has_result = any(name == "result" for name, _ in contract.response_fields)
+    if result is not None and not has_result:
+        raise SVXInheritanceError(f"task inheritance method {method_id} returned a value")
+    for name, _ in contract.response_fields:
+        if name == "result":
+            response_values[name] = result
+            continue
+        holder = holders[name]
+        if not holder._svx_copyout_is_set:
+            raise SVXInheritanceError(
+                f"inheritance method {method_id} did not assign {name!r}"
+            )
+        response_values[name] = holder.value
+    response = _record_value(response_schema, contract.response_fields, response_values)
     return _pack_call_record(response_schema, response)
 
 

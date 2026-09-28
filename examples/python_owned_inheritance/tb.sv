@@ -1,7 +1,7 @@
 `include "sv/svx_pkg.sv"
 `include "examples/python_owned_inheritance/generated/inheritance_mirrors.sv"
 
-class SvCounter extends svx_projection_examples_python_owned_inheritance_base_monitor_pkg::BaseMonitorProxy;
+class SvCounter extends svx_proxy_base_monitor::BaseMonitor;
   int calls;
   int seed;
 
@@ -28,9 +28,9 @@ class SvCounterFactory implements svx_pkg::svx_factory;
     output bit ok,
     output string error
   );
-    svx_projection_examples_python_owned_inheritance_base_monitor_pkg::BaseMonitorProxy::constructor_request_t constructor_request;
+    svx_proxy_base_monitor::BaseMonitor::constructor_request_t constructor_request;
     SvCounter counter;
-    constructor_request = svx_projection_examples_python_owned_inheritance_base_monitor_pkg::BaseMonitorProxy::svx_decode_constructor_request(request);
+    constructor_request = svx_proxy_base_monitor::BaseMonitor::svx_decode_constructor_request(request);
     counter = new(object_id, constructor_request.seed);
     ok = 1;
     error = "";

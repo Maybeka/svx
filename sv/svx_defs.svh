@@ -8,6 +8,19 @@
 `define SVX_PY_PROXY(PROXY_NAME, PYTHON_CLASS_ID, SV_BASE_NAME)
 `endif
 
+// Experimental typed handoff for an explicitly published Python-created
+// inheritance object. The cast prevents a name from being used as an
+// untyped object escape hatch.
+`ifndef SVX_GET_OBJECT
+`define SVX_GET_OBJECT(EXPECTED_TYPE, NAME, TARGET) \
+  begin \
+    svx_dispatchable __svx_published_object; \
+    svx_require_published_object(NAME, __svx_published_object); \
+    if (!$cast(TARGET, __svx_published_object)) \
+      $fatal(2, "SVX published object %s is not compatible with the expected type", NAME); \
+  end
+`endif
+
 typedef enum int {
   FINISHED,
   RUNNING,

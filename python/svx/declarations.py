@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 import inspect
 import json
 from pathlib import Path
 import sys
 from types import ModuleType
-from typing import Any, Callable, Iterable
+from typing import TYPE_CHECKING, Annotated, Any, Callable, Generic, Iterable, TypeAlias, TypeVar
 
 from .errors import SVXInheritanceError
 from .inheritance import (
@@ -28,6 +29,212 @@ from svtypes import SvObject
 
 SV_DECLARATION_SCHEMA_URI = "https://svx.dev/schema/sv-inheritance-declarations/v1"
 SV_DECLARATION_SCHEMA_VERSION = "1.0.0"
+_UNSET = object()
+
+
+@dataclass(frozen=True)
+class _ParameterMarker:
+    direction: str
+    type_declaration: Any
+
+
+@dataclass(frozen=True)
+class _FunctionMarker:
+    return_type: Any
+
+
+def _svtypes_binding(annotation: Any, *, where: str) -> dict[str, Any]:
+    """Derive all manifest data from SvTypes' public boundary contract."""
+
+    try:
+        if not svtypes.is_materializable_type(annotation):
+            raise TypeError("not a concrete SvTypes boundary type")
+        codec = svtypes.materialize_type_spec(annotation, location=where)
+        return {
+            "unified_type_name": svtypes.unified_type_name(codec),
+            "svtypes": svtypes.type_spec_identity(annotation, location=where),
+            "sv": svtypes.sv_type_expression(codec),
+            "sv_packer": svtypes.sv_packer_expression(codec),
+            "encoding_descriptor": svtypes.encoding_descriptor(codec).to_dict(),
+        }
+    except Exception as error:
+        raise TypeError(f"{where} must be a concrete SvTypes boundary type: {error}") from error
+
+
+def _type_declaration(value: Any, *, where: str) -> dict[str, Any]:
+    """Accept modern SvTypes annotations while retaining legacy manifests."""
+
+    if isinstance(value, dict):
+        return value
+    return _svtypes_binding(value, where=where)
+
+
+_T = TypeVar("_T")
+
+
+if TYPE_CHECKING:
+    # These aliases make declaration metadata transparent to Pyright.  Runtime
+    # marker classes below preserve the same concise annotation syntax.
+    Input: TypeAlias = _T
+    Function: TypeAlias = Annotated[_T, "svx.Function"]
+    Task: TypeAlias = Annotated[None, "svx.Task"]
+
+    class Output(Generic[_T]):
+        value: _T
+
+        def __init__(self) -> None: ...
+
+    class Inout(Generic[_T]):
+        value: _T
+
+        def __init__(self, value: _T) -> None: ...
+
+else:
+    class _ParameterDirection:
+        _direction = ""
+
+        def __init__(self, value: Any = _UNSET) -> None:
+            self._svx_copyout_value = value
+
+        @property
+        def value(self) -> Any:
+            if self._svx_copyout_value is _UNSET:
+                raise SVXInheritanceError(
+                    f"svx.{type(self).__name__} value is not available before the foreign call completes"
+                )
+            return self._svx_copyout_value
+
+        @value.setter
+        def value(self, value: Any) -> None:
+            self._svx_copyout_value = value
+
+        @property
+        def _svx_copyout_is_set(self) -> bool:
+            return self._svx_copyout_value is not _UNSET
+
+        @classmethod
+        def __class_getitem__(cls, type_declaration: Any) -> _ParameterMarker:
+            return _ParameterMarker(cls._direction, type_declaration)
+
+
+    class Input(_ParameterDirection):
+        """Function-annotation marker for an ``input`` SvTypes parameter."""
+
+        _direction = "input"
+
+
+    class Output(_ParameterDirection):
+        """Function-annotation marker for an ``output`` SvTypes parameter."""
+
+        _direction = "output"
+
+
+    class Inout(_ParameterDirection):
+        """Function-annotation marker for an ``inout`` SvTypes parameter."""
+
+        _direction = "inout"
+
+        def __init__(self, value: Any = _UNSET) -> None:
+            if value is _UNSET:
+                raise TypeError("svx.Inout(value) requires an initial value")
+            super().__init__(value)
+
+
+    class Task:
+        """Return annotation marking an inheritance member as an SV task."""
+
+        @classmethod
+        def __class_getitem__(cls, value: object):
+            raise TypeError("svx.Task has no function return type; use -> svx.Task")
+
+
+    class Function:
+        """Return annotation marking an inheritance member as an SV function."""
+
+        @classmethod
+        def __class_getitem__(cls, return_type: Any) -> _FunctionMarker:
+            return _FunctionMarker(return_type)
+
+
+def _resolved_annotations(function: Callable[..., Any]) -> dict[str, Any]:
+    """Resolve annotations while preserving a focused declaration diagnostic."""
+
+    try:
+        return inspect.get_annotations(function, eval_str=True)
+    except (NameError, TypeError) as error:
+        raise SVXInheritanceError(
+            f"cannot resolve annotations for inheritance method {function.__qualname__}: {error}"
+        ) from error
+
+
+def _return_declaration(function: Callable[..., Any], annotations: dict[str, Any]) -> tuple[str | None, Any]:
+    """Return the optional timing and SvTypes result binding from ``->``."""
+
+    annotation = annotations.get("return", inspect.Signature.empty)
+    if (
+        annotation is inspect.Signature.empty
+        or annotation is None
+        or annotation is type(None)
+    ):
+        return None, _UNSET
+    if annotation is Task:
+        return "task", _UNSET
+    if annotation is Function:
+        return "function", _UNSET
+    if isinstance(annotation, _FunctionMarker):
+        return "function", _type_declaration(
+            annotation.return_type,
+            where=f"inheritance method {function.__qualname__} return annotation",
+        )
+    raise SVXInheritanceError(
+        f"inheritance method {function.__qualname__} return annotation must be "
+        "svx.Task, svx.Function, or svx.Function[SVTYPES_TYPE]"
+    )
+
+
+def _parameter_declarations_from_annotations(
+    function: Callable[..., Any], annotations: dict[str, Any]
+) -> list[dict[str, Any]] | None:
+    """Build parameters from ``T``, ``Input[T]``, ``Output[T]``, and ``Inout[T]``."""
+
+    parameters = list(inspect.signature(function).parameters.values())
+    if not parameters or parameters[0].name != "self":
+        return None
+    declared: list[dict[str, Any]] = []
+    saw_marker = False
+    for parameter in parameters[1:]:
+        annotation = annotations.get(parameter.name, inspect.Signature.empty)
+        if not isinstance(annotation, _ParameterMarker) and annotation is not inspect.Signature.empty:
+            annotation = _ParameterMarker("input", annotation)
+        if annotation is inspect.Signature.empty:
+            if saw_marker:
+                raise SVXInheritanceError(
+                    f"inheritance method {function.__qualname__} must annotate every "
+                    "non-self parameter with a binding, svx.Input, svx.Output, or svx.Inout"
+                )
+            continue
+        if not isinstance(annotation, _ParameterMarker):
+            raise SVXInheritanceError(
+                f"inheritance method {function.__qualname__}.{parameter.name} annotation must be "
+                "a SvTypes type, svx.Input[TYPE], svx.Output[TYPE], or svx.Inout[TYPE]"
+            )
+        if not saw_marker and declared:
+            raise SVXInheritanceError(
+                f"inheritance method {function.__qualname__} must annotate every "
+                "non-self parameter with a binding, svx.Input, svx.Output, or svx.Inout"
+            )
+        saw_marker = True
+        declared.append(
+            inheritance_parameter(
+                parameter.name,
+                _type_declaration(
+                    annotation.type_declaration,
+                    where=f"inheritance method {function.__qualname__}.{parameter.name}",
+                ),
+                direction=annotation.direction,
+            )
+        )
+    return declared if saw_marker else None
 
 
 def _declared_svtypes_fields(cls: type) -> list[dict[str, Any]]:
@@ -169,45 +376,9 @@ def sv_mirror(canonical_id: str):
     return decorate
 
 
-def inheritance_type(
-    factory: Callable[..., Any],
-    *args: Any,
-    sv: str,
-    sv_packer: str,
-    **kwargs: Any,
-) -> dict[str, Any]:
-    """Build one declarative manifest type reference from a public SvTypes factory."""
-
-    if not callable(factory) or not isinstance(getattr(factory, "__module__", None), str):
-        raise TypeError("inheritance_type() factory must be a public callable")
-    symbol = getattr(factory, "__name__", None)
-    if not isinstance(symbol, str) or not symbol.isidentifier():
-        raise TypeError("inheritance_type() factory must have a public identifier name")
-    try:
-        json.dumps([args, kwargs])
-    except (TypeError, ValueError) as error:
-        raise TypeError("inheritance_type() arguments must be JSON values") from error
-    codec = factory(*args, **kwargs)
-    import svtypes
-
-    descriptor = svtypes.encoding_descriptor(codec)
-    return {
-        "unified_type_name": svtypes.unified_type_name(codec),
-        "python": {
-            "module": factory.__module__,
-            "symbol": symbol,
-            "args": list(args),
-            "kwargs": kwargs,
-        },
-        "sv": sv,
-        "sv_packer": sv_packer,
-        "encoding_descriptor": descriptor.to_dict(),
-    }
-
-
 def inheritance_parameter(
     name: str,
-    type_binding: dict[str, Any],
+    type_binding: Any,
     *,
     direction: str = "input",
 ) -> dict[str, Any]:
@@ -219,39 +390,79 @@ def inheritance_parameter(
         raise ValueError("SVX inheritance does not support ref or const ref parameters; use input, output, or inout")
     if direction not in {"input", "output", "inout"}:
         raise ValueError("inheritance parameter direction is invalid")
-    if not isinstance(type_binding, dict):
-        raise TypeError("inheritance parameter type must be a declarative type binding")
-    declaration = {"name": name, "type": type_binding, "direction": direction}
+    declaration = {
+        "name": name,
+        "type": _type_declaration(type_binding, where=f"inheritance parameter {name}"),
+        "direction": direction,
+    }
     return declaration
 
 
 def inheritance_method(
+    function: Callable[..., Any] | None = None,
     *,
-    parameters: Iterable[dict[str, Any]] = (),
-    return_type: dict[str, Any] | str = "void",
-    timing: str = "task",
+    parameters: Iterable[dict[str, Any]] | None = None,
+    return_type: dict[str, Any] | str | object = _UNSET,
+    timing: str | None = None,
     virtual: bool = True,
     pure_virtual: bool = False,
 ):
-    """Attach manifest method metadata to a Python-owned method."""
+    """Attach manifest metadata, optionally inferred from a Python prototype.
 
-    declaration = {
-        "parameters": list(parameters),
-        "return_type": return_type,
-        "timing": timing,
-        "virtual": virtual,
-        "pure_virtual": pure_virtual,
-    }
+    The concise form is ``@inheritance_method`` with ``T``, ``Input[T]``,
+    ``Output[T]``, or ``Inout[T]`` parameter annotations and a ``Task`` or ``Function[T]``
+    return annotation. The explicit keyword form remains available.
+    """
 
-    def decorate(function: Callable[..., Any]):
-        if hasattr(function, "__svx_inheritance_method__"):
+    def decorate(method: Callable[..., Any]):
+        if hasattr(method, "__svx_inheritance_method__"):
             raise SVXInheritanceError(
-                f"inheritance method {function.__qualname__} is already declared"
+                f"inheritance method {method.__qualname__} is already declared"
             )
-        setattr(function, "__svx_inheritance_method__", declaration)
-        return function
+        annotations = _resolved_annotations(method)
+        annotation_parameters = _parameter_declarations_from_annotations(method, annotations)
+        annotation_timing, annotation_return_type = _return_declaration(method, annotations)
+        if parameters is not None and annotation_parameters is not None:
+            raise SVXInheritanceError(
+                f"inheritance method {method.__qualname__} cannot mix parameters= with "
+                "prototype parameter annotations"
+            )
+        if return_type is not _UNSET and annotation_return_type is not _UNSET:
+            raise SVXInheritanceError(
+                f"inheritance method {method.__qualname__} cannot mix return_type= with "
+                "svx.Function[TYPE]"
+            )
+        if timing is not None and timing not in {"function", "task"}:
+            raise SVXInheritanceError(
+                f"inheritance method {method.__qualname__} timing must be 'function' or 'task'"
+            )
+        if timing is not None and annotation_timing is not None and timing != annotation_timing:
+            raise SVXInheritanceError(
+                f"inheritance method {method.__qualname__} timing={timing!r} conflicts "
+                f"with return annotation {annotation_timing!r}"
+            )
+        declaration = {
+            "parameters": list(parameters) if parameters is not None else (annotation_parameters or []),
+            "return_type": (
+                _type_declaration(
+                    return_type,
+                    where=f"inheritance method {method.__qualname__} return_type",
+                )
+                if return_type is not _UNSET
+                else annotation_return_type if annotation_return_type is not _UNSET else "void"
+            ),
+            "timing": annotation_timing or timing or "task",
+            "virtual": virtual,
+            "pure_virtual": pure_virtual,
+        }
+        setattr(method, "__svx_inheritance_method__", declaration)
+        return method
 
-    return decorate
+    if function is None:
+        return decorate
+    if not callable(function):
+        raise TypeError("inheritance_method() requires a callable")
+    return decorate(function)
 
 
 def inheritance_class(
@@ -290,16 +501,15 @@ def inheritance_class(
             metadata = getattr(member, "__svx_inheritance_method__", None)
             if metadata is None:
                 continue
-            request_names = [
-                parameter["name"]
-                for parameter in metadata["parameters"]
-                if parameter.get("direction", "input") in {"input", "inout"}
-            ]
-            actual_names = list(inspect.signature(member).parameters)
-            if actual_names != ["self", *request_names]:
+            signature_parameters = list(inspect.signature(member).parameters.values())
+            actual_names = [parameter.name for parameter in signature_parameters]
+            expected_names = ["self", *(
+                parameter["name"] for parameter in metadata["parameters"]
+            )]
+            if actual_names != expected_names:
                 raise SVXInheritanceError(
                     f"Python inheritance method {cls.__name__}.{name} signature must be "
-                    f"(self, {', '.join(request_names)})"
+                    f"(self, {', '.join(expected_names[1:])})"
                 )
             methods.append(
                 {

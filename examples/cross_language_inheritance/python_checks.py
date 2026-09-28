@@ -1,14 +1,20 @@
 import svx
 
-from svx_mirrors.example_driver_pkg import BaseDriverMirror
+from svx_mirror.example_driver_pkg import BaseDriver
 
 
-class PythonDriver(BaseDriverMirror):
+class PythonDriver(BaseDriver):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
     def drive(self):
+        self.calls += 1
         svx.display("PythonDriver received the SV virtual call")
         svx.delay(2, "ns")
 
 
-@svx.export(name="inheritance.report")
-def report():
-    svx.display("cross-language inheritance example passed")
+@svx.export(name="inheritance.create_driver")
+def create_driver():
+    driver = PythonDriver()
+    svx.publish_object("example.driver", driver)

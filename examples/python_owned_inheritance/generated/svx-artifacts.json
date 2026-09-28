@@ -10,18 +10,12 @@
       "language": "python",
       "module": "svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "be9d8851f0a6d74c76d017209cd44ac0aaddc73d084363690871c1355fe8cf72"
-    },
-    {
-      "language": "python",
-      "module": "svx_sv",
-      "path": "python/svx_sv/__init__.py",
-      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+      "sha256": "36c4f485af8772b827e1fd298e705e8d96d662007f0d54d957d261d4b21d8f24"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "dbeef484c6c38399aaca19d9af8f544e1cdc6961c46b7572517528db8c1d31a2"
+      "sha256": "46febb087a98f46c9ddcd9697efa3b6993fc7b575e386807df8819ab70e0a76d"
     }
   ],
   "callables": [
@@ -78,6 +72,13 @@
       }
     }
   ],
+  "generated_types": [
+    {
+      "canonical_class_id": "py://examples/python_owned_inheritance/base_monitor/BaseMonitor",
+      "python_adapter_fqn": "svx_py.examples.python_owned_inheritance.base_monitor.BaseMonitor",
+      "systemverilog_fqn": "svx_proxy_base_monitor::BaseMonitor"
+    }
+  ],
   "generator_abi_version": 2,
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
@@ -102,11 +103,9 @@
         "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
         "unified_type_name": "svtypes.Int"
       },
-      "python": {
-        "args": [],
-        "kwargs": {},
-        "module": "svtypes",
-        "symbol": "Int"
+      "svtypes": {
+        "kind": "scalar",
+        "name": "Int"
       },
       "unified_type_name": "svtypes.Int"
     }

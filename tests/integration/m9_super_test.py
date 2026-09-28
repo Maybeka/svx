@@ -1,8 +1,8 @@
 import svx
-from svx_mirrors.tb_pkg import BaseDriverMirror
+from svx_mirror.tb_pkg import BaseDriver
 
 
-class Driver(BaseDriverMirror):
+class Driver(BaseDriver):
     def __init__(self):
         super().__init__()
 
@@ -18,5 +18,5 @@ class Driver(BaseDriverMirror):
 @svx.export(name="m9.super_setup")
 def setup():
     # Importing this module registers Driver as the Python implementation for
-    # the SV-initiated BaseDriverMirror.  SV owns construction in this case.
+    # the SV-initiated BaseDriver bridge. SV owns construction in this case.
     return None

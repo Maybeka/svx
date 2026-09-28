@@ -190,8 +190,8 @@ bool svx_channel_put_payload(const char *name, void *payload, int process_index)
   ScopedDpiScope scope;
   using func_t = void (*)(const char *, void *, int, unsigned char *);
   unsigned char cancelled = 0;
-  resolve_symbol<func_t>("svx_channel_put_payload")(name, payload, process_index,
-                                                       &cancelled);
+  resolve_symbol<func_t>("svx_channel_put_payload_cancelable")(name, payload,
+                                                                 process_index, &cancelled);
   return cancelled != 0;
 }
 
@@ -200,8 +200,8 @@ void *svx_channel_get_payload(const char *name, int process_index, bool *cancell
   using func_t = void (*)(const char *, int, void **, unsigned char *);
   void *payload = nullptr;
   unsigned char was_cancelled = 0;
-  resolve_symbol<func_t>("svx_channel_get_payload")(name, process_index, &payload,
-                                                       &was_cancelled);
+  resolve_symbol<func_t>("svx_channel_get_payload_cancelable")(name, process_index,
+                                                                 &payload, &was_cancelled);
   if (cancelled != nullptr) *cancelled = was_cancelled != 0;
   return payload;
 }
@@ -211,8 +211,8 @@ void *svx_channel_peek_payload(const char *name, int process_index, bool *cancel
   using func_t = void (*)(const char *, int, void **, unsigned char *);
   void *payload = nullptr;
   unsigned char was_cancelled = 0;
-  resolve_symbol<func_t>("svx_channel_peek_payload")(name, process_index, &payload,
-                                                        &was_cancelled);
+  resolve_symbol<func_t>("svx_channel_peek_payload_cancelable")(name, process_index,
+                                                                  &payload, &was_cancelled);
   if (cancelled != nullptr) *cancelled = was_cancelled != 0;
   return payload;
 }
@@ -279,6 +279,12 @@ bool svx_create_object(const char *class_id, void *request,
   if (object_id != nullptr) *object_id = result;
   if (error != nullptr) *error = message ? message : "";
   return ok != 0;
+}
+
+void svx_publish_object(const char *name, std::uint64_t object_id) {
+  ScopedDpiScope scope;
+  using func_t = void (*)(const char *, std::uint64_t);
+  resolve_symbol<func_t>("svx_publish_object")(name, object_id);
 }
 
 } // namespace svx::dpi

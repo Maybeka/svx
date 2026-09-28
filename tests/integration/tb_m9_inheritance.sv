@@ -24,9 +24,7 @@ endpackage
 module tb;
   import m10_object_types_pkg::*;
   import svx_pkg::*;
-  import svx_projection_tb_pkg_BaseDriverMirror_pkg::*;
-
-  class IntermediateDriver extends BaseDriverMirror;
+  class IntermediateDriver extends svx_mirror_sv_tb_pkg_BaseDriver::BaseDriver;
     function new(input int seed);
       super.new(seed);
     endfunction

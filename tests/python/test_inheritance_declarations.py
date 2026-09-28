@@ -5,15 +5,19 @@ import sys
 from types import ModuleType
 
 import pytest
-from svtypes import Int, Object, Queue
+from svtypes import Bit, Int, Object, Queue, type_spec_identity
 
 from svx import (
+    Function,
+    Inout,
+    Input,
+    Output,
     SVMirror,
     SVXInheritanceError,
+    Task,
     inheritance_class,
     inheritance_method,
     inheritance_parameter,
-    inheritance_type,
     manifest_from_declarations,
     sv_mirror,
 )
@@ -28,7 +32,114 @@ from svx.sv_scan import scan_sv_sources, validate_sv_declarations
 
 
 def int_type():
-    return inheritance_type(Int, sv="int", sv_packer="int_packer")
+    return Int
+
+
+def test_return_markers_select_inheritance_method_timing():
+    module = ModuleType("checks.return_markers")
+
+    @inheritance_method(return_type=int_type())
+    def calculate(self) -> Function:
+        return 3
+
+    @inheritance_method()
+    def drive(self) -> Task:
+        return None
+
+    calculate.__module__ = module.__name__
+    drive.__module__ = module.__name__
+    Driver = type(
+        "Driver",
+        (),
+        {"__module__": module.__name__, "calculate": calculate, "drive": drive},
+    )
+    Driver = inheritance_class(canonical_id="py://checks/Driver")(Driver)
+    module.Driver = Driver
+
+    manifest = manifest_from_declarations(python_modules=(module,))
+    timings = {method.name: method.timing for method in manifest.classes[0].methods}
+    assert timings == {"calculate": "function", "drive": "task"}
+
+
+def test_annotated_prototype_derives_parameters_return_and_timing():
+    module = ModuleType("checks.compact_prototype")
+
+    @inheritance_method
+    def calculate(
+        self,
+        source: Bit[8],
+        changed: Inout[Bit[8]],
+        observed: Output[Queue[Bit[8]]],
+    ) -> Function[Int]:
+        changed.value = source
+        observed.value = []
+        return source
+
+    calculate.__module__ = module.__name__
+    Driver = type(
+        "Driver",
+        (),
+        {"__module__": module.__name__, "calculate": calculate},
+    )
+    Driver = inheritance_class(canonical_id="py://checks/CompactDriver")(Driver)
+    module.Driver = Driver
+
+    manifest = manifest_from_declarations(python_modules=(module,))
+    method = manifest.classes[0].methods[0]
+    assert method.timing == "function"
+    assert method.return_type is not None
+    assert [parameter.name for parameter in method.parameters] == [
+        "source",
+        "changed",
+        "observed",
+    ]
+    assert [parameter.direction for parameter in method.parameters] == [
+        "input",
+        "inout",
+        "output",
+    ]
+    serialized = manifest_dict(manifest)
+    parameter_types = serialized["classes"][0]["methods"][0]["parameters"]
+    assert [item["type"]["svtypes"] for item in parameter_types] == [
+        type_spec_identity(Bit[8]),
+        type_spec_identity(Bit[8]),
+        type_spec_identity(Queue[Bit[8]]),
+    ]
+    assert all("python" not in item["type"] for item in parameter_types)
+
+
+def test_annotated_output_is_a_regular_python_parameter():
+    @inheritance_method
+    def calculate(self, observed: Output[Int]) -> Task:
+        observed.value = 1
+        return None
+
+    Valid = type("Valid", (), {"calculate": calculate})
+    inheritance_class()(Valid)
+
+
+def test_explicit_input_marker_is_equivalent_to_an_unwrapped_binding():
+    INT = int_type()
+
+    @inheritance_method
+    def drive(self, value: Input[INT]) -> Task:
+        return None
+
+    parameter = drive.__svx_inheritance_method__["parameters"][0]
+    assert parameter["direction"] == "input"
+    assert parameter["type"]["svtypes"] == {"kind": "scalar", "name": "Int"}
+
+
+def test_return_marker_rejects_conflicting_or_unknown_timing():
+    with pytest.raises(SVXInheritanceError, match="conflicts"):
+        @inheritance_method(timing="task")
+        def calculate(self) -> Function:
+            return None
+
+    with pytest.raises(SVXInheritanceError, match="svx.Task, svx.Function"):
+        @inheritance_method()
+        def invalid(self) -> int:
+            return 3
 
 
 def test_python_decorators_and_sv_sidecar_normalize_to_v2_manifest(tmp_path):
@@ -41,8 +152,10 @@ def test_python_decorators_and_sv_sidecar_normalize_to_v2_manifest(tmp_path):
         ),
         timing="task",
     )
-    def exchange(self, changed):
-        return changed
+    def exchange(self, changed, observed):
+        changed.value += 1
+        observed.value = changed.value
+        return None
 
     exchange.__module__ = module.__name__
     Driver = type("Driver", (), {"__module__": module.__name__, "exchange": exchange})
@@ -117,12 +230,12 @@ def test_sv_mirror_declaration_contributes_complete_sv_base_lineage(tmp_path):
     assert [item.canonical_id for item in child.base_lineage] == ["sv://tb_pkg/BaseDriver"]
 
 
-def test_python_decorator_rejects_output_as_a_python_call_argument():
+def test_python_decorator_requires_output_in_its_python_call_signature():
     @inheritance_method(
         parameters=(inheritance_parameter("result", int_type(), direction="output"),),
         timing="task",
     )
-    def sample(self, result):
+    def sample(self):
         return None
 
     sample.__module__ = "checks.invalid"
@@ -146,8 +259,8 @@ def test_inheritance_declaration_discovers_direct_svtypes_fields(monkeypatch):
         {
             "__module__": module.__name__,
             "count": Int(),
-            "history": Queue(Int()),
-            "child": Object("Child"),
+            "history": Queue[Int](),
+            "child": Object["Child"](),
         },
     )
     Driver = inheritance_class(canonical_id="py://checks/ProjectedDriver")(Driver)
@@ -313,14 +426,11 @@ def test_inheritance_manifest_cli_generates_and_checks(tmp_path, monkeypatch):
     module_path = tmp_path / "declared.py"
     module_path.write_text(
         "from svtypes import Int\n"
-        "from svx import inheritance_class, inheritance_method, "
-        "inheritance_parameter, inheritance_type\n"
-        "INT = inheritance_type(Int, sv='int', sv_packer='int_packer')\n"
+        "from svx import Function, inheritance_class, inheritance_method\n"
         "@inheritance_class(canonical_id='py://declared/Driver')\n"
         "class Driver:\n"
-        "    @inheritance_method(parameters=(inheritance_parameter('value', INT),), "
-        "return_type=INT, timing='function')\n"
-        "    def run(self, value):\n"
+        "    @inheritance_method\n"
+        "    def run(self, value: Int) -> Function[Int]:\n"
         "        return value\n"
     )
     monkeypatch.syspath_prepend(str(tmp_path))

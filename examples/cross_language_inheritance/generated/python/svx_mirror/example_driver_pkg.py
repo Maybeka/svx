@@ -2,21 +2,21 @@
 from __future__ import annotations
 from svx import _native
 from svx.declarations import SVMirror
-from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass, response_value
+from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass
 
 register_contract({
-    'sv://example_driver_pkg/BaseDriver#drive': {'request': (), 'response': ()},
+    'sv://example_driver_pkg/BaseDriver#drive': {'parameters': (), 'request': (), 'response': ()},
 })
 register_constructor('sv://example_driver_pkg/BaseDriver', ())
 
-class BaseDriverMirror(SVMirror):
+class BaseDriver(SVMirror):
     """Executable Python base view of example_driver_pkg::BaseDriver."""
     __svx_foreign_class_id__ = 'sv://example_driver_pkg/BaseDriver'
     __svx_projected_fields_by_class_id__ = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        if BaseDriverMirror in cls.__bases__:
+        if BaseDriver in cls.__bases__:
             register_python_subclass('sv://example_driver_pkg/BaseDriver', cls)
 
     def _svx_bind_active_projected_fields(self):

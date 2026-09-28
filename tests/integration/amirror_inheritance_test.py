@@ -1,9 +1,9 @@
 import svx
 
-from svx_mirrors.amirror_pkg import BaseMirror
+from svx_mirror.amirror_pkg import Base
 
 
-class PythonChild(BaseMirror):
+class PythonChild(Base):
     def ping(self):
         svx.display("AMIRROR_PYTHON_OVERRIDE")
         svx.delay(2, "ns")

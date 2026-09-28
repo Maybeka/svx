@@ -13,12 +13,10 @@ endpackage
 `include ".tmp/amirror_inheritance/mirrors.sv"
 
 module tb;
-  import amirror_pkg::*;
   import svx_pkg::*;
-  import svx_projection_amirror_pkg_BaseMirror_pkg::*;
 
   initial begin
-    BaseMirror driver;
+    svx_mirror_sv_amirror_pkg_Base::Base driver;
     time before_ping;
 
     svx_init();

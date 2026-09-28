@@ -68,6 +68,10 @@ def inheritance_create_sv(class_id: str, request: bytes) -> int:
     return int(_native().inheritance_create_sv(class_id, request))
 
 
+def inheritance_publish(name: str, object_id: int) -> None:
+    _native().inheritance_publish(str(name), int(object_id))
+
+
 def inheritance_stats() -> tuple[int, int]:
     count, nanoseconds = _native().inheritance_stats()
     return int(count), int(nanoseconds)

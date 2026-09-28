@@ -2,32 +2,20 @@
   "artifacts": [
     {
       "language": "python",
-      "module": "svx_mirrors",
-      "path": "python/svx_mirrors/__init__.py",
+      "module": "svx_mirror",
+      "path": "python/svx_mirror/__init__.py",
       "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
     },
     {
       "language": "python",
-      "module": "svx_mirrors.example_driver_pkg",
-      "path": "python/svx_mirrors/example_driver_pkg.py",
-      "sha256": "2b925546c32fb649ccbd85c3d6e7805bb8d698a1c8ef03be29d351e7882c69af"
-    },
-    {
-      "language": "python",
-      "module": "svx_py",
-      "path": "python/svx_py/__init__.py",
-      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
-    },
-    {
-      "language": "python",
-      "module": "svx_sv",
-      "path": "python/svx_sv/__init__.py",
-      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+      "module": "svx_mirror.example_driver_pkg",
+      "path": "python/svx_mirror/example_driver_pkg.py",
+      "sha256": "f3026e037395112095a1b69e2b6e4f68e9f1d56d8c4a33320c6b90dfe236caaa"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "30da86a0e79150b1dd78a8ea76c9495f6cfb22aad1d2767e10e4bc403720f9a7"
+      "sha256": "ece3ebd67a4a426da387ed6c9b9c1c1837a63c6a737d9766c6b21e93b069ef49"
     }
   ],
   "callables": [
@@ -53,9 +41,15 @@
   "constructors": [
     {
       "canonical_class_id": "sv://example_driver_pkg/BaseDriver",
-      "initiator": "sv",
+      "initiator": "python",
       "request_fields": [],
       "request_record": null
+    }
+  ],
+  "generated_types": [
+    {
+      "canonical_class_id": "sv://example_driver_pkg/BaseDriver",
+      "python_fqn": "svx_mirror.example_driver_pkg.BaseDriver"
     }
   ],
   "generator_abi_version": 2,

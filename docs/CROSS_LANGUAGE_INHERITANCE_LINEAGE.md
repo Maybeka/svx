@@ -38,20 +38,26 @@ must be identical.
 
 ## Projection Stack
 
+**Naming convention.** Earlier design notes in this document used `AMirror`,
+`BProxy`, `CMirror`, and `DProxy` as role labels. They are no longer generated
+public type names. An SV `pkg::A` is exposed in Python as
+`svx_mirror.pkg.A`; a Python `module.B` is exposed in SV as
+`svx_proxy_module::B`. The role labels below describe bridge portions only.
+
 For one SV-to-Python boundary, an SV base `A` and Python child `B` need a
 paired mirror on each side:
 
 ```text
-SV:      A <- AMirror
-Python:  AMirror <- B
+SV:      A <- svx_mirror_sv_<pkg>_A::A
+Python:  svx_mirror.<pkg>.A <- B
 ```
 
-The two `AMirror` names occur in separate language namespaces. The generated
-SV `AMirror extends A`; the Python `AMirror` is B's executable base view and
-creates that SV mirror. The Python B instance and the SV AMirror dynamic object
+The generated SV `A` bridge extends the source `A`; the Python
+`svx_mirror.<pkg>.A` is B's executable base view and creates that SV bridge.
+The Python B instance and the SV bridge dynamic object
 share one object ID. The SV mirror contains A's normal base portion; the Python
 mirror is a base portion of B, not a separately allocated Python object. There
-is no `BProxy` for a direct `B()` construction.
+is no SV proxy for a direct `B()` construction.
 
 The SV AMirror overrides each explicitly exposed A virtual member and dispatches
 it to the Python object registered under the shared object ID. Its generated
@@ -60,24 +66,52 @@ Python `AMirror.super()` uses that gateway. Thus both Python-initiated calls and
 ordinary SV virtual calls on the SV AMirror can reach B's Python override
 without changing the user's A implementation.
 
-`BProxy extends SV::AMirror` is created only when a later Python-to-SV edge
+`svx_proxy_<module>::B` is created only when a later Python-to-SV edge
 needs B to be an SV base, for example `A(SV) -> B(Python) -> C(SV)`. The C dynamic object
-then contains a BProxy portion, which provides B's SV-visible virtual dispatch,
-qualified base gateways, and selected projected state. More precisely, BProxy
-extends the generated SV AMirror, preserving A's callback-dispatch layer.
+then contains that B projection, which provides B's SV-visible virtual dispatch,
+qualified base gateways, and selected projected state. It extends the generated
+SV A bridge, preserving A's callback-dispatch layer.
 
 For a complete alternating chain, each class-specific projection must be
 preserved:
 
 ```text
-SV:      A <- AMirror <- BProxy <- C <- DProxy
-Python:  AMirror <- B <- CMirror <- D
+SV:      A <- bridge(A) <- svx_proxy_<B_module>::B <- C <- bridge(C)
+Python:  svx_mirror.<A_pkg>.A <- B <- svx_mirror.<C_pkg>.C <- D
 ```
 
 The cross-language links are object bindings, not native `extends` relations.
 For a direct B instance, Python AMirror holds SV AMirror's object ID and its
 base-call path targets the A base portion. For C and D instances, BProxy makes
 B visible as an SV base for C and carries B's additional SV-visible contract.
+
+## Experimental Published-Object Handoff
+
+When Python constructs an instance derived from an SV base, the paired SV
+bridge is a real instance of that base class. Existing SV code may consume it,
+but only after Python explicitly publishes that one instance:
+
+```python
+driver = PythonDriver()
+svx.publish_object("env.driver", driver)
+```
+
+SV retrieves it with a declared expected type:
+
+```systemverilog
+example_driver_pkg::BaseDriver driver;
+`SVX_GET_OBJECT(example_driver_pkg::BaseDriver, "env.driver", driver)
+driver.drive();
+```
+
+`publish_object` is experimental. It accepts only a currently bound SVX
+cross-language instance, and its name is an application-defined capability
+name, not a general Python-object lookup key. `SVX_GET_OBJECT` first resolves
+the published live object and then uses `$cast`; a missing, retired, or
+incompatible object terminates simulation. Publishing the same name again
+replaces the previous publication. Releasing the paired object or shutting
+down SVX removes every publication for that object. Publication does not
+transfer ownership or extend the object's lifetime.
 
 ## Member Invocation Semantics
 
@@ -108,12 +142,12 @@ record contains the optional function return plus named encoded updates for all
 before returning to its caller. This is ordinary copy-in/copy-out behavior, so
 `inout` requires no alias protocol.
 
-For an SV-to-Python callback with copy-out values, the generated AMirror module
-exports a `<Class><Method>Response(**values)` factory. The Python override
-returns this factory result rather than constructing an implementation-specific
-SvTypes record class directly. The factory validates and normalizes every named
-field through the generated method contract. Conversely, a Python-to-SV mirror
-call returns the decoded SvTypes response object; scalar fields use `.value`.
+Python preserves every SV formal in its original order. `input` is decoded as a
+value; `inout` and `output` are mutable `svx.Inout` / `svx.Output` carriers.
+The override reads or assigns carrier `.value` and returns only its ordinary
+function result. Conversely, Python callers supply the same carriers to a
+generated Python-to-SV mirror and observe their updated `.value` after the
+call. Generated SvTypes request and response records stay private.
 
 Cross-language inheritance methods accept only `input`, `output`, and `inout`
 parameters. A manifest with `ref` or `const ref` is rejected during generation.
@@ -222,11 +256,13 @@ normalized JSON literal value. The same specialization must have one canonical
 class ID across all targets and lineage entries.
 
 The generator checks the declared argument count, kind, and order against the
-parsed SV source, and emits a digest-qualified helper name such as
-`Packet__svx_a1b2c3_mirror`. It rejects open parameters (`T`), unevaluated
-expressions (`f(N)`), and macro/localparam-dependent values: those cannot give
-the generated artifact a stable type or name. Concrete specializations remain
-ordinary SV inheritance; only their generated helper names are qualified.
+parsed SV source. A generated specialization keeps the source simple class
+name, such as `Packet`; its closed parameter list remains on the SV source
+reference. Two distinct specializations that would occupy one public generated
+package/module are rejected rather than receiving a hash suffix. Open
+parameters (`T`), unevaluated expressions (`f(N)`), and
+macro/localparam-dependent values are rejected because they cannot give the
+generated artifact a stable type or name.
 
 ### Projected Field Storage Binding
 
@@ -522,6 +558,25 @@ A instance has a Python companion. The generated AMirror implementation gains
 only the A methods and fields explicitly exposed by A's manifest declaration,
 including qualified typed base-call operations.
 
+### Public Generated Type Names
+
+Generated bridge types are public at the language boundary and retain the
+foreign source class's simple name. For SV `drivers_pkg::A`, Python imports
+`svx_mirror.drivers_pkg.A`. For Python `uvmx.env.agent.B`, SV derives from
+`svx_proxy_agent::B`; the package stem is the final Python module component.
+
+The SV subclass that must override an SV source's virtual members remains an
+implementation artifact because SV needs a real derived dynamic type. It is
+named `svx_mirror_sv_drivers_pkg_A::A`, not `AMirror`. The generated Python
+`svx_mirror.drivers_pkg.A` class and the generated SV
+`svx_proxy_agent::B` class directly own their bridge behavior; no extra public
+facade or `*Mirror`/`*Proxy` type is emitted. The artifact manifest records
+these public full names by canonical class ID.
+
+Two Python source classes with the same simple class name and final module
+component would request the same SV full name. That is a generation error; it
+is never resolved with a hash or an order-dependent suffix.
+
 ### Static Interface Contract
 
 The AMirror source body is the Python static interface for the exposed A
@@ -638,25 +693,23 @@ completed. A virtual boundary call attempted during an unbound construction
 phase fails with `CrossLanguageConstructionError`; SVX must not silently call a
 wrong base implementation or manufacture a partial companion object.
 
-The runtime records this as `ALLOCATED`, `SV_CONSTRUCTED`, `BOUND`,
-`PY_INITIALIZED`, and `ACTIVE`. Python-origin construction allocates the ID,
-constructs the final SV projection, binds it, then runs the Python initializer.
+Python-origin construction allocates the ID, constructs the final SV
+projection, registers and binds it, then runs the Python initializer.
 SV-origin construction uses the generated AMirror constructor path to allocate
 and bind B when `new C(...)` omits its optional internal object-ID argument.
 For a C portion that may also be created through `CMirror`, the marked C
 constructor accepts that trailing optional ID and forwards it to BProxy; a
 nonzero value reuses the already allocated cross-language object instead of
 constructing another B. There is no portable way to intercept completion of
-arbitrary handwritten `new C(...)` outside the marked construction path. A
-failure unbinds external field storage first,
-removes registry entries, and marks the ID `ABORTED`.
+arbitrary handwritten `new C(...)` outside the generated construction path.
+A failure unbinds external field storage first and removes registry entries.
 
 Python-origin pairs own the Python object and their internal SV companion.
-An SV caller that writes `new C(...)` owns that actual SV object; SVX owns only
-the borrowed companion binding. `RemoteRef` is non-owning. An already existing
-SV object is never silently converted according to guessed dynamic type:
-`svx.adopt_instance(target, handle)` is the only supported opt-in, creates an
-uninitialized mirror view, and does not invoke Python `__init__`.
+An SV caller that writes generated `new C(...)` owns that actual SV object;
+SVX owns only the borrowed companion binding. `RemoteRef` is non-owning. SVX
+does not convert arbitrary pre-existing SV objects into mirrors: it has no
+general SV object reflection or destructor hook, and every cross-language
+instance must enter through a generated construction path.
 
 Each cross-language invocation carries a monotonic call ID and a logical
 receiver/method stack. Entering a receiver/method pair already active on that

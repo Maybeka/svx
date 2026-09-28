@@ -421,30 +421,40 @@ the project's target simulator configuration.
 ## 17. Cross-Language Inheritance
 
 Cross-language inheritance is generated from an SVX inheritance manifest. The
-manifest is the only runtime input. Every value binding names an SvTypes Python
-codec, its SV declaration, and its generated SV packer; SVX transports only
-object/method metadata and opaque SvTypes bytes.
+manifest is the only runtime input. Every value binding records a canonical
+SvTypes type identity plus SvTypes-derived SV declaration and packer metadata;
+SVX transports only object/method metadata and opaque SvTypes bytes.
 
 The manifest may be authored directly or normalized from declaration front
 ends. A Python-owned class uses explicit decorators:
 
 ```python
 from svtypes import Int
-from svx import (inheritance_class, inheritance_method,
-                 inheritance_parameter, inheritance_type)
-
-INT = inheritance_type(Int, sv="int", sv_packer="int_packer")
+from svx import Function, inheritance_class, inheritance_method
 
 @inheritance_class(canonical_id="py://checks/BaseMonitor")
 class BaseMonitor:
-    @inheritance_method(
-        parameters=(inheritance_parameter("sample_id", INT),),
-        return_type=INT,
-        timing="function",
-    )
-    def sample(self, sample_id):
+    @inheritance_method
+    def sample(self, sample_id: Int) -> Function[Int]:
         return sample_id
 ```
+
+An unwrapped concrete SvTypes type `T` and `Input[T]` mean `input`; `Output[T]` and
+`Inout[T]` put their respective direction in the Python prototype. Each
+parameter is independent: a direction marker does not affect later parameters.
+`-> Task`, `-> Function`, and
+`-> Function[T]` select a task, a void function, and a function with a SvTypes
+result respectively. They are declaration metadata, not Python runtime value
+types. `Output[T]` and `Inout[T]` remain in their declared position and receive
+mutable `svx.Output` / `svx.Inout` carriers; access their `.value` and return
+only the ordinary function result. Generated SvTypes records are private. The
+older `parameters=`, `return_type=`, and `timing=` form remains available but
+cannot be mixed with an annotation for the same fact. This rule does not apply
+to `@svx.export` or `@svx.test`, whose entry is always task-shaped.
+
+The markers remain friendly to static tooling: `Input[T]` is checked as `T`,
+`Function[T]` as `T`, and `Task` as `None`; `Output[T]` and `Inout[T]` expose a
+typed `.value: T` carrier.
 
 SV-owned declarations use a versioned JSON sidecar with schema URI
 `https://svx.dev/schema/sv-inheritance-declarations/v1`. Its `classes` entries
@@ -478,12 +488,15 @@ initialization. Use the same command with `--check` in a build verification
 step to reject stale mirrors without rewriting them.
 
 For an SV-owned `tb_pkg::BaseDriver` that crosses into Python, derive from the
-generated `svx_mirrors.tb_pkg.BaseDriverMirror`; SV constructs the corresponding
-`BaseDriverMirror`, which creates and binds the Python instance. For a
-Python-owned `checks.BaseMonitor` that is followed by an SV descendant, derive
-in SV from the generated `svx_projection_checks_pkg::BaseMonitorProxy`; Python
-accesses the SV-derived object through `svx_py.checks.BaseMonitor`. AMirror and
-Proxy helpers are generated only for explicit cross-language lineage targets.
+generated `svx_mirror.tb_pkg.BaseDriver`; SV constructs the implementation
+bridge `svx_mirror_sv_tb_pkg_BaseDriver::BaseDriver`, which creates and binds
+the Python instance. For a Python-owned `checks.BaseMonitor` that is followed
+by an SV descendant, derive in SV from the generated
+`svx_proxy_checks::BaseMonitor`; Python accesses its own source base through
+the generated same-name runtime adapter `svx_py.checks.BaseMonitor`, which
+forwards the source Python implementation to its SV companion. The generated
+public types keep the source simple name; their package/module identifies the
+boundary and source namespace.
 Declared task overrides may call `super()` across either language boundary.
 
 All proxy objects use a nonzero unique 64-bit remote object ID. Call
@@ -499,25 +512,21 @@ sides with the same typed values, binds the pair, then runs the post-bind hook.
 If either construction step fails, it rolls back both partial entries. Foreign
 virtual calls from constructors are invalid until binding completes.
 
-The generated lifecycle is `ALLOCATED -> SV_CONSTRUCTED -> BOUND ->
-PY_INITIALIZED -> ACTIVE`. An SV-originated construction must use the generated
-construction marker and invoke `svx_post_construct()` after ordinary SV base
-and derived construction; SVX cannot observe the end of arbitrary handwritten
-`new` expressions. A raw existing SV handle can be given a Python mirror only
-through explicit `svx.adopt_instance(target, handle)`. Adoption does not call
-Python `__init__`, does not transfer ownership of the SV object, and rejects an
-unknown target or an already-bound handle.
+The generated factory controls the lifecycle: it allocates one object ID,
+constructs the generated SV portion, registers and binds the companion, then
+runs the Python initializer. An SV-originated construction must use the
+generated construction path; SVX cannot observe the end of arbitrary
+handwritten `new` expressions. A raw existing SV handle cannot be given a
+Python mirror in SVX 1.0 because SVX has no general object reflection or
+destructor hook. Every cross-language instance therefore enters through a
+generated constructor or factory.
 
-Python mirror task signatures contain request values for `input` and `inout`;
-a pure `output` parameter is not passed by the caller. A method with only a
-function result returns that result directly. A Python-to-SV mirror call with
-copy-out values returns the decoded SvTypes response object. For an
-SV-to-Python callback, return the generated
-`<Class><Method>Response(**values)` factory result from the Python override;
-it creates the response through the registered SvTypes contract and accepts
-exactly the declared `output` and `inout` values, followed by `result` when
-present. Scalar response fields use the normal SvTypes generated object
-`.value` accessor.
+Python mirrors preserve every declared parameter in order. `input` receives a
+decoded value; `inout` and `output` receive mutable `svx.Inout` and
+`svx.Output` carriers. The override reads or writes carrier `.value` and
+returns only its ordinary function result, if any. The generated SvTypes
+request/response records and their scalar `.value` access are private bridge
+implementation details.
 
 An inheritance callback is always an ordinary synchronous Python `def`.
 `async def`, an awaitable return value, and `asyncio` are invalid in this path
@@ -529,7 +538,7 @@ not transport SV lvalue aliases. A member that needs ref semantics remains in
 user SystemVerilog. Applications can define a separate mutable protocol through
 SvTypes objects or getter/setter methods.
 
-An SV method declared with `"static": true` is exposed as an AMirror Python
+An SV method declared with `"static": true` is exposed as a generated Python
 `@staticmethod`. SVX registers a class-level generated dispatcher that invokes
 the qualified SV static member with no object ID. Static methods cannot be
 `virtual`; a Python subclass can shadow the name for ordinary Python lookup but

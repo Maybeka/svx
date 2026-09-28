@@ -29,12 +29,17 @@ from .roles import (
 from .primitives import delay, display, fork_join, fork_join_any, fork_join_none
 from .test_runner import test
 from .inheritance import close_instance
+from .object_handoff import publish_object
 from .declarations import (
+    Function,
+    Inout,
+    Input,
+    Output,
     SVMirror,
+    Task,
     inheritance_class,
     inheritance_method,
     inheritance_parameter,
-    inheritance_type,
     manifest_from_declarations,
     sv_mirror,
 )
@@ -43,6 +48,9 @@ from .runtime import RuntimeState, state as runtime_state
 
 __all__ = [
     "FATAL",
+    "Function",
+    "Inout",
+    "Input",
     "REPORT",
     "SVXContextError",
     "SVXError",
@@ -54,6 +62,8 @@ __all__ = [
     "__version__",
     "Signal",
     "SVMirror",
+    "Output",
+    "Task",
     "RuntimeState",
     "Channel",
     "ConfigChannel",
@@ -77,9 +87,9 @@ __all__ = [
     "inheritance_class",
     "inheritance_method",
     "inheritance_parameter",
-    "inheritance_type",
     "manifest_from_declarations",
     "mon_channel",
+    "publish_object",
     "req_channel",
     "reqrsp_channel",
     "rsp_channel",

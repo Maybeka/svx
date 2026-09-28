@@ -155,6 +155,7 @@ class svx_inheritance_registry;
   static svx_dispatchable objects[longint unsigned];
   static svx_static_dispatchable static_objects[string];
   static svx_factory factories[string];
+  static longint unsigned published_object_ids[string];
   static longint unsigned next_object_id = 1;
 
   static function longint unsigned allocate_object_id();
@@ -182,12 +183,43 @@ class svx_inheritance_registry;
 
   static function void unbind(longint unsigned object_id);
     objects.delete(object_id);
+    foreach (published_object_ids[name]) begin
+      if (published_object_ids[name] == object_id) published_object_ids.delete(name);
+    end
+  endfunction
+
+  static function void publish_object(string name, longint unsigned object_id);
+    if (name.len() == 0) begin
+      $fatal(2, "SVX published object name cannot be empty");
+    end
+    if (!objects.exists(object_id)) begin
+      $fatal(2, "SVX cannot publish unknown inheritance object id %0d", object_id);
+    end
+    published_object_ids[name] = object_id;
+  endfunction
+
+  static function void require_published_object(
+    string name,
+    output svx_dispatchable object
+  );
+    longint unsigned object_id;
+    object = null;
+    if (!published_object_ids.exists(name)) begin
+      $fatal(2, "SVX published object %s does not exist", name);
+    end
+    object_id = published_object_ids[name];
+    if (!objects.exists(object_id)) begin
+      published_object_ids.delete(name);
+      $fatal(2, "SVX published object %s is no longer live", name);
+    end
+    object = objects[object_id];
   endfunction
 
   static function void clear();
     objects.delete();
     static_objects.delete();
     factories.delete();
+    published_object_ids.delete();
   endfunction
 
   static function void register_factory(string class_id, svx_factory factory);
@@ -204,6 +236,17 @@ class svx_inheritance_registry;
     static_objects[class_id] = object;
   endfunction
 endclass
+
+task automatic svx_publish_object(string name, longint unsigned object_id);
+  svx_inheritance_registry::publish_object(name, object_id);
+endtask
+
+task automatic svx_require_published_object(
+  string name,
+  output svx_dispatchable object
+);
+  svx_inheritance_registry::require_published_object(name, object);
+endtask
 
 task automatic svx_create_object(
   string class_id,
@@ -329,5 +372,6 @@ export "DPI-C" task svx_invoke_object;
 export "DPI-C" task svx_invoke_static;
 export "DPI-C" task svx_release_object;
 export "DPI-C" task svx_create_object;
+export "DPI-C" task svx_publish_object;
 
 `endif

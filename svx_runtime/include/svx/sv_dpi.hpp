@@ -49,5 +49,6 @@ bool svx_invoke_static(const char *class_id, const char *method_id,
 void svx_release_object(std::uint64_t object_id);
 bool svx_create_object(const char *class_id, void *request,
                        std::uint64_t *object_id, std::string *error);
+void svx_publish_object(const char *name, std::uint64_t object_id);
 
 } // namespace svx::dpi
