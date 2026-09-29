@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+环境、编译和成功判定请使用[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 配合 fork/join 示例使用。它说明 fork 出来的 Python object method 共享同一
 Python heap，而每个仿真器拥有的 Python process 具有独立执行状态。
 

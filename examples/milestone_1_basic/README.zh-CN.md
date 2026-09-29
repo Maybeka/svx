@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+编译、runtime 加载和结果判定请使用[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 这是最小可运行的 SVX 边界示例，展示仿真器托管的 Python 调用路径：
 
 1. SV 初始化 SVX。
@@ -9,6 +11,7 @@
 3. SV 启动显式导出的 Python function。
 4. Python 调用 `svx.display`。
 5. Python 调用 `svx.delay(1.5, "ns")`。
+6. SV 在结束仿真前调用 `svx_shutdown()`。
 
 最终 SV 时间前进 1.5 ns，并按 `svx_pkg` 的时间精度取整。需要面向实际
 transaction 的端到端路径时，继续阅读 [typed bus 示例](../milestone_7_sv_typed_helpers/README.zh-CN.md)。

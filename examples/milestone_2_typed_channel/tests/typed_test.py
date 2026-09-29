@@ -4,7 +4,7 @@ from svtypes import Bit, Int, SvObject, svobj
 
 @svobj
 class M2Transaction(SvObject):
-    addr = Bit(16)
+    addr = Bit[16]()
     data = Int()
 
 

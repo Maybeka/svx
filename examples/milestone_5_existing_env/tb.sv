@@ -120,6 +120,7 @@ module tb;
     join
 
     $display("M5 existing-environment integration test done @ %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule

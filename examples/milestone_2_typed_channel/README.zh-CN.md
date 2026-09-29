@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+除下方生成步骤外，也请遵循[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 此专项示例介绍建立在 raw binary payload channel 上的 SvTypes typed channel 层：
 
 - Python 对生成的 `SvObject` transaction 编码后用 `Channel.put(...)` 发送。

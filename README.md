@@ -95,6 +95,7 @@ loaded plugin.
 ## Documentation
 
 - [Examples and adoption paths](examples/README.md)
+- [Step-by-step Cookbook (Chinese)](docs/SVX_COOKBOOK.zh-CN.md)
 - [User manual](docs/SVX_USER_MANUAL.md)
 - [API reference](docs/SVX_API_REFERENCE.md)
 - [1.0.0 release contract and gates](docs/RELEASE_1.0.0.md)

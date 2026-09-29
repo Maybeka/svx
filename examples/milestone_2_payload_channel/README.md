@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+For setup, compilation, and success criteria, use the [example run guide](../RUNNING_EXAMPLES.md).
+
 Use raw payload channels only when no shared SvTypes schema is appropriate. It
 demonstrates the binary payload layer:
 

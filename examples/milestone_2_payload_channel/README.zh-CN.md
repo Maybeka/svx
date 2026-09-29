@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+环境、编译和成功判定请使用[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 仅当不存在合适的共享 SvTypes schema 时使用 raw payload channel。此示例展示
 二进制 payload 层：
 

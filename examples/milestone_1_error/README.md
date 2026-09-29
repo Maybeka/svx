@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+Use the [example run guide](../RUNNING_EXAMPLES.md); this example is an intentional fatal-result exception.
+
 Use this to see the default fatal exception policy at the SV/Python boundary.
 
 The exported Python function raises an uncaught exception. SVX should report the

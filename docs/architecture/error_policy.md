@@ -18,11 +18,11 @@ class SVXContextError(SVXError):
 class SVXExportError(SVXError):
     """Raised when export registration or resolution fails."""
 
-class SVXFatalError(SVXError):
-    """Raised when an uncaught exception escapes an SVX execution context."""
+class SVXRemoteError(SVXInheritanceError):
+    """Raised when a declared cross-language call fails."""
 
-class SVXTimeoutError(SVXError):
-    """Raised when a time-bounded await exceeds its limit. (Post-M1)"""
+class SVXSignalError(SVXError):
+    """Raised when hierarchical signal access fails."""
 ```
 
 ## 2. Policy Configuration
@@ -34,8 +34,7 @@ import svx
 
 # Set the exception policy globally.
 svx.set_exception_policy(svx.FATAL)       # default
-svx.set_exception_policy(svx.REPORT)      # future
-svx.set_exception_policy(svx.CALLBACK, handler=my_handler)  # future
+svx.set_exception_policy(svx.REPORT)
 
 # Query current policy.
 current = svx.get_exception_policy()
@@ -43,12 +42,12 @@ current = svx.get_exception_policy()
 
 ### 2.2 Policy Behaviors
 
-| Policy | M1 Required? | Behavior |
+| Policy | 1.0 support | Behavior |
 |---|---|---|
-| `svx.FATAL` | Yes (default) | Prints exception type, message, traceback, and export name. Terminates simulation via `$fatal`. |
-| `svx.REPORT` | No (future) | Prints the same information but does not terminate. Returns error status to the SV caller. |
-| `svx.DEFER` | No (future) | Stores the exception in the process handle. Reported on `await_()` or `status()`. |
-| `svx.CALLBACK` | No (future) | Invokes a user-provided handler function before applying the default fatal/report behavior. |
+| `svx.FATAL` | Yes (default) | Prints the exception and traceback, then terminates simulation via `$fatal`. |
+| `svx.REPORT` | Yes | Prints the same information, preserves a failure status for the caller, and does not invoke `$fatal`. |
+| `svx.DEFER` | No | Not a public policy. |
+| `svx.CALLBACK` | No | Not a public policy. |
 
 ### 2.3 Fatal Mechanism
 
@@ -71,7 +70,7 @@ endtask
 export "DPI-C" task svx_fatal_svx;
 ```
 
-The severity level (0, 1, 2) is hardcoded to 2 for Milestone 1. Making this configurable is a post-M1 feature.
+The severity level is fixed at 2 for the stable fatal policy.
 
 ## 3. Exception Reporting Format
 

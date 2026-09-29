@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+Follow the [example run guide](../RUNNING_EXAMPLES.md) in addition to the generation step below.
+
 Use this adoption pattern to introduce SVX into an existing SystemVerilog
 environment without adding a new SVX component framework.
 

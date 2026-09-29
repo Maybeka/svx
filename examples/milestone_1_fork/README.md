@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+For setup, compilation, and success criteria, use the [example run guide](../RUNNING_EXAMPLES.md).
+
 Use this when Python test intent needs simulator-owned concurrent work. It
 demonstrates:
 

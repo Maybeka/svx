@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+Follow the [example run guide](../RUNNING_EXAMPLES.md) in addition to the generation step below.
+
 This is the recommended first end-to-end SVX example. It keeps a clocked driver
 and monitor in SystemVerilog while Python owns the transaction program and
 checks. Generated SystemVerilog typed-channel helpers carry the SvTypes

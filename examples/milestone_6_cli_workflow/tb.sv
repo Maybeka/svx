@@ -112,6 +112,7 @@ module tb;
     join
 
     $display("M6 CLI workflow test done @ %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule

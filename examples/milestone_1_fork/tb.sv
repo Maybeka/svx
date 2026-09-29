@@ -12,6 +12,7 @@ module tb;
     svx_load("examples.milestone_1_fork.tests.fork_test");
     svx_start("examples.milestone_1_fork.tests.fork_test.main");
     $display("FORK TEST realtime after SVX: %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule

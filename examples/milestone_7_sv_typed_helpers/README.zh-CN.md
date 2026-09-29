@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+除下方生成步骤外，也请遵循[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 这是推荐的首个端到端 SVX 示例。它在 SystemVerilog 中保留时钟化 driver 和
 monitor，而 Python 负责 transaction program 和检查。生成的 SystemVerilog
 typed-channel helper 在两个方向传输 SvTypes object。

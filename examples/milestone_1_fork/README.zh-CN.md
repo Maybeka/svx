@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+环境、编译和成功判定请使用[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 当 Python 测试意图需要由仿真器管理的并发工作时，使用此示例。它展示：
 
 - `svx.fork_join`

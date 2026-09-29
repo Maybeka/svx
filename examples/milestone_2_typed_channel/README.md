@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+Follow the [example run guide](../RUNNING_EXAMPLES.md) in addition to the generation step below.
+
 This focused example introduces the SvTypes typed channel layer on top of raw
 binary payload channels:
 

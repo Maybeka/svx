@@ -12,8 +12,9 @@ The following names exported from `svx` are stable:
 - channels: `Payload`, `Channel`, `channel`, the typed role classes, and their
   corresponding factory functions;
 - inheritance lifecycle: `close_instance`;
-- inheritance declarations: `inheritance_type`, `inheritance_parameter`,
-  `inheritance_method`, `inheritance_class`, `SVMirror`, `sv_mirror`, and
+- inheritance declarations: `Task`, `Function`, `Input`, `Output`, `Inout`,
+  `inheritance_parameter`, `inheritance_method`,
+  `inheritance_class`, `SVMirror`, `sv_mirror`, and
   `manifest_from_declarations`;
 - hierarchical access: `Signal` and `declare_signal`;
 - runtime and errors: `RuntimeState`, `runtime_state`, the `SVXError` hierarchy,
@@ -28,25 +29,41 @@ registration helpers, and names
 beginning with an underscore are private runtime ABI and may not be called by
 user code.
 
-Generated Python mirrors keep the foreign class and method names. Their task
-signatures contain `input` and `inout` values; pure `output` values are not call
-arguments. A method with only a function result returns that result directly. A
-Python-to-SV mirror call with copy-out values returns its decoded SvTypes response object.
-For an SV-to-Python callback, the generated AMirror module exports a
-`<Class><Method>Response(**values)` factory; the Python override returns that
-factory result, with exactly the declared `output` and `inout` values followed
-by `result` when present. The factory normalizes values through
-the registered SvTypes contract instead of relying on a record constructor's
-keyword-argument behavior. Field values use normal SvTypes generated object
-access, including `.value` for scalar descriptors. Inheritance callbacks must
-be synchronous ordinary Python functions; coroutine functions and awaitable
-results are rejected fatally.
+Generated Python mirrors keep the foreign class method prototype: every
+declared `input`, `output`, and `inout` formal remains present and in the same
+order. `input` is passed as its decoded value. `svx.Inout(value)` and
+`svx.Output()` are mutable copy-out carriers whose `.value` is read or assigned
+by Python and is updated after a Python-to-SV call. A function returns its
+ordinary Python result; a task returns `None`. Generated SvTypes request and
+response records remain private transport implementation details. Field values
+use normal SvTypes generated object access, including `.value` for scalar
+descriptors. Inheritance callbacks must be synchronous ordinary Python
+functions; coroutine functions and awaitable results are rejected fatally.
 
 Inheritance manifests reject `ref` and `const ref`; SVX does not expose a
 cross-language lvalue-alias capability. Use an explicit SvTypes object or
 getter/setter API when an application needs mutable behavior across the boundary.
 
-An SV source method marked `"static": true` is exposed as an AMirror Python
+The concise Python declaration form uses `@svx.inheritance_method` directly:
+an unwrapped concrete SvTypes type `T` or `svx.Input[T]` declares `input`; `svx.Output[T]`
+and `svx.Inout[T]` declare their respective parameter directions.
+while `-> svx.Task`, `-> svx.Function`, or `-> svx.Function[T]` declares task
+or function transport and, in the last form, the SvTypes result binding. These
+are declaration-only annotations, not Python runtime value types. Each Python
+parameter declares its own direction; no annotation changes the direction of a
+subsequent parameter. `Output[T]` and `Inout[T]` remain in their declared
+position and receive mutable copy-out carriers. The explicit
+`parameters=`, `return_type=`, and `timing=` form remains supported, but it
+cannot be mixed with the corresponding prototype annotation. This
+classification does not apply to `@svx.export` or `@svx.test`: those are
+entered through the task-shaped `svx_start` boundary.
+
+For static checking, SVX makes these declaration markers transparent:
+`Input[T]` is treated as `T`, `Function[T]` as its ordinary result type `T`,
+and `Task` as `None`. `Output[T]` and `Inout[T]` are typed carriers whose
+`.value` has type `T`, so this concise form remains usable in Pyright and LSPs.
+
+An SV source method marked `"static": true` is exposed as a generated Python
 `@staticmethod`. It uses a generated class dispatcher, has no object ID, and
 calls the qualified SV static implementation. Static and `virtual` are mutually
 exclusive; a Python subclass may shadow the name locally but cannot override
@@ -74,10 +91,12 @@ User code imports `svx_pkg` and uses `svx_init`,
 and `svx_shutdown`. Channel byte helpers and generated typed helpers are also
 stable.
 
-The `svx_inheritance_registry`, dispatcher/factory interfaces, raw `chandle`
-payload functions, DPI imports/exports, and generated adapter entry points are
-implementation ABI. They are public only to generated SVX code and must not be
-called directly by application code.
+The `svx_inheritance_registry`, dispatcher/factory interfaces, DPI
+imports/exports, and generated adapter entry points are implementation ABI.
+They are public only to generated SVX code and must not be called directly by
+application code. The stable low-level `svx_channel_*_payload` tasks are an
+untyped SV channel API; application code normally uses byte or generated typed
+helpers instead.
 
 ## Compatibility
 

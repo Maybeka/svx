@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+除下方生成步骤外，也请遵循[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 在既有 SystemVerilog 环境中采用 SVX，同时不引入新的 SVX component framework
 时，使用此模式。
 

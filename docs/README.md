@@ -18,6 +18,16 @@
   adoption, SvTypes generation, Python test startup, typed channels, generated
   SV helpers, lifecycle rules, debug flow, cross-language inheritance, signal
   access, and anti-patterns.
+- [SVX_COOKBOOK.zh-CN.md](SVX_COOKBOOK.zh-CN.md): a standalone, step-by-step
+  Chinese cookbook that builds the SVX model from runtime foundations through
+  typed channels, inheritance, and hierarchical signal access.
+- [SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md](SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md):
+  Chinese concept guide that connects the architecture diagrams to runnable
+  examples for SvTypes data contracts, SVX primitives, typed channels, signals,
+  and both cross-language inheritance directions.
+- [../examples/RUNNING_EXAMPLES.zh-CN.md](../examples/RUNNING_EXAMPLES.zh-CN.md):
+  shared operational setup, build-input, runtime-loading, and result criteria
+  for every published example.
 - [SVX_API_REFERENCE.md](SVX_API_REFERENCE.md): stable Python, CLI, and
   SystemVerilog surface plus private runtime ABI boundaries.
 - [diagrams/](diagrams/): visual overview diagrams for SVX layers,

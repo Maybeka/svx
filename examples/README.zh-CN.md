@@ -5,6 +5,11 @@
 这些示例按验证工程师通常的采用路径组织，而不是按能力最初出现的
 milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界选择专项示例。
 
+若希望从运行时基础开始，按依赖顺序完成一条完整路径，请阅读独立的
+[SVX Cookbook](../docs/SVX_COOKBOOK.zh-CN.md)。它逐步解释这些示例背后的设计，
+并给出每一步的操作和检查点。
+共享的环境、构建输入、runtime 加载和通过/失败判定见[示例运行指南](RUNNING_EXAMPLES.zh-CN.md)。
+
 | 目标 | 从这里开始 | 展示内容 |
 |---|---|---|
 | 从 SV testbench 运行一个 Python 测试 | [基础启动](milestone_1_basic/README.zh-CN.md) | `svx_init`、`svx_run_test`、显示和由仿真器管理的延时 |
@@ -18,6 +23,10 @@ milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界�
 | 理解运行时行为 | [Fork/join](milestone_1_fork/README.zh-CN.md)、[共享状态](milestone_1_shared_state/README.zh-CN.md) 和 [异常策略](milestone_1_error/README.zh-CN.md) | 仿真器驱动的进程控制、Python heap 共享与未捕获异常处理 |
 
 `milestone_*` 目录名因源码和回归兼容性而保留，不代表推荐学习顺序。
+
+所有正常完成的示例都会在 `$finish` 前调用 `svx_shutdown()`，使 Python 和
+native runtime 资源按文档规定的顺序释放。异常策略示例会有意走 fatal 路径，
+是唯一的例外。
 
 ## 学习路径
 

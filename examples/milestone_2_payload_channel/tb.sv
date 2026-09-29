@@ -121,6 +121,7 @@ module tb;
     svx_payload_destroy(payload);
 
     $display("M2 payload test done @ %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule

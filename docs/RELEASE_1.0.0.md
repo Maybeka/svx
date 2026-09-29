@@ -33,9 +33,15 @@ the Python ABI used by the simulator process.
 ```sh
 python -m pip install 'svtypes>=1.3.0,<2.0.0'
 python -m pip install svx==1.0.0
-cmake -S . -B build
+cmake -S . -B build \
+  -DSVX_SIMULATOR_INCLUDE_DIR=/path/to/simulator/include \
+  -DSVX_REQUIRE_DIRECT_VPI=ON
 cmake --build build -j2
 ```
+
+The default CMake configuration without `vpi_user.h` builds the core runtime
+with a signal-service stub for non-simulator development only. It does not
+provide hierarchical signal access and is not a release-qualified runtime.
 
 For source development, use the editable sibling dependency:
 

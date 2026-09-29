@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+For setup, compilation, and success criteria, use the [example run guide](../RUNNING_EXAMPLES.md).
+
 Use this with the fork/join example to understand that forked Python object
 methods share the same Python
 heap while each simulator-owned Python process has its own execution state.

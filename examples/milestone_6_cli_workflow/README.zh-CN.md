@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+除下方生成步骤外，也请遵循[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)。
+
 在项目构建中集成生成类型时，使用此示例。它展示：
 
 - 用 `python -m svx svtypes-gen` 生成 SV type

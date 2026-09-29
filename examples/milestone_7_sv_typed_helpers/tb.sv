@@ -107,6 +107,7 @@ module tb;
     join
 
     $display("M7 SV typed helper test done @ %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule

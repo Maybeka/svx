@@ -7,6 +7,12 @@ adopts, rather than by the historical milestone in which a capability was
 introduced. Start with the typed-bus example, then choose the focused example
 for the boundary you need.
 
+For one complete, bottom-up path through these examples, read the
+[SVX Cookbook (Chinese)](../docs/SVX_COOKBOOK.zh-CN.md). It explains the
+runtime model first and then leads through each example in dependency order.
+For shared setup, build inputs, runtime loading, and pass/fail criteria, use
+the [example run guide](RUNNING_EXAMPLES.md).
+
 | Goal | Start here | What it demonstrates |
 |---|---|---|
 | Run one Python test from an SV testbench | [Basic bootstrap](milestone_1_basic) | `svx_init`, `svx_run_test`, display, and simulator-owned delay |
@@ -21,6 +27,11 @@ for the boundary you need.
 
 The `milestone_*` directory names are retained for source and regression
 compatibility. They are not a recommended learning sequence.
+
+Every normally completing example calls `svx_shutdown()` before `$finish` so
+that Python and native runtime resources are released in the documented order.
+The error-policy example intentionally terminates through its fatal path and is
+the sole exception.
 
 ## Learning Path
 

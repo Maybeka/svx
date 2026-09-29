@@ -12,6 +12,7 @@ module tb;
     svx_load("examples.milestone_1_basic.tests.basic_test");
     svx_start("examples.milestone_1_basic.tests.basic_test.main");
     $display("SV realtime after SVX: %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule

@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+Follow the [example run guide](../RUNNING_EXAMPLES.md) in addition to the generation step below.
+
 Use this example when integrating generated types into a project build. It
 demonstrates:
 

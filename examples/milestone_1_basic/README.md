@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+For compilation, runtime loading, and result criteria, use the [example run guide](../RUNNING_EXAMPLES.md).
+
 Use this as the smallest runnable SVX boundary. It establishes the
 simulator-hosted Python path:
 
@@ -10,6 +12,7 @@ simulator-hosted Python path:
 3. SV starts an explicitly exported Python function.
 4. Python calls `svx.display`.
 5. Python calls `svx.delay(1.5, "ns")`.
+6. SV calls `svx_shutdown()` before finishing the simulation.
 
 The final SV time advances by 1.5 ns, rounded according to `svx_pkg` time
 precision. Continue with the [typed bus example](../milestone_7_sv_typed_helpers)

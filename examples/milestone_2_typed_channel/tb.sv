@@ -67,6 +67,7 @@ module tb;
     join
 
     $display("M2 typed channel test done @ %0.3f ns", $realtime);
+    svx_shutdown();
     $finish;
   end
 endmodule
