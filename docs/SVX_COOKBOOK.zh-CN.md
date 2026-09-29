@@ -443,6 +443,38 @@ def calculate(
 生成后将 `SVX_ARTIFACT_MANIFEST` 指向 artifact manifest；在 build gate 中运行
 同一命令加 `--check`，拒绝过期生成物。
 
+### 9.1 传递外部 class handle 与 virtual interface
+
+不是每个跨边界的 SV handle 都应成为跨语言继承 target。对于仅需要传递、保存或
+返回的任意 SV class，使用 `svtypes.RemoteRef[target]` 加
+`svx.sv_class_handle(target, static_sv_type)` 声明静态类型。Python 得到的是不透明
+引用：可以保存、传给兼容形参和返回，但不能构造对象、读取字段或调用方法。
+
+virtual interface 同样使用 `RemoteRef`，但要用
+`svx.virtual_interface_handle(target, "virtual if_name.modport")` 声明。生成 manifest
+和 mirrors 时附加接口源码：
+
+```sh
+python -m svx inheritance-manifest \
+  --python-module verification.python_api \
+  --sv-source rtl/bus_if.sv \
+  --out build/inheritance.json
+python -m svx inheritance-gen \
+  --manifest build/inheritance.json \
+  --sv-source rtl/bus_if.sv \
+  --python-out build/python \
+  --sv-out build/mirrors.sv
+```
+
+生成器根据 interface/modport 自动产生受限 Python view，例如
+`svx_vif.bus_if.master.Master`。它仅包含该静态 modport 可见的信号读写和
+task/function；所有值仍使用 SvTypes 类型。不要为 VIF 维护第二份成员白名单，
+也不要把 VIF 当作全局按名查找的资源。
+
+**检查点：** [外部 handle 示例](../examples/foreign_handles) 同时验证派生 SV
+class 经基类 handle 的身份保持、Python VIF 信号写入/function 调用，以及 VIF
+回到 SV 后继续使用。
+
 ## 10. 使用层次信号访问做小规模诊断
 
 层次信号访问的目的只是配置检查、短暂观察和 fault injection。高频驱动、采样、
@@ -525,6 +557,7 @@ read/write、force/release 和启动期失败的完整路径。
 | SV 侧类型化辅助任务 | [类型化总线](../examples/milestone_7_sv_typed_helpers) |
 | SV 基类由 Python 扩展 | [SV -> Python 继承](../examples/cross_language_inheritance) |
 | Python 基类由 SV 扩展 | [Python -> SV 继承](../examples/python_owned_inheritance) |
+| 外部 SV class handle 或 virtual interface | [外部 handle](../examples/foreign_handles) |
 | 小规模层次信号访问 | [层次信号访问](../examples/hierarchical_signal_access) |
 
 更完整的 API 形状请查阅 [API Reference](SVX_API_REFERENCE.md)，架构约束请查阅

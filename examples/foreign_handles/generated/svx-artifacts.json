@@ -1,0 +1,172 @@
+{
+  "artifacts": [
+    {
+      "language": "python",
+      "module": "svx_py",
+      "path": "python/svx_py/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_py.examples.foreign_handles.python_api",
+      "path": "python/svx_py/examples/foreign_handles/python_api.py",
+      "sha256": "af1f97405e3797c410440bd08200ce55671d6add68a289a681cef985986762f4"
+    },
+    {
+      "language": "python",
+      "module": "svx_vif",
+      "path": "python/svx_vif/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_vif.example_bus_if",
+      "path": "python/svx_vif/example_bus_if/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_vif.example_bus_if.master",
+      "path": "python/svx_vif/example_bus_if/master.py",
+      "sha256": "0e7d82d6a67ac1f724e4ec149ace10d9d810aea5fea14aeeebb78d34131340f3"
+    },
+    {
+      "language": "systemverilog",
+      "path": "mirrors.sv",
+      "sha256": "02b4367e118e0c95f9e5b7a4d0b31570131d05cf34d2acab8b32249726686d40"
+    }
+  ],
+  "callables": [
+    {
+      "canonical_id": "py://examples/foreign_handles/HandlePortal#exercise_bus",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "bus",
+          "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b",
+          "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.request"
+        },
+        "sv_class": "SVXCall_0b6441f07486f0ac15e8_Request",
+        "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b",
+          "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.response"
+        },
+        "sv_class": "SVXCall_6bb62ea46d23364d236c_Response",
+        "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.response"
+      }
+    },
+    {
+      "canonical_id": "py://examples/foreign_handles/HandlePortal#retain_packet",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "packet",
+          "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba",
+          "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.request"
+        },
+        "sv_class": "SVXCall_ce732f2bbaebb926684d_Request",
+        "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba",
+          "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.response"
+        },
+        "sv_class": "SVXCall_7e64c571b8c6a2bf1d36_Response",
+        "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.response"
+      }
+    }
+  ],
+  "classes": [
+    "py://examples/foreign_handles/HandlePortal"
+  ],
+  "constructors": [
+    {
+      "canonical_class_id": "py://examples/foreign_handles/HandlePortal",
+      "initiator": "python",
+      "request_fields": [],
+      "request_record": null
+    }
+  ],
+  "generated_types": [
+    {
+      "canonical_class_id": "py://examples/foreign_handles/HandlePortal",
+      "python_adapter_fqn": "svx_py.examples.foreign_handles.python_api.HandlePortal",
+      "systemverilog_fqn": "svx_proxy_python_api::HandlePortal"
+    }
+  ],
+  "generator_abi_version": 2,
+  "inheritance_manifest": {
+    "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+    "schema_version": "2.0.0"
+  },
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/generated-artifacts/v1",
+  "schema_version": "1.0.0",
+  "svtypes": {
+    "required_package_major": 1
+  },
+  "svx_runtime_abi_version": 1,
+  "types": [
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f",
+        "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+      },
+      "svtypes": {
+        "kind": "remote_ref",
+        "target": "sv-vif://example_bus_if/master"
+      },
+      "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+    },
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92",
+        "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+      },
+      "svtypes": {
+        "kind": "remote_ref",
+        "target": "sv://example_packet_pkg/Packet"
+      },
+      "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+    }
+  ]
+}

@@ -10,7 +10,7 @@
       "language": "python",
       "module": "svx_mirror.example_driver_pkg",
       "path": "python/svx_mirror/example_driver_pkg.py",
-      "sha256": "f3026e037395112095a1b69e2b6e4f68e9f1d56d8c4a33320c6b90dfe236caaa"
+      "sha256": "23790b70247e96bf00cc84ab2cad7e594335cf56102df836fa605417e9541229"
     },
     {
       "language": "systemverilog",

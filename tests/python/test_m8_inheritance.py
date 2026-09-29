@@ -137,6 +137,74 @@ def test_manifest_emits_language_specific_mirrors():
     assert "python_proxy" not in sv_text
 
 
+@pytest.mark.parametrize(
+    ("kind", "target", "sv_type"),
+    [
+        ("sv_class", "sv://packet_pkg/Packet", "packet_pkg::Packet"),
+        ("virtual_interface", "sv-vif://bus_if/master", "virtual bus_if.master"),
+    ],
+)
+def test_generated_external_handle_adapters_preserve_sv_formal_types(
+    kind, target, sv_type
+):
+    data = manifest_data()
+    method = data["classes"][1]["methods"][0]
+    reference = type_ref(
+        RemoteRef,
+        sv="svtypes_pkg::remote_ref",
+        sv_packer="svtypes_pkg::remote_ref_packer",
+        args=(target,),
+    )
+    method["parameters"] = [
+        {
+            "name": "foreign",
+            "type": reference,
+            "handle": {
+                "kind": kind,
+                "target_type_name": target,
+                "sv_type": sv_type,
+            },
+        }
+    ]
+    method["return_type"] = reference
+    method["return_handle"] = {
+        "kind": kind,
+        "target_type_name": target,
+        "sv_type": sv_type,
+    }
+    method["timing"] = "function"
+
+    manifest = parse_manifest(data)
+    text = emit_sv_mirrors(manifest)
+    adapter = "SVXExternal_" + target.replace(":", "_").replace("/", "_").replace("-", "_")
+    assert "package svx_external_handles_pkg;" in text
+    assert f"class {adapter};" in text
+    assert f"function remote_ref encode({sv_type} value);" in text
+    assert f"function bit decode(input remote_ref reference, output {sv_type} value" in text
+    assert f"virtual function {sv_type} sample(input {sv_type} foreign);" in text
+    assert "svtypes_pkg::remote_ref foreign = new" in text
+    assert f"{adapter}::encode(foreign)" in text
+    assert f"{adapter}::decode(response_value.svx_return_value, result, error)" in text
+
+
+def test_manifest_rejects_external_handle_without_matching_remote_ref_target():
+    data = manifest_data()
+    parameter = data["classes"][0]["methods"][0]["parameters"][0]
+    parameter["type"] = type_ref(
+        RemoteRef,
+        sv="svtypes_pkg::remote_ref",
+        sv_packer="svtypes_pkg::remote_ref_packer",
+        args=("sv://packet_pkg/Packet",),
+    )
+    parameter["handle"] = {
+        "kind": "sv_class",
+        "target_type_name": "sv://packet_pkg/OtherPacket",
+        "sv_type": "packet_pkg::Packet",
+    }
+    with pytest.raises(SVXInheritanceError, match="must match the SvTypes RemoteRef target"):
+        parse_manifest(data)
+
+
 def test_python_initiated_sv_base_without_cross_language_lineage_has_no_sv_proxy():
     data = manifest_data()
     data["classes"][0]["constructor"] = {

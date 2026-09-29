@@ -30,6 +30,9 @@
   for every published example.
 - [SVX_API_REFERENCE.md](SVX_API_REFERENCE.md): stable Python, CLI, and
   SystemVerilog surface plus private runtime ABI boundaries.
+- [CROSS_LANGUAGE_HANDLE_ADAPTERS.md](CROSS_LANGUAGE_HANDLE_ADAPTERS.md):
+  declared `RemoteRef` transport for arbitrary SV class handles and generated
+  restricted virtual-interface views.
 - [diagrams/](diagrams/): visual overview diagrams for SVX layers,
   concurrency, and typed channels.
 

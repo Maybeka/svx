@@ -14,7 +14,8 @@ The following names exported from `svx` are stable:
 - inheritance lifecycle: `close_instance`;
 - inheritance declarations: `Task`, `Function`, `Input`, `Output`, `Inout`,
   `inheritance_parameter`, `inheritance_method`,
-  `inheritance_class`, `SVMirror`, `sv_mirror`, and
+  `inheritance_class`, `sv_class_handle`, `virtual_interface_handle`,
+  `SVMirror`, `sv_mirror`, and
   `manifest_from_declarations`;
 - hierarchical access: `Signal` and `declare_signal`;
 - runtime and errors: `RuntimeState`, `runtime_state`, the `SVXError` hierarchy,
@@ -69,6 +70,17 @@ calls the qualified SV static implementation. Static and `virtual` are mutually
 exclusive; a Python subclass may shadow the name locally but cannot override
 the SV static member across the boundary.
 
+Foreign class and virtual-interface formals use a concrete
+`svtypes.RemoteRef[target]` as the SvTypes type. Add
+`handle=svx.sv_class_handle(target, sv_type)` or
+`handle=svx.virtual_interface_handle(target, sv_type)` to the explicit
+`inheritance_parameter` declaration; a function result uses the corresponding
+`return_handle=` on `inheritance_method`. An external class handle is opaque in
+Python and can only be retained, passed, or returned. A virtual-interface
+handle decodes to its generated restricted view. Run the manifest/generator
+command with `--sv-source` to derive that view's visible signals, tasks, and
+functions from the static interface/modport declaration.
+
 ## Stable CLI
 
 - `svx share`, `svx native-source`, `svx sv-files`, `svx libs`, and
@@ -78,6 +90,8 @@ the SV static member across the boundary.
 - `svx inheritance-gen` validates a manifest and generates Python mirrors,
   SystemVerilog mirrors, and an optional compatibility artifact manifest.
   `--check` verifies that all three requested output groups are current.
+  `--sv-source` additionally scans interface declarations to generate
+  virtual-interface views.
 - `svx inheritance-migrate` converts the supported legacy manifest to the
   declarative schema without evaluating source expressions.
 - `svx inheritance-manifest` normalizes decorated Python classes and versioned

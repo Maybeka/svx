@@ -5,7 +5,7 @@ from svx.declarations import SVMirror
 from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass
 
 register_contract({
-    'sv://example_driver_pkg/BaseDriver#drive': {'parameters': (), 'request': (), 'response': ()},
+    'sv://example_driver_pkg/BaseDriver#drive': {'parameters': (), 'request': (), 'response': (), 'external_targets': ()},
 })
 register_constructor('sv://example_driver_pkg/BaseDriver', ())
 

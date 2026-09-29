@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import inspect
 import json
 from pathlib import Path
+import re
 import sys
 from types import ModuleType
 from typing import TYPE_CHECKING, Annotated, Any, Callable, Generic, Iterable, TypeAlias, TypeVar
@@ -21,7 +22,7 @@ from .inheritance import (
     Manifest,
     parse_manifest,
 )
-from .sv_scan import validate_sv_declarations
+from .sv_scan import SVVirtualInterfaceFact, scan_sv_virtual_interfaces, validate_sv_declarations
 
 import svtypes
 from svtypes import SvObject
@@ -381,6 +382,7 @@ def inheritance_parameter(
     type_binding: Any,
     *,
     direction: str = "input",
+    handle: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Declare one ordered inheritance parameter."""
 
@@ -395,7 +397,39 @@ def inheritance_parameter(
         "type": _type_declaration(type_binding, where=f"inheritance parameter {name}"),
         "direction": direction,
     }
+    if handle is not None:
+        if not isinstance(handle, dict):
+            raise TypeError("inheritance handle metadata must be a dictionary")
+        declaration["handle"] = dict(handle)
     return declaration
+
+
+def sv_class_handle(target_type_name: str, sv_type: str) -> dict[str, str]:
+    """Declare the static SV class type behind a ``RemoteRef`` boundary value."""
+
+    if not isinstance(target_type_name, str) or not target_type_name.startswith("sv://"):
+        raise ValueError("SV class handle target must use an sv:// type name")
+    if not isinstance(sv_type, str) or not sv_type.strip():
+        raise ValueError("SV class handle requires a non-empty static SV type")
+    return {
+        "kind": "sv_class",
+        "target_type_name": target_type_name,
+        "sv_type": sv_type,
+    }
+
+
+def virtual_interface_handle(target_type_name: str, sv_type: str) -> dict[str, str]:
+    """Declare the static virtual-interface type behind a ``RemoteRef`` value."""
+
+    if not isinstance(target_type_name, str) or not target_type_name.startswith("sv-vif://"):
+        raise ValueError("virtual-interface handle target must use an sv-vif:// type name")
+    if not isinstance(sv_type, str) or not sv_type.startswith("virtual "):
+        raise ValueError("virtual-interface handle requires a 'virtual <interface>[.<modport>]' type")
+    return {
+        "kind": "virtual_interface",
+        "target_type_name": target_type_name,
+        "sv_type": sv_type,
+    }
 
 
 def inheritance_method(
@@ -406,6 +440,7 @@ def inheritance_method(
     timing: str | None = None,
     virtual: bool = True,
     pure_virtual: bool = False,
+    return_handle: dict[str, str] | None = None,
 ):
     """Attach manifest metadata, optionally inferred from a Python prototype.
 
@@ -455,6 +490,10 @@ def inheritance_method(
             "virtual": virtual,
             "pure_virtual": pure_virtual,
         }
+        if return_handle is not None:
+            if not isinstance(return_handle, dict):
+                raise TypeError("inheritance return handle metadata must be a dictionary")
+            declaration["return_handle"] = dict(return_handle)
         setattr(method, "__svx_inheritance_method__", declaration)
         return method
 
@@ -589,13 +628,18 @@ def manifest_from_declarations(
 ) -> Manifest:
     """Normalize supported declaration front ends to the sole v2 manifest model."""
 
-    classes = _python_declarations(python_modules)
+    sv_source_files = tuple(sv_source_files)
+    # Nested method/handle dictionaries are intentionally enriched below;
+    # never mutate decorator metadata retained on the user's Python classes.
+    classes = [copy.deepcopy(item) for item in _python_declarations(python_modules)]
     sv_classes: list[dict[str, Any]] = []
     for path in sv_declaration_files:
         sv_classes.extend(load_sv_declarations(path))
     if sv_source_files:
         validate_sv_declarations(sv_classes, sv_source_files)
     classes.extend(sv_classes)
+    if sv_source_files:
+        _enrich_virtual_interface_handles(classes, scan_sv_virtual_interfaces(sv_source_files))
     declared_by_id = {
         item.get("canonical_id"): item
         for item in classes
@@ -643,6 +687,186 @@ def manifest_from_declarations(
     )
 
 
+def _vif_type_declaration(sv_type: str, *, where: str) -> dict[str, Any]:
+    """Map the supported static SV scalar subset to a public SvTypes type."""
+
+    normalized = " ".join(sv_type.split())
+    match = re.fullmatch(r"(bit|logic)\s*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?", normalized)
+    if match:
+        base, left, right = match.groups()
+        width = 1 if left is None else abs(int(left) - int(right)) + 1
+        annotation = (svtypes.Bit if base == "bit" else svtypes.Logic)[width]
+        return _svtypes_binding(annotation, where=where)
+    scalar_types = {
+        "int": svtypes.Int,
+        "integer": svtypes.Int,
+        "longint": svtypes.LongInt,
+        "string": svtypes.String,
+        "real": svtypes.Real,
+    }
+    annotation = scalar_types.get(normalized)
+    if annotation is None:
+        raise SVXInheritanceError(
+            f"{where} uses {sv_type!r}, which has no declared SvTypes VIF mapping"
+        )
+    return _svtypes_binding(annotation, where=where)
+
+
+def _vif_operations(
+    target_type_name: str,
+    fact: SVVirtualInterfaceFact,
+    modport: str | None,
+) -> list[dict[str, Any]]:
+    if modport is None:
+        directions = {member.name: "inout" for member in fact.members}
+    else:
+        directions = {
+            item.name: item.direction
+            for name, items in fact.modport_members
+            if name == modport
+            for item in items
+        }
+    operations: list[dict[str, Any]] = []
+    for member in fact.members:
+        direction = directions.get(member.name)
+        if direction is None:
+            continue
+        if member.kind == "signal":
+            assert member.sv_type is not None
+            binding = _vif_type_declaration(
+                member.sv_type,
+                where=f"virtual interface {fact.symbol}.{member.name}",
+            )
+            if direction in {"input", "inout"}:
+                operations.append(
+                    {
+                        "operation": "signal_read",
+                        "member": member.name,
+                        "method": {
+                            "canonical_id": f"{target_type_name}#read_{member.name}",
+                            "name": f"read_{member.name}",
+                            "parameters": [],
+                            "return_type": binding,
+                            "timing": "function",
+                        },
+                    }
+                )
+            if direction in {"output", "inout"}:
+                operations.append(
+                    {
+                        "operation": "signal_write",
+                        "member": member.name,
+                        "method": {
+                            "canonical_id": f"{target_type_name}#write_{member.name}",
+                            "name": f"write_{member.name}",
+                            "parameters": [{"name": "value", "type": binding, "direction": "input"}],
+                            "return_type": "void",
+                            "timing": "task",
+                        },
+                    }
+                )
+            continue
+        # A full virtual-interface type has no modport visibility filter:
+        # every declared subroutine is callable.  A modport, in contrast,
+        # exposes only subroutines explicitly imported by that modport.
+        if modport is not None and direction != "import":
+            continue
+        parameters = []
+        for parameter in member.parameters:
+            if parameter.direction not in {"input", "output", "inout"}:
+                raise SVXInheritanceError(
+                    f"virtual interface {fact.symbol}.{member.name}.{parameter.name} "
+                    f"uses unsupported direction {parameter.direction!r}"
+                )
+            parameters.append(
+                {
+                    "name": parameter.name,
+                    "type": _vif_type_declaration(
+                        parameter.sv_type,
+                        where=f"virtual interface {fact.symbol}.{member.name}.{parameter.name}",
+                    ),
+                    "direction": parameter.direction,
+                }
+            )
+        return_type: Any = "void"
+        if member.kind == "function":
+            assert member.sv_type is not None
+            return_type = _vif_type_declaration(
+                member.sv_type,
+                where=f"virtual interface {fact.symbol}.{member.name} return",
+            )
+        operations.append(
+            {
+                "operation": member.kind,
+                "member": member.name,
+                "method": {
+                    "canonical_id": f"{target_type_name}#{member.name}",
+                    "name": member.name,
+                    "parameters": parameters,
+                    "return_type": return_type,
+                    "timing": member.kind,
+                },
+            }
+        )
+    return operations
+
+
+def _enrich_virtual_interface_handles(
+    classes: list[dict[str, Any]], facts: dict[str, SVVirtualInterfaceFact]
+) -> None:
+    """Attach generated VIF operations to handle metadata in-place."""
+
+    def enrich_handle(handle: object) -> None:
+        if not isinstance(handle, dict) or handle.get("kind") != "virtual_interface":
+            return
+        if handle.get("operations"):
+            return
+        sv_type = handle.get("sv_type")
+        target = handle.get("target_type_name")
+        if not isinstance(sv_type, str) or not isinstance(target, str):
+            return
+        match = re.fullmatch(r"virtual\s+([A-Za-z_$][A-Za-z0-9_$:]*)((?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)", sv_type)
+        if match is None:
+            raise SVXInheritanceError(
+                f"virtual interface handle type {sv_type!r} is not a supported static VIF declaration"
+            )
+        interface_name, modport_suffix = match.groups()
+        modport = modport_suffix[1:] if modport_suffix else None
+        fact = facts.get(interface_name)
+        if fact is None:
+            raise SVXInheritanceError(
+                f"virtual interface {interface_name} was not found in scanned SV sources"
+            )
+        expected_target = f"sv-vif://{interface_name}/{modport or 'full'}"
+        if target != expected_target:
+            raise SVXInheritanceError(
+                f"virtual interface target {target!r} must be {expected_target!r}"
+            )
+        handle["operations"] = _vif_operations(target, fact, modport)
+
+    def visit_class(declaration: object) -> None:
+        if not isinstance(declaration, dict):
+            return
+        constructor = declaration.get("constructor")
+        groups: list[object] = [constructor.get("parameters", [])] if isinstance(constructor, dict) else []
+        for method in declaration.get("methods", []):
+            if not isinstance(method, dict):
+                continue
+            groups.append(method.get("parameters", []))
+            enrich_handle(method.get("return_handle"))
+        for parameters in groups:
+            if not isinstance(parameters, list):
+                continue
+            for parameter in parameters:
+                if isinstance(parameter, dict):
+                    enrich_handle(parameter.get("handle"))
+        for base in declaration.get("base_lineage", []):
+            visit_class(base)
+
+    for declaration in classes:
+        visit_class(declaration)
+
+
 def _class_declaration(cls: Any) -> dict[str, Any]:
     """Render a normalized class without recursively rendering its lineage."""
 
@@ -652,6 +876,53 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
         "symbol": cls.symbol,
         "methods": [],
     }
+
+    def handle_declaration(handle: Any) -> dict[str, Any]:
+        result = {
+            "kind": handle.kind,
+            "target_type_name": handle.target_type_name,
+            "sv_type": handle.sv_type,
+        }
+        if handle.operations:
+            result["operations"] = [
+                {
+                    "operation": operation.operation,
+                    "member": operation.sv_member_name,
+                    "method": {
+                        "canonical_id": operation.method.canonical_id,
+                        "name": operation.method.name,
+                        "parameters": [parameter_declaration(item) for item in operation.method.parameters],
+                        "return_type": (
+                            operation.method.return_type.runtime_spec()
+                            | {
+                                "sv": operation.method.return_type.sv,
+                                "sv_packer": operation.method.return_type.sv_packer,
+                            }
+                            if operation.method.return_type is not None
+                            else "void"
+                        ),
+                        "timing": operation.method.timing,
+                        "virtual": False,
+                        "pure_virtual": False,
+                    },
+                }
+                for operation in handle.operations
+            ]
+        return result
+
+    def parameter_declaration(parameter: Any) -> dict[str, Any]:
+        result = {
+            "name": parameter.name,
+            "type": parameter.type_binding.runtime_spec()
+            | {
+                "sv": parameter.type_binding.sv,
+                "sv_packer": parameter.type_binding.sv_packer,
+            },
+            "direction": parameter.direction,
+        }
+        if parameter.handle is not None:
+            result["handle"] = handle_declaration(parameter.handle)
+        return result
     if cls.fields:
         declaration["fields"] = [
             {
@@ -667,35 +938,13 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
     if cls.constructor is not None:
         declaration["constructor"] = {
             "initiator": cls.constructor.initiator,
-            "parameters": [
-                {
-                    "name": parameter.name,
-                    "type": parameter.type_binding.runtime_spec()
-                    | {
-                        "sv": parameter.type_binding.sv,
-                        "sv_packer": parameter.type_binding.sv_packer,
-                    },
-                    "direction": parameter.direction,
-                }
-                for parameter in cls.constructor.parameters
-            ],
+            "parameters": [parameter_declaration(parameter) for parameter in cls.constructor.parameters],
         }
     for method in cls.methods:
         method_declaration = {
             "canonical_id": method.canonical_id,
             "name": method.name,
-            "parameters": [
-                {
-                    "name": parameter.name,
-                    "type": parameter.type_binding.runtime_spec()
-                    | {
-                        "sv": parameter.type_binding.sv,
-                        "sv_packer": parameter.type_binding.sv_packer,
-                    },
-                    "direction": parameter.direction,
-                }
-                for parameter in method.parameters
-            ],
+            "parameters": [parameter_declaration(parameter) for parameter in method.parameters],
             "return_type": (
                 method.return_type.runtime_spec()
                 | {
@@ -711,6 +960,8 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
         }
         if method.is_static:
             method_declaration["static"] = True
+        if method.return_handle is not None:
+            method_declaration["return_handle"] = handle_declaration(method.return_handle)
         declaration["methods"].append(method_declaration)
     if cls.specialization is not None:
         declaration["specialization"] = {
@@ -755,3 +1006,23 @@ def manifest_dict(manifest: Manifest) -> dict[str, Any]:
         "required_runtime_capabilities": list(manifest.required_runtime_capabilities),
         "classes": classes,
     }
+
+
+def enrich_virtual_interface_manifest(
+    manifest: Manifest, *, sv_source_files: Iterable[Path]
+) -> Manifest:
+    """Attach generated VIF views to an existing normalized manifest.
+
+    ``inheritance-gen`` accepts a checked-in manifest as its stable input.
+    This helper lets that command additionally inspect the SV interface source
+    without requiring a second user-maintained VIF member whitelist.
+    """
+
+    paths = tuple(Path(path) for path in sv_source_files)
+    if not paths:
+        return manifest
+    declaration = manifest_dict(manifest)
+    _enrich_virtual_interface_handles(
+        declaration["classes"], scan_sv_virtual_interfaces(paths)
+    )
+    return parse_manifest(declaration)

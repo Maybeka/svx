@@ -19,6 +19,7 @@ def test_examples_index_covers_current_adoption_paths():
         "CLI workflow",
         "cross_language_inheritance",
         "python_owned_inheritance",
+        "foreign_handles",
         "hierarchical_signal_access",
         "Capability Matrix",
         "SVX Cookbook (Chinese)",
@@ -78,6 +79,7 @@ def test_cookbook_is_linked_and_covers_every_core_example_boundary():
         "milestone_7_sv_typed_helpers",
         "cross_language_inheritance",
         "python_owned_inheritance",
+        "foreign_handles",
         "hierarchical_signal_access",
     ):
         assert f"../examples/{path}" in cookbook
@@ -141,6 +143,49 @@ def test_python_owned_inheritance_example_artifacts_are_current():
     testbench = (EXAMPLES / "python_owned_inheritance" / "tb.sv").read_text()
     assert "SvCounterFactory" in testbench
     assert "register_factory" in testbench
+
+
+def test_foreign_handle_example_artifacts_are_current():
+    manifest = EXAMPLES / "foreign_handles" / "generated" / "handles.json"
+    assert (
+        main(
+            [
+                "inheritance-manifest",
+                "--python-module",
+                "examples.foreign_handles.python_api",
+                "--sv-source",
+                "examples/foreign_handles/bus_if.sv",
+                "--out",
+                str(manifest),
+                "--check",
+            ],
+            out=StringIO(),
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "inheritance-gen",
+                "--manifest",
+                str(manifest),
+                "--sv-source",
+                "examples/foreign_handles/bus_if.sv",
+                "--python-out",
+                "examples/foreign_handles/generated/python",
+                "--sv-out",
+                "examples/foreign_handles/generated/mirrors.sv",
+                "--artifact-manifest",
+                "examples/foreign_handles/generated/svx-artifacts.json",
+                "--check",
+            ],
+            out=StringIO(),
+        )
+        == 0
+    )
+    testbench = (EXAMPLES / "foreign_handles" / "tb.sv").read_text()
+    assert "TaggedPacket" in testbench
+    assert "virtual example_bus_if.master" in testbench
 
 
 def test_hierarchical_signal_example_predeclares_paths_at_initialization():

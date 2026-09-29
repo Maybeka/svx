@@ -11,6 +11,79 @@ interface class svx_dispatchable;
   );
 endclass
 
+class svx_object_id_allocator;
+  static longint unsigned next_object_id = 1;
+
+  static function longint unsigned allocate();
+    longint unsigned object_id = next_object_id;
+    next_object_id++;
+    if (object_id == 0) begin
+      object_id = next_object_id;
+      next_object_id++;
+    end
+    return object_id;
+  endfunction
+endclass
+
+// A foreign handle is retained only through one generated, statically typed
+// wrapper. The generic registry never sees the underlying class or virtual
+// interface type, so it cannot accidentally cast a handle to an unrelated
+// SV type.
+interface class svx_external_handle;
+  pure virtual function string svx_external_target_type();
+endclass
+
+class svx_external_handle_registry;
+  static svx_external_handle objects[longint unsigned];
+
+  static function longint unsigned allocate_object_id();
+    return svx_object_id_allocator::allocate();
+  endfunction
+
+  static function void register_object(
+    longint unsigned object_id,
+    svx_external_handle object
+  );
+    if (object_id == 0) begin
+      $fatal(2, "SVX external handle object id 0 is reserved");
+    end
+    if (object == null) begin
+      $fatal(2, "SVX cannot register a null external handle endpoint");
+    end
+    if (objects.exists(object_id)) begin
+      $fatal(2, "SVX external handle object id %0d is already bound", object_id);
+    end
+    objects[object_id] = object;
+  endfunction
+
+  static function bit resolve(
+    longint unsigned object_id,
+    string target_type_name,
+    output svx_external_handle object,
+    output string error
+  );
+    object = null;
+    error = "";
+    if (object_id == 0) return 1;
+    if (!objects.exists(object_id)) begin
+      error = $sformatf("unknown external handle id %0d", object_id);
+      return 0;
+    end
+    object = objects[object_id];
+    if (object.svx_external_target_type() != target_type_name) begin
+      error = $sformatf("external handle %0d has target %s, expected %s",
+                        object_id, object.svx_external_target_type(), target_type_name);
+      object = null;
+      return 0;
+    end
+    return 1;
+  endfunction
+
+  static function void clear();
+    objects.delete();
+  endfunction
+endclass
+
 interface class svx_factory;
   pure virtual task svx_create(
     longint unsigned object_id,
@@ -156,16 +229,9 @@ class svx_inheritance_registry;
   static svx_static_dispatchable static_objects[string];
   static svx_factory factories[string];
   static longint unsigned published_object_ids[string];
-  static longint unsigned next_object_id = 1;
 
   static function longint unsigned allocate_object_id();
-    longint unsigned object_id = next_object_id;
-    next_object_id++;
-    if (object_id == 0) begin
-      object_id = next_object_id;
-      next_object_id++;
-    end
-    return object_id;
+    return svx_object_id_allocator::allocate();
   endfunction
 
   static function void register_object(longint unsigned object_id, svx_dispatchable object);
@@ -363,6 +429,7 @@ endtask
 
 task automatic svx_shutdown();
   svx_inheritance_registry::clear();
+  svx_external_handle_registry::clear();
   svx_inheritance_shutdown();
   svx_channel_registry::clear();
   svx_runtime_shutdown();

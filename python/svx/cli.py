@@ -21,7 +21,11 @@ from .inheritance import (
     write_text_atomic,
     write_python_mirrors,
 )
-from .declarations import manifest_dict, manifest_from_declarations
+from .declarations import (
+    enrich_virtual_interface_manifest,
+    manifest_dict,
+    manifest_from_declarations,
+)
 
 
 def repo_root() -> Path:
@@ -335,6 +339,9 @@ def _cmd_svtypes_gen(args: argparse.Namespace, out: TextIO) -> int:
 
 def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
     manifest = load_manifest(Path(args.manifest))
+    manifest = enrich_virtual_interface_manifest(
+        manifest, sv_source_files=[Path(item) for item in args.sv_source]
+    )
     python_sources = emit_python_mirrors(manifest)
     sv_text = emit_sv_mirrors(manifest)
     if args.sv_out and args.sv_stage_dir:
@@ -494,6 +501,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("inheritance-gen", help="generate cross-language inheritance mirrors")
     p.add_argument("--manifest", required=True, help="versioned JSON inheritance manifest")
+    p.add_argument(
+        "--sv-source",
+        action="append",
+        default=[],
+        help="SystemVerilog interface source used to generate virtual-interface views",
+    )
     p.add_argument("--python-out", help="directory for generated Python SV mirrors")
     p.add_argument("--sv-out", help="output file for generated SystemVerilog Python mirrors")
     p.add_argument(

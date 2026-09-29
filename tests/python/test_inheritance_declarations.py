@@ -5,7 +5,7 @@ import sys
 from types import ModuleType
 
 import pytest
-from svtypes import Bit, Int, Object, Queue, type_spec_identity
+from svtypes import Bit, Int, Object, Queue, RemoteRef, type_spec_identity
 
 from svx import (
     Function,
@@ -19,7 +19,9 @@ from svx import (
     inheritance_method,
     inheritance_parameter,
     manifest_from_declarations,
+    sv_class_handle,
     sv_mirror,
+    virtual_interface_handle,
 )
 from svx.declarations import (
     SV_DECLARATION_SCHEMA_URI,
@@ -28,7 +30,11 @@ from svx.declarations import (
 )
 from svx.cli import main
 from svx.inheritance import parse_manifest
-from svx.sv_scan import scan_sv_sources, validate_sv_declarations
+from svx.sv_scan import (
+    scan_sv_sources,
+    scan_sv_virtual_interfaces,
+    validate_sv_declarations,
+)
 
 
 def int_type():
@@ -420,6 +426,105 @@ def test_pyslang_scans_and_validates_sv_inheritance_declarations(tmp_path):
             ],
             [source],
         )
+
+
+def test_pyslang_scans_virtual_interface_modports(tmp_path):
+    pytest.importorskip("pyslang")
+    source = tmp_path / "bus_if.sv"
+    source.write_text(
+        "interface bus_if;\n"
+        "  logic valid;\n"
+        "  task write(input logic value); valid = value; endtask\n"
+        "  modport master(output valid, import write);\n"
+        "  modport monitor(input valid);\n"
+        "endinterface\n"
+    )
+
+    facts = scan_sv_virtual_interfaces([source])
+    assert facts["bus_if"].modports == {"master", "monitor"}
+    master = facts["bus_if"].visible_members("master")
+    assert [(member.name, member.kind) for member in master] == [
+        ("valid", "signal"),
+        ("write", "task"),
+    ]
+    write = next(member for member in master if member.name == "write")
+    assert write.parameters[0].sv_type == "logic"
+    assert write.parameters[0].direction == "input"
+    directions = dict(
+        (item.name, item.direction)
+        for name, items in facts["bus_if"].modport_members
+        if name == "master"
+        for item in items
+    )
+    assert directions == {"valid": "output", "write": "import"}
+
+
+def test_declaration_handles_generate_vif_operations(tmp_path):
+    pytest.importorskip("pyslang")
+    source = tmp_path / "bus_if.sv"
+    source.write_text(
+        "interface bus_if;\n"
+        "  logic [7:0] data;\n"
+        "  task write(input logic [7:0] value); data = value; endtask\n"
+        "  function logic [7:0] read(); return data; endfunction\n"
+        "  modport master(output data, import write, read);\n"
+        "endinterface\n"
+    )
+    module = ModuleType("checks.handle_portal")
+    packet_ref = RemoteRef["sv://packet_pkg/Packet"]
+    vif_ref = RemoteRef["sv-vif://bus_if/master"]
+
+    def round_trip(self, packet, vif):
+        return vif
+
+    round_trip.__module__ = module.__name__
+    round_trip = inheritance_method(
+        parameters=[
+            inheritance_parameter(
+                "packet",
+                packet_ref,
+                handle=sv_class_handle("sv://packet_pkg/Packet", "packet_pkg::Packet"),
+            ),
+            inheritance_parameter(
+                "vif",
+                vif_ref,
+                handle=virtual_interface_handle(
+                    "sv-vif://bus_if/master", "virtual bus_if.master"
+                ),
+            ),
+        ],
+        return_type=vif_ref,
+        return_handle=virtual_interface_handle(
+            "sv-vif://bus_if/master", "virtual bus_if.master"
+        ),
+        timing="function",
+    )(round_trip)
+    portal = type(
+        "HandlePortal",
+        (),
+        {"__module__": module.__name__, "round_trip": round_trip},
+    )
+    portal = inheritance_class(canonical_id="py://checks/HandlePortal")(portal)
+    setattr(module, "HandlePortal", portal)
+
+    manifest = manifest_from_declarations(
+        python_modules=[module], sv_source_files=[source]
+    )
+    method = manifest.classes[0].methods[0]
+    assert method.parameters[0].handle is not None
+    assert method.parameters[0].handle.kind == "sv_class"
+    assert method.parameters[1].handle is not None
+    assert sorted(operation.method.name for operation in method.parameters[1].handle.operations) == [
+        "read",
+        "write",
+        "write_data",
+    ]
+    assert method.return_handle is not None
+    assert sorted(operation.method.name for operation in method.return_handle.operations) == [
+        "read",
+        "write",
+        "write_data",
+    ]
 
 
 def test_inheritance_manifest_cli_generates_and_checks(tmp_path, monkeypatch):

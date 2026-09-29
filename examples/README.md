@@ -21,6 +21,7 @@ the [example run guide](RUNNING_EXAMPLES.md).
 | Use generated types in a build | [CLI workflow](milestone_6_cli_workflow) | `svx svtypes-gen` and CLI discovery commands |
 | Derive an SV class in Python | [Cross-language inheritance](cross_language_inheritance) | Manifest validation, generated mirrors, SV-owned construction, and a timed Python override |
 | Derive a Python class in SV | [Python-owned inheritance](python_owned_inheritance) | Python-initiated construction, SV factory registration, and cross-language `super()` |
+| Pass an arbitrary SV class or a virtual interface | [Foreign handles](foreign_handles) | Opaque class `RemoteRef`, generated VIF view, static modport access, and handle identity |
 | Inspect or temporarily alter a hierarchy path | [Hierarchical signal access](hierarchical_signal_access) | Predeclaration, startup validation, read/write, force/release, and four-state values |
 | Use raw bytes instead of a typed model | [Payload channels](milestone_2_payload_channel) | Binary payload, peek, and nonblocking channel operations |
 | Understand runtime behavior | [Fork/join](milestone_1_fork), [shared state](milestone_1_shared_state), and [error policy](milestone_1_error) | Simulator-backed process control, Python heap sharing, and uncaught-exception handling |
@@ -63,6 +64,7 @@ the sole exception.
 | Incremental adoption in an existing environment | [Existing SV environment](milestone_5_existing_env) | Replace narrow data boundaries, not the SV component structure |
 | SV-owned class extended in Python | [Cross-language inheritance](cross_language_inheritance) | SV initiates construction; Python implements declared overrides |
 | Python-owned class extended in SV | [Python-owned inheritance](python_owned_inheritance) | Python initiates construction; SV registers a factory |
+| Foreign SV class handles and virtual interfaces | [Foreign handles](foreign_handles) | `RemoteRef` identity transport; VIF members come from its static interface/modport type |
 | Targeted hierarchical read/write/force/release | [Hierarchical signal access](hierarchical_signal_access) | Every path is declared and validated before runtime readiness |
 
 SvTypes randomization, coverage collection, and UCIS handling remain SvTypes

@@ -223,7 +223,7 @@ package svx_call_records_pkg;
   endclass
 
   class SVXCall_9a2f5982598a02ada022_Response extends svtypes_pkg::sv_object;
-    rand int result;
+    rand int svx_return_value;
 
     protected bit __svtypes_layered_randomize_active;
     protected int __svtypes_layered_randomize_priority;
@@ -238,24 +238,24 @@ package svx_call_records_pkg;
       int __svtypes_ok;
       bit __svtypes_previous_layered_active;
       int __svtypes_previous_layered_priority;
-      int __svtypes_rand_result;
+      int __svtypes_rand_svx_return_value;
       __svtypes_ok = 1;
       __svtypes_previous_layered_active = __svtypes_layered_randomize_active;
       __svtypes_previous_layered_priority = __svtypes_layered_randomize_priority;
       __svtypes_layered_randomize_active = 1;
-      __svtypes_rand_result = result.rand_mode();
-      result.rand_mode(0);
+      __svtypes_rand_svx_return_value = svx_return_value.rand_mode();
+      svx_return_value.rand_mode(0);
       if (__svtypes_ok) begin
         __svtypes_layered_randomize_priority = 0;
-        result.rand_mode(1);
+        svx_return_value.rand_mode(1);
         if (!this.randomize()) begin
           __svtypes_ok = 0;
         end
         else begin
-          result.rand_mode(0);
+          svx_return_value.rand_mode(0);
         end
       end
-      result.rand_mode(__svtypes_rand_result);
+      svx_return_value.rand_mode(__svtypes_rand_svx_return_value);
       __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
       __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
       return __svtypes_ok;
@@ -279,8 +279,8 @@ package svx_call_records_pkg;
         svtypes_pkg::end_plusarg_object();
         return;
       end
-      __svtypes_key = (prefix == "") ? "result=%d" : {prefix, ".result=%d"};
-      if ($test$plusargs((prefix == "") ? "result" : {prefix, ".result"}) && !$value$plusargs(__svtypes_key, result)) $fatal(2, "Malformed plusarg result");
+      __svtypes_key = (prefix == "") ? "svx_return_value=%d" : {prefix, ".svx_return_value=%d"};
+      if ($test$plusargs((prefix == "") ? "svx_return_value" : {prefix, ".svx_return_value"}) && !$value$plusargs(__svtypes_key, svx_return_value)) $fatal(2, "Malformed plusarg svx_return_value");
       svtypes_pkg::end_plusarg_object();
     endfunction
 
@@ -294,8 +294,8 @@ package svx_call_records_pkg;
         return result;
       end
       result = $sformatf("SVXCall_9a2f5982598a02ada022_Response#%0d{", __svtypes_object_number);
-      result = {result, "result="};
-      result = {result, $sformatf("%0d", result)};
+      result = {result, "svx_return_value="};
+      result = {result, $sformatf("%0d", svx_return_value)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -315,7 +315,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response", "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::int_packer::pack(result, bytes);
+      svtypes_pkg::int_packer::pack(svx_return_value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -337,7 +337,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response", "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::int_packer::unpack(result, bytes, offset);
+      svtypes_pkg::int_packer::unpack(svx_return_value, bytes, offset);
     endfunction
 
     class SVXCall_9a2f5982598a02ada022_Response__svtypes_coverage;
@@ -353,7 +353,7 @@ package svx_call_records_pkg;
         type_option.comment = "";
         type_option.goal = 100;
         type_option.weight = 1;
-        result: coverpoint item.result {
+        svx_return_value: coverpoint item.svx_return_value {
             option.at_least = 1;
             option.auto_bin_max = 64;
             option.comment = "";
@@ -497,7 +497,7 @@ package svx_proxy_base_monitor;
       offset = 0;
       response_value = new();
       response_value.unpack(bytes, offset);
-      result = response_value.result;
+      result = response_value.svx_return_value;
       svx_require_unpacked_all("py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample", "inheritance response", "call response", offset, bytes.size());
       return result;
     endfunction
@@ -533,7 +533,7 @@ package svx_proxy_base_monitor;
           result = sample();
           bytes.delete();
           response_value = new();
-          response_value.result = result;
+          response_value.svx_return_value = result;
           response_value.pack(bytes);
           ok = 1;
           error = "";

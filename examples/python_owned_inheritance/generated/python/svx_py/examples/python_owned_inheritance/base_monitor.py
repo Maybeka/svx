@@ -6,8 +6,8 @@ from svx.inheritance import bind_instance, encode_constructor, invoke_sv, regist
 from examples.python_owned_inheritance.base_monitor import BaseMonitor as _ForeignBaseMonitor
 
 register_contract({
-    'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample': {'parameters': (), 'request': (), 'response': (('result', {'unified_type_name': 'svtypes.Int', 'encoding_descriptor': {'binary_format_version': 1, 'encoding_fingerprint': '0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d', 'unified_type_name': 'svtypes.Int'}, 'svtypes': {'kind': 'scalar', 'name': 'Int'}}),)},
-    'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify': {'parameters': (), 'request': (), 'response': ()},
+    'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample': {'parameters': (), 'request': (), 'response': (('svx_return_value', {'unified_type_name': 'svtypes.Int', 'encoding_descriptor': {'binary_format_version': 1, 'encoding_fingerprint': '0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d', 'unified_type_name': 'svtypes.Int'}, 'svtypes': {'kind': 'scalar', 'name': 'Int'}}),), 'external_targets': ()},
+    'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify': {'parameters': (), 'request': (), 'response': (), 'external_targets': ()},
 })
 register_constructor('py://examples/python_owned_inheritance/base_monitor/BaseMonitor', (('seed', {'unified_type_name': 'svtypes.Int', 'encoding_descriptor': {'binary_format_version': 1, 'encoding_fingerprint': '0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d', 'unified_type_name': 'svtypes.Int'}, 'svtypes': {'kind': 'scalar', 'name': 'Int'}}),))
 class BaseMonitor(_ForeignBaseMonitor):

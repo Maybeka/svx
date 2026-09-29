@@ -1,0 +1,370 @@
+{
+  "classes": [
+    {
+      "canonical_id": "py://examples/foreign_handles/HandlePortal",
+      "constructor": {
+        "initiator": "python",
+        "parameters": []
+      },
+      "language": "python",
+      "methods": [
+        {
+          "canonical_id": "py://examples/foreign_handles/HandlePortal#retain_packet",
+          "name": "retain_packet",
+          "parameters": [
+            {
+              "direction": "input",
+              "handle": {
+                "kind": "sv_class",
+                "sv_type": "example_packet_pkg::Packet",
+                "target_type_name": "sv://example_packet_pkg/Packet"
+              },
+              "name": "packet",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92",
+                  "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+                },
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "svtypes": {
+                  "kind": "remote_ref",
+                  "target": "sv://example_packet_pkg/Packet"
+                },
+                "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+              }
+            }
+          ],
+          "pure_virtual": false,
+          "return_handle": {
+            "kind": "sv_class",
+            "sv_type": "example_packet_pkg::Packet",
+            "target_type_name": "sv://example_packet_pkg/Packet"
+          },
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92",
+              "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+            },
+            "sv": "svtypes_pkg::remote_ref",
+            "sv_packer": "svtypes_pkg::remote_ref_packer",
+            "svtypes": {
+              "kind": "remote_ref",
+              "target": "sv://example_packet_pkg/Packet"
+            },
+            "unified_type_name": "svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]"
+          },
+          "timing": "function",
+          "virtual": true
+        },
+        {
+          "canonical_id": "py://examples/foreign_handles/HandlePortal#exercise_bus",
+          "name": "exercise_bus",
+          "parameters": [
+            {
+              "direction": "input",
+              "handle": {
+                "kind": "virtual_interface",
+                "operations": [
+                  {
+                    "member": "data",
+                    "method": {
+                      "canonical_id": "sv-vif://example_bus_if/master#write_data",
+                      "name": "write_data",
+                      "parameters": [
+                        {
+                          "direction": "input",
+                          "name": "value",
+                          "type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "73d3773dbca6b2c2e2c0d3217fc9fec8617a5fd434a0cef28dd4683cd5e93f96",
+                              "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                            },
+                            "sv": "logic [7:0]",
+                            "sv_packer": "svtypes_pkg::logic_packer#(logic [7:0])",
+                            "svtypes": {
+                              "args": [
+                                8,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Logic"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                          }
+                        }
+                      ],
+                      "pure_virtual": false,
+                      "return_type": "void",
+                      "timing": "task",
+                      "virtual": false
+                    },
+                    "operation": "signal_write"
+                  },
+                  {
+                    "member": "write",
+                    "method": {
+                      "canonical_id": "sv-vif://example_bus_if/master#write",
+                      "name": "write",
+                      "parameters": [
+                        {
+                          "direction": "input",
+                          "name": "value",
+                          "type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "73d3773dbca6b2c2e2c0d3217fc9fec8617a5fd434a0cef28dd4683cd5e93f96",
+                              "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                            },
+                            "sv": "logic [7:0]",
+                            "sv_packer": "svtypes_pkg::logic_packer#(logic [7:0])",
+                            "svtypes": {
+                              "args": [
+                                8,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Logic"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                          }
+                        }
+                      ],
+                      "pure_virtual": false,
+                      "return_type": "void",
+                      "timing": "task",
+                      "virtual": false
+                    },
+                    "operation": "task"
+                  },
+                  {
+                    "member": "read",
+                    "method": {
+                      "canonical_id": "sv-vif://example_bus_if/master#read",
+                      "name": "read",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "73d3773dbca6b2c2e2c0d3217fc9fec8617a5fd434a0cef28dd4683cd5e93f96",
+                          "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                        },
+                        "sv": "logic [7:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [7:0])",
+                        "svtypes": {
+                          "args": [
+                            8,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "function"
+                  }
+                ],
+                "sv_type": "virtual example_bus_if.master",
+                "target_type_name": "sv-vif://example_bus_if/master"
+              },
+              "name": "bus",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f",
+                  "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+                },
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "svtypes": {
+                  "kind": "remote_ref",
+                  "target": "sv-vif://example_bus_if/master"
+                },
+                "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+              }
+            }
+          ],
+          "pure_virtual": false,
+          "return_handle": {
+            "kind": "virtual_interface",
+            "operations": [
+              {
+                "member": "data",
+                "method": {
+                  "canonical_id": "sv-vif://example_bus_if/master#write_data",
+                  "name": "write_data",
+                  "parameters": [
+                    {
+                      "direction": "input",
+                      "name": "value",
+                      "type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "73d3773dbca6b2c2e2c0d3217fc9fec8617a5fd434a0cef28dd4683cd5e93f96",
+                          "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                        },
+                        "sv": "logic [7:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [7:0])",
+                        "svtypes": {
+                          "args": [
+                            8,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                      }
+                    }
+                  ],
+                  "pure_virtual": false,
+                  "return_type": "void",
+                  "timing": "task",
+                  "virtual": false
+                },
+                "operation": "signal_write"
+              },
+              {
+                "member": "write",
+                "method": {
+                  "canonical_id": "sv-vif://example_bus_if/master#write",
+                  "name": "write",
+                  "parameters": [
+                    {
+                      "direction": "input",
+                      "name": "value",
+                      "type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "73d3773dbca6b2c2e2c0d3217fc9fec8617a5fd434a0cef28dd4683cd5e93f96",
+                          "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                        },
+                        "sv": "logic [7:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [7:0])",
+                        "svtypes": {
+                          "args": [
+                            8,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                      }
+                    }
+                  ],
+                  "pure_virtual": false,
+                  "return_type": "void",
+                  "timing": "task",
+                  "virtual": false
+                },
+                "operation": "task"
+              },
+              {
+                "member": "read",
+                "method": {
+                  "canonical_id": "sv-vif://example_bus_if/master#read",
+                  "name": "read",
+                  "parameters": [],
+                  "pure_virtual": false,
+                  "return_type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "73d3773dbca6b2c2e2c0d3217fc9fec8617a5fd434a0cef28dd4683cd5e93f96",
+                      "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                    },
+                    "sv": "logic [7:0]",
+                    "sv_packer": "svtypes_pkg::logic_packer#(logic [7:0])",
+                    "svtypes": {
+                      "args": [
+                        8,
+                        {
+                          "kind": "signedness",
+                          "value": "unsigned"
+                        }
+                      ],
+                      "base": {
+                        "kind": "packed",
+                        "name": "Logic"
+                      },
+                      "kind": "specialization"
+                    },
+                    "unified_type_name": "svtypes.Logic[width=8,signed=false,state=4state]"
+                  },
+                  "timing": "function",
+                  "virtual": false
+                },
+                "operation": "function"
+              }
+            ],
+            "sv_type": "virtual example_bus_if.master",
+            "target_type_name": "sv-vif://example_bus_if/master"
+          },
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f",
+              "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+            },
+            "sv": "svtypes_pkg::remote_ref",
+            "sv_packer": "svtypes_pkg::remote_ref_packer",
+            "svtypes": {
+              "kind": "remote_ref",
+              "target": "sv-vif://example_bus_if/master"
+            },
+            "unified_type_name": "svtypes.RemoteRef[target=sv-vif://example_bus_if/master]"
+          },
+          "timing": "function",
+          "virtual": true
+        }
+      ],
+      "symbol": "examples.foreign_handles.python_api.HandlePortal"
+    }
+  ],
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0"
+}

@@ -1,0 +1,109 @@
+{
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0",
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1"
+  ],
+  "classes": [
+    {
+      "canonical_id": "py://tests/integration/external_handle_base/HandlePortal",
+      "language": "python",
+      "symbol": "tests.integration.external_handle_base.HandlePortal",
+      "constructor": {"initiator": "python", "parameters": []},
+      "methods": [
+        {
+          "canonical_id": "py://tests/integration/external_handle_base/HandlePortal#round_trip_packet",
+          "name": "round_trip_packet",
+          "parameters": [
+            {
+              "name": "packet",
+              "type": {
+                "unified_type_name": "svtypes.RemoteRef[target=sv://external_handle_test_pkg/Packet]",
+                "svtypes": {"kind": "remote_ref", "target": "sv://external_handle_test_pkg/Packet"},
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "encoding_descriptor": {
+                  "unified_type_name": "svtypes.RemoteRef[target=sv://external_handle_test_pkg/Packet]",
+                  "encoding_fingerprint": "b34814ebf5b3466751aa27d6c954a004450d3f4ce6217fb7af9185445ff579b7",
+                  "binary_format_version": 1
+                }
+              },
+              "handle": {
+                "kind": "sv_class",
+                "target_type_name": "sv://external_handle_test_pkg/Packet",
+                "sv_type": "external_handle_test_pkg::Packet"
+              }
+            }
+          ],
+          "return_type": {
+            "unified_type_name": "svtypes.RemoteRef[target=sv://external_handle_test_pkg/Packet]",
+            "svtypes": {"kind": "remote_ref", "target": "sv://external_handle_test_pkg/Packet"},
+            "sv": "svtypes_pkg::remote_ref",
+            "sv_packer": "svtypes_pkg::remote_ref_packer",
+            "encoding_descriptor": {
+              "unified_type_name": "svtypes.RemoteRef[target=sv://external_handle_test_pkg/Packet]",
+              "encoding_fingerprint": "b34814ebf5b3466751aa27d6c954a004450d3f4ce6217fb7af9185445ff579b7",
+              "binary_format_version": 1
+            }
+          },
+          "return_handle": {
+            "kind": "sv_class",
+            "target_type_name": "sv://external_handle_test_pkg/Packet",
+            "sv_type": "external_handle_test_pkg::Packet"
+          },
+          "timing": "function",
+          "virtual": true,
+          "pure_virtual": false
+        },
+        {
+          "canonical_id": "py://tests/integration/external_handle_base/HandlePortal#round_trip_vif",
+          "name": "round_trip_vif",
+          "parameters": [
+            {
+              "name": "vif",
+              "type": {
+                "unified_type_name": "svtypes.RemoteRef[target=sv-vif://external_bus_if/master]",
+                "svtypes": {"kind": "remote_ref", "target": "sv-vif://external_bus_if/master"},
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "encoding_descriptor": {
+                  "unified_type_name": "svtypes.RemoteRef[target=sv-vif://external_bus_if/master]",
+                  "encoding_fingerprint": "1daea26a1585d05eb1fa4ec58b81cd11f21d0c7bed8242ff576ef93a299b4cb9",
+                  "binary_format_version": 1
+                }
+              },
+              "handle": {
+                "kind": "virtual_interface",
+                "target_type_name": "sv-vif://external_bus_if/master",
+                "sv_type": "virtual external_bus_if.master"
+              }
+            }
+          ],
+          "return_type": {
+            "unified_type_name": "svtypes.RemoteRef[target=sv-vif://external_bus_if/master]",
+            "svtypes": {"kind": "remote_ref", "target": "sv-vif://external_bus_if/master"},
+            "sv": "svtypes_pkg::remote_ref",
+            "sv_packer": "svtypes_pkg::remote_ref_packer",
+            "encoding_descriptor": {
+              "unified_type_name": "svtypes.RemoteRef[target=sv-vif://external_bus_if/master]",
+              "encoding_fingerprint": "1daea26a1585d05eb1fa4ec58b81cd11f21d0c7bed8242ff576ef93a299b4cb9",
+              "binary_format_version": 1
+            }
+          },
+          "return_handle": {
+            "kind": "virtual_interface",
+            "target_type_name": "sv-vif://external_bus_if/master",
+            "sv_type": "virtual external_bus_if.master"
+          },
+          "timing": "function",
+          "virtual": true,
+          "pure_virtual": false
+        }
+      ]
+    }
+  ]
+}

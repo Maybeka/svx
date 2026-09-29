@@ -41,7 +41,9 @@ from .declarations import (
     inheritance_method,
     inheritance_parameter,
     manifest_from_declarations,
+    sv_class_handle,
     sv_mirror,
+    virtual_interface_handle,
 )
 from .signal import Signal, declare_signal
 from .runtime import RuntimeState, state as runtime_state
@@ -95,6 +97,8 @@ __all__ = [
     "rsp_channel",
     "runtime_state",
     "set_exception_policy",
+    "sv_class_handle",
     "sv_mirror",
     "test",
+    "virtual_interface_handle",
 ]

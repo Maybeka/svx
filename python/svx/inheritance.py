@@ -24,6 +24,10 @@ GENERATOR_ABI_VERSION = 2
 REQUIRED_RUNTIME_CAPABILITIES = SVTYPES_REQUIRED_CAPABILITIES
 EXTERNAL_FIELD_STORAGE_CAPABILITY = "svtypes.external-field-storage.v1"
 MAX_CALL_PAYLOAD_BYTES = 16 * 1024 * 1024
+# This is private SVX record framing, not a user-visible Python parameter.
+# Do not use ``result``: SvTypes' generated SV ``svtypes_sprint`` uses that
+# name as a local variable, and a RemoteRef field would shadow it.
+_RETURN_FIELD_NAME = "svx_return_value"
 LEGACY_SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v1"
 _LEGACY_TYPES = {
     "bit": {"svtypes": "svtypes.Bit(1)", "sv": "bit", "sv_packer": "bits_packer#(bit)"},
@@ -71,10 +75,35 @@ class TypeBinding:
 
 
 @dataclass(frozen=True)
+class VifOperation:
+    """One generated member operation exposed by a virtual-interface view."""
+
+    method: Method
+    operation: str
+    sv_member_name: str
+
+
+@dataclass(frozen=True)
+class HandleBinding:
+    """The typed SV endpoint behind one SvTypes ``RemoteRef`` value.
+
+    ``type_binding`` remains the sole encoded call contract. This description
+    exists only at the generated SV boundary, where a remote-reference record
+    field is converted to an actual SV class or virtual-interface handle.
+    """
+
+    kind: str
+    target_type_name: str
+    sv_type: str
+    operations: tuple[VifOperation, ...] = ()
+
+
+@dataclass(frozen=True)
 class Parameter:
     name: str
     type_binding: TypeBinding
     direction: str
+    handle: HandleBinding | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +112,7 @@ class Method:
     name: str
     parameters: tuple[Parameter, ...]
     return_type: TypeBinding | None
+    return_handle: HandleBinding | None
     timing: str
     virtual: bool
     pure_virtual: bool
@@ -467,9 +497,68 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
     return binding
 
 
+def _remote_ref_target(binding: TypeBinding, where: str) -> str:
+    """Return the SvTypes RemoteRef target declared by ``binding``."""
+
+    try:
+        import svtypes
+
+        codec = _codec_from_spec(binding.runtime_spec())
+        remote_ref = getattr(svtypes, "RemoteRef", None)
+        if remote_ref is None or not isinstance(codec, remote_ref):
+            raise TypeError("is not svtypes.RemoteRef[TARGET]")
+        return codec.target_type_name
+    except Exception as error:
+        raise _error(where, f"must use a concrete SvTypes RemoteRef type: {error}") from error
+
+
+def _handle_binding(value: Any, binding: TypeBinding, where: str) -> HandleBinding:
+    """Parse typed foreign-handle metadata without changing its wire codec."""
+
+    raw = _object(value, where)
+    _reject_unknown(raw, {"kind", "target_type_name", "sv_type", "operations"}, where)
+    kind = _required_string(raw, "kind", where)
+    if kind not in {"sv_class", "virtual_interface"}:
+        raise _error(f"{where}.kind", "must be sv_class or virtual_interface")
+    target_type_name = _required_string(raw, "target_type_name", where)
+    expected_target = _remote_ref_target(binding, f"{where}.type")
+    if target_type_name != expected_target:
+        raise _error(
+            f"{where}.target_type_name",
+            f"must match the SvTypes RemoteRef target {expected_target!r}",
+        )
+    if kind == "sv_class" and not target_type_name.startswith("sv://"):
+        raise _error(f"{where}.target_type_name", "must use an sv:// target for an SV class")
+    if kind == "virtual_interface" and not target_type_name.startswith("sv-vif://"):
+        raise _error(
+            f"{where}.target_type_name",
+            "must use an sv-vif:// target for a virtual interface",
+        )
+    sv_type = _required_string(raw, "sv_type", where)
+    if kind == "virtual_interface":
+        valid = re.fullmatch(r"virtual [A-Za-z_$][A-Za-z0-9_$:.#() ,\[\]]*", sv_type)
+    else:
+        valid = re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_:$#() ,.\[\]]*", sv_type)
+    if not valid:
+        raise _error(f"{where}.sv_type", "contains unsupported SystemVerilog type characters")
+    raw_operations = raw.get("operations", [])
+    if not isinstance(raw_operations, list):
+        raise _error(f"{where}.operations", "must be a list")
+    if kind != "virtual_interface" and raw_operations:
+        raise _error(f"{where}.operations", "is valid only for virtual_interface handles")
+    operations = tuple(
+        _parse_vif_operation(item, target_type_name, f"{where}.operations[{index}]")
+        for index, item in enumerate(raw_operations)
+    )
+    operation_names = [operation.method.name for operation in operations]
+    if len(operation_names) != len(set(operation_names)):
+        raise _error(f"{where}.operations", "contains duplicate generated operation names")
+    return HandleBinding(kind, target_type_name, sv_type, operations)
+
+
 def _parse_parameter(value: Any, where: str) -> Parameter:
     raw = _object(value, where)
-    _reject_unknown(raw, {"name", "type", "direction"}, where)
+    _reject_unknown(raw, {"name", "type", "direction", "handle"}, where)
     name = _identifier(_required_string(raw, "name", where), f"{where}.name")
     type_binding = _type_binding(raw.get("type"), f"{where}.type", allow_void=False)
     direction = raw.get("direction", "input")
@@ -481,10 +570,17 @@ def _parse_parameter(value: Any, where: str) -> Parameter:
     if direction not in {"input", "output", "inout"}:
         raise _error(f"{where}.direction", "must be input, output, or inout")
     assert type_binding is not None
+    handle_raw = raw.get("handle")
+    handle = (
+        _handle_binding(handle_raw, type_binding, f"{where}.handle")
+        if handle_raw is not None
+        else None
+    )
     return Parameter(
         name=name,
         type_binding=type_binding,
         direction=direction,
+        handle=handle,
     )
 
 
@@ -589,7 +685,7 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
     raw = _object(value, where)
     _reject_unknown(
         raw,
-        {"canonical_id", "name", "parameters", "return_type", "timing", "virtual", "pure_virtual", "static"},
+        {"canonical_id", "name", "parameters", "return_type", "return_handle", "timing", "virtual", "pure_virtual", "static"},
         where,
     )
     name = _identifier(_required_string(raw, "name", where), f"{where}.name")
@@ -607,6 +703,14 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
         raise _error(f"{where}.parameters", "contains duplicate parameter names")
 
     return_type = _type_binding(raw.get("return_type"), f"{where}.return_type", allow_void=True)
+    return_handle_raw = raw.get("return_handle")
+    if return_handle_raw is not None and return_type is None:
+        raise _error(f"{where}.return_handle", "requires a non-void return_type")
+    return_handle = (
+        _handle_binding(return_handle_raw, return_type, f"{where}.return_handle")
+        if return_handle_raw is not None and return_type is not None
+        else None
+    )
     timing = _required_string(raw, "timing", where)
     if timing not in {"function", "task"}:
         raise _error(f"{where}.timing", "must be 'function' or 'task'")
@@ -635,7 +739,36 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
         raise _error(where, "pure_virtual methods must also be virtual")
     if is_static and virtual:
         raise _error(where, "static methods cannot be virtual across an SVX inheritance boundary")
-    return Method(canonical_id, name, parameters, return_type, timing, virtual, pure_virtual, is_static)
+    return Method(canonical_id, name, parameters, return_type, return_handle, timing, virtual, pure_virtual, is_static)
+
+
+def _parse_vif_operation(value: Any, target_type_name: str, where: str) -> VifOperation:
+    raw = _object(value, where)
+    _reject_unknown(raw, {"operation", "member", "method"}, where)
+    operation = _required_string(raw, "operation", where)
+    if operation not in {"task", "function", "signal_read", "signal_write"}:
+        raise _error(
+            f"{where}.operation",
+            "must be task, function, signal_read, or signal_write",
+        )
+    member = _identifier(_required_string(raw, "member", where), f"{where}.member")
+    method_raw = _object(raw.get("method"), f"{where}.method")
+    # VIF operations are generated private adapters, never virtual members of
+    # a user inheritance class. Keep the method parser as the single source of
+    # record-direction validation.
+    method_data = dict(method_raw)
+    method_data.setdefault("virtual", False)
+    method_data.setdefault("pure_virtual", False)
+    method = _parse_method(method_data, target_type_name, f"{where}.method")
+    if method.is_static:
+        raise _error(f"{where}.method.static", "is not valid for a virtual-interface operation")
+    if operation in {"task", "signal_write"} and method.return_type is not None:
+        raise _error(f"{where}.method.return_type", "must be void for this virtual-interface operation")
+    if operation == "function" and method.return_type is None:
+        raise _error(f"{where}.method.return_type", "must be non-void for a virtual-interface function")
+    if operation == "signal_read" and method.return_type is None:
+        raise _error(f"{where}.method.return_type", "must be non-void for a signal read")
+    return VifOperation(method, operation, member)
 
 
 def _parse_constructor(value: Any, where: str) -> Constructor:
@@ -1047,12 +1180,20 @@ def _response_field_specs(method: Method) -> str:
         for parameter in _response_parameters(method)
     ]
     if method.return_type is not None:
-        fields.append(("result", method.return_type.runtime_spec()))
+        fields.append((_RETURN_FIELD_NAME, method.return_type.runtime_spec()))
     content = ", ".join(repr(field) for field in fields)
     return f"({content}{',' if len(fields) == 1 else ''})"
 
 
 def _contract_repr(method: Method) -> str:
+    external_targets = tuple(
+        handle.target_type_name
+        for handle in (
+            *(parameter.handle for parameter in method.parameters),
+            method.return_handle,
+        )
+        if handle is not None
+    )
     return (
         "{'parameters': "
         + repr(tuple(
@@ -1063,6 +1204,8 @@ def _contract_repr(method: Method) -> str:
         + _field_specs(_request_parameters(method))
         + ", 'response': "
         + _response_field_specs(method)
+        + ", 'external_targets': "
+        + repr(external_targets)
         + "}"
     )
 
@@ -1093,6 +1236,21 @@ def _response_parameters(method: Method) -> tuple[Parameter, ...]:
         for parameter in method.parameters
         if parameter.direction in {"output", "inout"}
     )
+
+
+def _vif_module_parts(binding: HandleBinding) -> tuple[str, ...]:
+    assert binding.kind == "virtual_interface"
+    stem = binding.target_type_name.removeprefix("sv-vif://")
+    interface, separator, modport = stem.partition("/")
+    if not separator or not interface or not modport:
+        raise SVXInheritanceError(
+            f"invalid virtual-interface target {binding.target_type_name!r}"
+        )
+    return ("svx_vif", interface, modport)
+
+
+def _vif_view_class_name(binding: HandleBinding) -> str:
+    return _vif_module_parts(binding)[-1][:1].upper() + _vif_module_parts(binding)[-1][1:]
 
 
 def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
@@ -1373,6 +1531,58 @@ def emit_python_mirrors(manifest: Manifest) -> dict[PurePosixPath, str]:
                 lines.extend(["", f"    def {method.name}({_python_request_parameter_list(method)}):", f"        return invoke_sv(self._svx_remote_object_id, {method.canonical_id!r}, {_request_values_repr(method)})"])
             lines.append("")
         emitted[path] = "\n".join(lines).rstrip() + "\n"
+
+    vif_bindings = tuple(
+        binding
+        for binding in _manifest_handle_bindings(manifest)
+        if binding.kind == "virtual_interface" and binding.operations
+    )
+    if vif_bindings:
+        emitted[PurePosixPath("svx_vif/__init__.py")] = "# Generated by svx inheritance-gen.\n"
+    for binding in vif_bindings:
+        parts = _vif_module_parts(binding)
+        for depth in range(2, len(parts)):
+            emitted.setdefault(
+                PurePosixPath(*parts[:depth], "__init__.py"),
+                "# Generated by svx inheritance-gen.\n",
+            )
+        path = PurePosixPath(*parts).with_suffix(".py")
+        class_name = _vif_view_class_name(binding)
+        lines = [
+            "# Generated by svx inheritance-gen. Do not edit.",
+            "from __future__ import annotations",
+            "from svx.inheritance import invoke_sv, register_contract, register_vif_view",
+            "",
+            "register_contract({",
+        ]
+        for operation in binding.operations:
+            lines.append(f"    {operation.method.canonical_id!r}: {_contract_repr(operation.method)},")
+        lines.extend(
+            [
+                "})",
+                "",
+                f"class {class_name}:",
+                f"    \"\"\"Generated restricted view of {binding.sv_type}.\"\"\"",
+                f"    _svx_vif_target_type_name = {binding.target_type_name!r}",
+                "",
+                "    def __init__(self, reference):",
+                "        if getattr(reference, 'target_type_name', None) != self._svx_vif_target_type_name:",
+                "            raise TypeError('virtual-interface RemoteRef target does not match this view')",
+                "        self._svx_remote_reference = reference",
+                "        self._svx_remote_object_id = reference.object_number",
+            ]
+        )
+        for operation in binding.operations:
+            method = operation.method
+            lines.extend(
+                [
+                    "",
+                    f"    def {method.name}({_python_request_parameter_list(method)}):",
+                    f"        return invoke_sv(self._svx_remote_object_id, {method.canonical_id!r}, {_request_values_repr(method)})",
+                ]
+            )
+        lines.extend(["", f"register_vif_view({binding.target_type_name!r}, {class_name})", ""])
+        emitted[path] = "\n".join(lines)
     return emitted
 
 
@@ -1380,9 +1590,179 @@ def _sv_parameters(method: Method) -> str:
     if not method.parameters:
         return ""
     def render(parameter: Parameter) -> str:
-        return f"{parameter.direction} {parameter.type_binding.sv} {parameter.name}"
+        sv_type = parameter.handle.sv_type if parameter.handle is not None else parameter.type_binding.sv
+        return f"{parameter.direction} {sv_type} {parameter.name}"
 
     return ", ".join(render(parameter) for parameter in method.parameters)
+
+
+def _sv_return_type(method: Method) -> str:
+    assert method.return_type is not None
+    return method.return_handle.sv_type if method.return_handle is not None else method.return_type.sv
+
+
+def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
+    """Return one compatible static endpoint description per RemoteRef target."""
+
+    bindings: dict[str, HandleBinding] = {}
+
+    def add(binding: HandleBinding) -> None:
+        previous = bindings.get(binding.target_type_name)
+        if previous is None:
+            bindings[binding.target_type_name] = binding
+            return
+        if (previous.kind, previous.sv_type) != (binding.kind, binding.sv_type):
+            raise SVXInheritanceError(
+                "one foreign handle target must have one static SV type: "
+                f"{binding.target_type_name!r} is declared as both "
+                f"{previous.sv_type!r} and {binding.sv_type!r}"
+            )
+        operations = {item.method.canonical_id: item for item in previous.operations}
+        for item in binding.operations:
+            existing = operations.setdefault(item.method.canonical_id, item)
+            if existing != item:
+                raise SVXInheritanceError(
+                    "one virtual-interface operation must have one declaration: "
+                    f"{item.method.canonical_id!r}"
+                )
+        bindings[binding.target_type_name] = HandleBinding(
+            kind=previous.kind,
+            target_type_name=previous.target_type_name,
+            sv_type=previous.sv_type,
+            operations=tuple(operations[key] for key in sorted(operations)),
+        )
+
+    for cls in _all_manifest_classes(manifest):
+        for parameter in (*((cls.constructor or Constructor("python", ())).parameters), *(
+            parameter for method in cls.methods for parameter in method.parameters
+        )):
+            if parameter.handle is None:
+                continue
+            add(parameter.handle)
+        for method in cls.methods:
+            if method.return_handle is None:
+                continue
+            add(method.return_handle)
+    return tuple(bindings[key] for key in sorted(bindings))
+
+
+def _handle_adapter_name(binding: HandleBinding) -> str:
+    stem = re.sub(r"[^A-Za-z0-9_]", "_", binding.target_type_name).strip("_")
+    return "SVXExternal_" + stem
+
+
+def _emit_sv_external_handle_adapters(manifest: Manifest) -> list[str]:
+    """Emit typed SV endpoints for every external class or VIF RemoteRef."""
+
+    bindings = _manifest_handle_bindings(manifest)
+    if not bindings:
+        return []
+    lines = [
+        "",
+        "package svx_external_handles_pkg;",
+        "  import svx_pkg::*;",
+        "  import svtypes_pkg::*;",
+        "  import svx_call_records_pkg::*;",
+    ]
+    for binding in bindings:
+        name = _handle_adapter_name(binding)
+        target = json.dumps(binding.target_type_name)
+        endpoint_interfaces = "svx_external_handle, svx_dispatchable" if binding.operations else "svx_external_handle"
+        lines.extend(
+            [
+                "",
+                f"  class {name}Endpoint implements {endpoint_interfaces};",
+                f"    {binding.sv_type} value;",
+                "    longint unsigned object_id;",
+                "",
+                f"    function new({binding.sv_type} value);",
+                "      this.value = value;",
+                "    endfunction",
+                "",
+                "    virtual function string svx_external_target_type();",
+                f"      return {target};",
+                "    endfunction",
+            ]
+        )
+        if binding.operations:
+            lines.extend(
+                [
+                    "",
+                    "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                    "      byte unsigned bytes[$];",
+                    "      int offset;",
+                    "      response = null;",
+                    "      svx_payload_to_byte_queue(request, bytes);",
+                    "      offset = 0;",
+                    "      case (method_id)",
+                ]
+            )
+            for operation in binding.operations:
+                lines.extend(_emit_sv_vif_operation_dispatch_case(operation))
+            lines.extend(
+                [
+                    "        default: begin",
+                    "          ok = 0;",
+                    "          error = {\"unsupported virtual-interface operation: \", method_id};",
+                    "        end",
+                    "      endcase",
+                    "    endtask",
+                ]
+            )
+        lines.extend(
+            [
+                f"  endclass : {name}Endpoint",
+                "",
+                f"  class {name};",
+                f"    static {name}Endpoint endpoints[$];",
+                "",
+                f"    static function remote_ref encode({binding.sv_type} value);",
+                "      longint unsigned object_id;",
+                f"      {name}Endpoint endpoint;",
+                "      remote_ref reference;",
+                f"      if (value == null) begin",
+                f"        reference = new({target}, 0);",
+                "        return reference;",
+                "      end",
+                "      foreach (endpoints[index]) begin",
+                "        if (endpoints[index].value == value) begin",
+                f"          reference = new({target}, endpoints[index].object_id);",
+                "          return reference;",
+                "        end",
+                "      end",
+                "      object_id = svx_external_handle_registry::allocate_object_id();",
+                "      endpoint = new(value);",
+                "      endpoint.object_id = object_id;",
+                "      endpoints.push_back(endpoint);",
+                "      svx_external_handle_registry::register_object(object_id, endpoint);",
+                *(
+                    ["      svx_inheritance_registry::register_object(object_id, endpoint);"]
+                    if binding.operations
+                    else []
+                ),
+                f"      reference = new({target}, object_id);",
+                "      return reference;",
+                "    endfunction",
+                "",
+                f"    static function bit decode(input remote_ref reference, output {binding.sv_type} value, output string error);",
+                "      svx_external_handle raw;",
+                f"      {name}Endpoint endpoint;",
+                "      value = null;",
+                "      error = \"\";",
+                "      if (reference == null || reference.object_number == 0) return 1;",
+                f"      if (!svx_external_handle_registry::resolve(reference.object_number, {target}, raw, error)) return 0;",
+                "      if (!$cast(endpoint, raw)) begin",
+                "        error = \"external handle registry returned an incompatible typed endpoint\";",
+                "        return 0;",
+                "      end",
+                "      value = endpoint.value;",
+                "      return 1;",
+                "    endfunction",
+                f"  endclass : {name}",
+            ]
+        )
+    lines.extend(["endpackage : svx_external_handles_pkg", ""])
+    return lines
 
 
 def _sv_record_type(
@@ -1434,7 +1814,24 @@ def _manifest_sv_record_types(manifest: Manifest) -> list[type]:
                 for parameter in _response_parameters(method)
             )
             if method.return_type is not None:
-                response += (("result", method.return_type),)
+                response += ((_RETURN_FIELD_NAME, method.return_type),)
+            if request:
+                records.append(_sv_record_type(method.canonical_id, "request", request))
+            if response:
+                records.append(_sv_record_type(method.canonical_id, "response", response))
+    for binding in _manifest_handle_bindings(manifest):
+        for operation in binding.operations:
+            method = operation.method
+            request = tuple(
+                (parameter.name, parameter.type_binding)
+                for parameter in _request_parameters(method)
+            )
+            response = tuple(
+                (parameter.name, parameter.type_binding)
+                for parameter in _response_parameters(method)
+            )
+            if method.return_type is not None:
+                response += ((_RETURN_FIELD_NAME, method.return_type),)
             if request:
                 records.append(_sv_record_type(method.canonical_id, "request", request))
             if response:
@@ -1454,7 +1851,7 @@ def _emit_sv_outbound_method(method: Method) -> list[str]:
         assert method.return_type is not None
         result = [
             "",
-            f"    virtual function {method.return_type.sv} {method.name}({parameters});",
+            f"    virtual function {_sv_return_type(method)} {method.name}({parameters});",
         ]
     result.extend(
         [
@@ -1476,11 +1873,17 @@ def _emit_sv_outbound_method(method: Method) -> list[str]:
             f"      {_call_record_class_name(method.canonical_id, 'response')} response_value;"
         )
     if method.return_type is not None:
-        result.append(f"      {method.return_type.sv} result;")
+        result.append(f"      {_sv_return_type(method)} result;")
     if request_parameters:
         result.append("      request_value = new();")
         for parameter in request_parameters:
-            result.append(f"      request_value.{parameter.name} = {parameter.name};")
+            if parameter.handle is None:
+                result.append(f"      request_value.{parameter.name} = {parameter.name};")
+            else:
+                result.append(
+                    f"      request_value.{parameter.name} = "
+                    f"{_handle_adapter_name(parameter.handle)}::encode({parameter.name});"
+                )
         result.append("      request_value.pack(bytes);")
     result.append(
         '      request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");'
@@ -1515,9 +1918,27 @@ def _emit_sv_outbound_method(method: Method) -> list[str]:
             ]
         )
         for parameter in response_parameters:
-            result.append(f"      {parameter.name} = response_value.{parameter.name};")
+            if parameter.handle is None:
+                result.append(f"      {parameter.name} = response_value.{parameter.name};")
+            else:
+                result.extend(
+                    [
+                        f"      if (!{_handle_adapter_name(parameter.handle)}::decode(response_value.{parameter.name}, {parameter.name}, error)) begin",
+                        f'        $fatal(2, "SVX inheritance callback {method.canonical_id} returned invalid handle {parameter.name}: %s", error);',
+                        "      end",
+                    ]
+                )
         if method.return_type is not None:
-            result.append("      result = response_value.result;")
+            if method.return_handle is None:
+                result.append(f"      result = response_value.{_RETURN_FIELD_NAME};")
+            else:
+                result.extend(
+                    [
+                        f"      if (!{_handle_adapter_name(method.return_handle)}::decode(response_value.{_RETURN_FIELD_NAME}, result, error)) begin",
+                        f'        $fatal(2, "SVX inheritance callback {method.canonical_id} returned invalid handle result: %s", error);',
+                        "      end",
+                    ]
+                )
         result.append(
             f'      svx_require_unpacked_all("{method.canonical_id}", "inheritance response", "call response", offset, bytes.size());'
         )
@@ -1550,9 +1971,10 @@ def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
             f"          {_call_record_class_name(method.canonical_id, 'response')} response_value;"
         )
     for parameter in method.parameters:
-        result.append(f"          {parameter.type_binding.sv} {parameter.name};")
+        sv_type = parameter.handle.sv_type if parameter.handle is not None else parameter.type_binding.sv
+        result.append(f"          {sv_type} {parameter.name};")
     if method.return_type is not None:
-        result.append(f"          {method.return_type.sv} result;")
+        result.append(f"          {_sv_return_type(method)} result;")
     if request_parameters:
         result.extend(
             [
@@ -1561,7 +1983,18 @@ def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
             ]
         )
         for parameter in request_parameters:
-            result.append(f"          {parameter.name} = request_value.{parameter.name};")
+            if parameter.handle is None:
+                result.append(f"          {parameter.name} = request_value.{parameter.name};")
+            else:
+                result.extend(
+                    [
+                        f"          if (!{_handle_adapter_name(parameter.handle)}::decode(request_value.{parameter.name}, {parameter.name}, error)) begin",
+                        "            ok = 0;",
+                        "            response = null;",
+                        "            return;",
+                        "          end",
+                    ]
+                )
     result.append(
         f'          svx_require_unpacked_all("{method.canonical_id}", "inheritance request", "call request", offset, bytes.size());'
     )
@@ -1574,12 +2007,80 @@ def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
     if response_parameters or method.return_type is not None:
         result.append("          response_value = new();")
         for parameter in response_parameters:
-            result.append(f"          response_value.{parameter.name} = {parameter.name};")
+            if parameter.handle is None:
+                result.append(f"          response_value.{parameter.name} = {parameter.name};")
+            else:
+                result.append(
+                    f"          response_value.{parameter.name} = "
+                    f"{_handle_adapter_name(parameter.handle)}::encode({parameter.name});"
+                )
         if method.return_type is not None:
-            result.append("          response_value.result = result;")
+            if method.return_handle is None:
+                result.append(f"          response_value.{_RETURN_FIELD_NAME} = result;")
+            else:
+                result.append(
+                    f"          response_value.{_RETURN_FIELD_NAME} = "
+                    f"{_handle_adapter_name(method.return_handle)}::encode(result);"
+                )
         result.append("          response_value.pack(bytes);")
     result.extend(
         [
+            "          ok = 1;",
+            '          error = "";',
+            '          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+            "        end",
+        ]
+    )
+    return result
+
+
+def _emit_sv_vif_operation_dispatch_case(operation: VifOperation) -> list[str]:
+    """Emit one typed VIF signal or subroutine operation on ``value``."""
+
+    if operation.operation in {"task", "function"}:
+        # Subroutine argument names are user-controlled and may themselves be
+        # called ``value``.  Qualify the endpoint field to avoid shadowing it.
+        return _emit_sv_dispatch_case(operation.method, receiver="this.value.")
+
+    method = operation.method
+    result = [f"        {json.dumps(method.canonical_id)}: begin"]
+    if operation.operation == "signal_read":
+        assert method.return_type is not None
+        result.extend(
+            [
+                f"          {method.return_type.sv} result;",
+                f"          {_call_record_class_name(method.canonical_id, 'response')} response_value;",
+                "          if (bytes.size() != 0) begin",
+                "            ok = 0;",
+                '            error = "VIF signal read request must be empty";',
+                "            response = null;",
+                "            return;",
+                "          end",
+                f"          result = value.{operation.sv_member_name};",
+                "          bytes.delete();",
+                "          response_value = new();",
+                f"          response_value.{_RETURN_FIELD_NAME} = result;",
+                "          response_value.pack(bytes);",
+                "          ok = 1;",
+                '          error = "";',
+                '          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
+                "        end",
+            ]
+        )
+        return result
+
+    assert operation.operation == "signal_write"
+    parameter = method.parameters[0]
+    result.extend(
+        [
+            f"          {_call_record_class_name(method.canonical_id, 'request')} request_value;",
+            f"          {parameter.type_binding.sv} value_to_write;",
+            "          request_value = new();",
+            "          request_value.unpack(bytes, offset);",
+            f"          value_to_write = request_value.{parameter.name};",
+            f'          svx_require_unpacked_all("{method.canonical_id}", "VIF signal write", "call request", offset, bytes.size());',
+            f"          value.{operation.sv_member_name} = value_to_write;",
+            "          bytes.delete();",
             "          ok = 1;",
             '          error = "";',
             '          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
@@ -2356,6 +2857,7 @@ def _emit_sv_projection_helpers(
     manifest: Manifest,
     *,
     has_call_records: bool,
+    has_external_handles: bool,
 ) -> list[str]:
     """Materialize only mirrors/proxies implied by top-level target lineages."""
 
@@ -2433,6 +2935,7 @@ def _emit_sv_projection_helpers(
                 "  import svx_pkg::*;",
                 "  import svtypes_pkg::*;",
                 *(["  import svx_call_records_pkg::*;"] if has_call_records else []),
+                *(["  import svx_external_handles_pkg::*;"] if has_external_handles else []),
             ]
         )
         class_ids = sorted(set(packages[package]))
@@ -2551,10 +3054,13 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
         for record_type in record_types:
             lines.extend(["", record_type.to_sv_obj(1)])
         lines.extend(["endpackage : svx_call_records_pkg", ""])
+    external_handle_bindings = _manifest_handle_bindings(manifest)
+    lines.extend(_emit_sv_external_handle_adapters(manifest))
     record_import = ["  import svx_call_records_pkg::*;"] if record_types else []
+    external_handle_import = ["  import svx_external_handles_pkg::*;"] if external_handle_bindings else []
     for package, classes in sorted(packages.items()):
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
-        lines.extend(["", f"`ifndef {guard}", f"`define {guard}", "", f"package {package};", "  import svx_pkg::*;", "  import svtypes_pkg::*;", *record_import])
+        lines.extend(["", f"`ifndef {guard}", f"`define {guard}", "", f"package {package};", "  import svx_pkg::*;", "  import svtypes_pkg::*;", *record_import, *external_handle_import])
         for cls in sorted(classes, key=lambda item: item.name):
             proxy_name = cls.generated_name
             lines.extend(["", f"  // Generated SV projection for {cls.canonical_id}", f"  virtual class {proxy_name} implements svx_dispatchable;", "    longint unsigned __svx_remote_object_id;"])
@@ -2621,6 +3127,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                 "  import svx_pkg::*;",
                 "  import svtypes_pkg::*;",
                 *record_import,
+                *external_handle_import,
                 f"  import {source_package}::*;",
             ]
         )
@@ -2633,7 +3140,13 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
         )
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
 
-    lines.extend(_emit_sv_projection_helpers(manifest, has_call_records=bool(record_types)))
+    lines.extend(
+        _emit_sv_projection_helpers(
+            manifest,
+            has_call_records=bool(record_types),
+            has_external_handles=bool(external_handle_bindings),
+        )
+    )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -2816,7 +3329,7 @@ def artifact_manifest(
                             for parameter in _response_parameters(method)
                         )
                         + (
-                            (("result", method.return_type),)
+                            ((_RETURN_FIELD_NAME, method.return_type),)
                             if method.return_type is not None
                             else ()
                         ),
@@ -2840,7 +3353,7 @@ def artifact_manifest(
                     + (
                         [
                             {
-                                "name": "result",
+                                "name": _RETURN_FIELD_NAME,
                                 "direction": "return",
                                 "unified_type_name": method.return_type.unified_type_name,
                             }
@@ -3065,6 +3578,8 @@ class _RecordSchemaAdapter:
 _method_contracts: dict[str, _CallContract] = {}
 _constructor_contracts: dict[str, _CallContract] = {}
 _python_subclasses: dict[str, type] = {}
+_external_handle_targets: set[str] = set()
+_vif_views: dict[str, type] = {}
 
 
 def _shutdown_python_state() -> None:
@@ -3073,6 +3588,52 @@ def _shutdown_python_state() -> None:
     _method_contracts.clear()
     _constructor_contracts.clear()
     _python_subclasses.clear()
+    _external_handle_targets.clear()
+    _vif_views.clear()
+
+
+def register_vif_view(target_type_name: str, view_type: type) -> None:
+    """Register one generated Python view for a statically typed VIF target."""
+
+    if not isinstance(target_type_name, str) or not target_type_name.startswith("sv-vif://"):
+        raise SVXInheritanceError("generated VIF view target must use sv-vif://")
+    if not isinstance(view_type, type):
+        raise SVXInheritanceError("generated VIF view must be a class")
+    existing = _vif_views.get(target_type_name)
+    if existing is not None and existing is not view_type:
+        raise SVXInheritanceError(
+            f"conflicting generated VIF views for {target_type_name}: "
+            f"{existing.__module__}.{existing.__name__} and {view_type.__module__}.{view_type.__name__}"
+        )
+    _vif_views[target_type_name] = view_type
+
+
+def _decode_vif_view(value: Any) -> Any:
+    target_type_name = getattr(value, "target_type_name", None)
+    view_type = _vif_views.get(target_type_name)
+    if view_type is None and isinstance(target_type_name, str):
+        # Generated views use a deterministic module path. Load it before an
+        # inbound call reaches user code, rather than requiring a ceremonial
+        # import solely to activate an annotated VIF parameter.
+        match = re.fullmatch(
+            r"sv-vif://([A-Za-z_][A-Za-z0-9_$]*)/([A-Za-z_][A-Za-z0-9_$]*)",
+            target_type_name,
+        )
+        if match is not None:
+            interface, modport = match.groups()
+            importlib.import_module(f"svx_vif.{interface}.{modport}")
+            view_type = _vif_views.get(target_type_name)
+    return view_type(value) if view_type is not None and getattr(value, "object_number", 0) != 0 else value
+
+
+def _encode_vif_view(value: Any) -> Any:
+    target_type_name = getattr(value, "_svx_vif_target_type_name", None)
+    if target_type_name is None:
+        return value
+    reference = getattr(value, "_svx_remote_reference", None)
+    if getattr(reference, "target_type_name", None) != target_type_name:
+        raise SVXInheritanceError("virtual-interface view has no matching RemoteRef")
+    return reference
 
 
 def register_contract(contract: dict[str, dict[str, Any]]) -> None:
@@ -3107,10 +3668,22 @@ def register_contract(contract: dict[str, dict[str, Any]]) -> None:
                 "request": request,
                 "response": response,
             }
-        if set(signature) != {"parameters", "request", "response"}:
+        signature_keys = set(signature)
+        if signature_keys not in (
+            {"parameters", "request", "response"},
+            {"parameters", "request", "response", "external_targets"},
+        ):
             raise SVXInheritanceError(
                 f"generated call contract {method_id} must contain parameters, request, and response"
             )
+        external_targets = signature.get("external_targets", ())
+        if not isinstance(external_targets, tuple) or not all(
+            isinstance(target, str) and target for target in external_targets
+        ):
+            raise SVXInheritanceError(
+                f"generated call contract {method_id} external targets must be a tuple of strings"
+            )
+        _external_handle_targets.update(external_targets)
         normalized = _CallContract(
             _normalize_call_parameters(method_id, signature["parameters"]),
             _normalize_call_fields(method_id, "request", signature["request"]),
@@ -3320,6 +3893,12 @@ def _validate_remote_ref_target(target_type_name: str, value: Any) -> None:
         )
     if object_id == 0:
         return
+    # Externally owned SV class and virtual-interface handles are resolved by
+    # their generated typed SV endpoint. Python deliberately has no simulator
+    # pointer lookup for them, so it validates only the public RemoteRef target
+    # and defers liveness/type resolution to that endpoint.
+    if target_type_name in _external_handle_targets:
+        return
     from . import _native
 
     instance = _native.inheritance_get(object_id)
@@ -3400,10 +3979,13 @@ def _record_value(schema: Any, fields: tuple[tuple[str, dict[str, Any]], ...], v
         if extra:
             details.append("unexpected " + ", ".join(extra))
         raise TypeError("invalid generated call fields: " + "; ".join(details))
+    normalized_values = {
+        name: _encode_vif_view(value) for name, value in values.items()
+    }
     for name, spec in fields:
-        _validate_remote_refs(_svtypes_codec(spec), values[name])
+        _validate_remote_refs(_svtypes_codec(spec), normalized_values[name])
     try:
-        return schema.value_type(**values)
+        return schema.value_type(**normalized_values)
     except (AttributeError, TypeError):
         from .runtime import codec_session
 
@@ -3412,9 +3994,9 @@ def _record_value(schema: Any, fields: tuple[tuple[str, dict[str, Any]], ...], v
             for name, _ in fields:
                 member = getattr(result, name)
                 if hasattr(member, "value"):
-                    member.value = values[name]
+                    member.value = normalized_values[name]
                 else:
-                    setattr(result, name, values[name])
+                    setattr(result, name, normalized_values[name])
             return result
         except Exception as error:
             raise SVXInheritanceError(
@@ -3471,7 +4053,7 @@ def _call_values(
     request: dict[str, Any] = {}
     holders: dict[str, Any] = {}
     for name, direction, _ in contract.parameters:
-        value = values[name]
+        value = _encode_vif_view(values[name])
         if direction == "input":
             request[name] = value
         elif direction == "inout":
@@ -3492,7 +4074,8 @@ def _consume_call_response(
     result = None
     for name, _ in contract.response_fields:
         value = _record_field(response, name)
-        if name == "result":
+        value = _decode_vif_view(value)
+        if name in {"result", _RETURN_FIELD_NAME}:
             result = value
         else:
             holder = holders.get(name)
@@ -3672,7 +4255,8 @@ def dispatch_python_call(object_id: int, method_id: str, payload: bytes) -> byte
         request = _unpack_call_record(request_schema, payload)
         _validate_record_fields(request, contract.request_fields)
         request_values = {
-            name: _record_field(request, name) for name, _ in contract.request_fields
+            name: _decode_vif_view(_record_field(request, name))
+            for name, _ in contract.request_fields
         }
     from .declarations import Inout, Output
 
@@ -3703,11 +4287,11 @@ def dispatch_python_call(object_id: int, method_id: str, payload: bytes) -> byte
             )
         return b""
     response_values: dict[str, Any] = {}
-    has_result = any(name == "result" for name, _ in contract.response_fields)
+    has_result = any(name in {"result", _RETURN_FIELD_NAME} for name, _ in contract.response_fields)
     if result is not None and not has_result:
         raise SVXInheritanceError(f"task inheritance method {method_id} returned a value")
     for name, _ in contract.response_fields:
-        if name == "result":
+        if name in {"result", _RETURN_FIELD_NAME}:
             response_values[name] = result
             continue
         holder = holders[name]

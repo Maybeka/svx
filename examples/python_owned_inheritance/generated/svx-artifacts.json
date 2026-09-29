@@ -10,12 +10,12 @@
       "language": "python",
       "module": "svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "36c4f485af8772b827e1fd298e705e8d96d662007f0d54d957d261d4b21d8f24"
+      "sha256": "98216bbd740f6000b0236895777821f758b94f8bf265c9f0ce814e1f4e33f03c"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "46febb087a98f46c9ddcd9697efa3b6993fc7b575e386807df8819ab70e0a76d"
+      "sha256": "ee000f529c8db770c5c64786201d07b202ecc2cf7f2b0c7106ecee4133c92d03"
     }
   ],
   "callables": [
@@ -33,7 +33,7 @@
       "response_fields": [
         {
           "direction": "return",
-          "name": "result",
+          "name": "svx_return_value",
           "unified_type_name": "svtypes.Int"
         }
       ],

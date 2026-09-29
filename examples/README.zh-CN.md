@@ -18,6 +18,7 @@ milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界�
 | 在构建中使用生成类型 | [CLI 工作流](milestone_6_cli_workflow/README.zh-CN.md) | `svx svtypes-gen` 和 CLI 定位命令 |
 | 在 Python 中派生 SV class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | manifest 校验、生成镜像、SV 发起构造与 Python timed override |
 | 在 SV 中派生 Python class | [Python 所有的继承](python_owned_inheritance/README.zh-CN.md) | Python 发起构造、SV factory 注册与跨语言 `super()` |
+| 传递任意 SV class 或 virtual interface | [外部 handle](foreign_handles/README.zh-CN.md) | 不透明 class `RemoteRef`、生成的 VIF view、静态 modport 访问与 handle 身份 |
 | 检查或临时修改层次路径 | [分层信号访问](hierarchical_signal_access/README.zh-CN.md) | 预声明、启动校验、读/写、force/release 和四态值 |
 | 使用原始字节而非 typed model | [Payload channel](milestone_2_payload_channel/README.zh-CN.md) | 二进制 payload、peek 与非阻塞 channel 操作 |
 | 理解运行时行为 | [Fork/join](milestone_1_fork/README.zh-CN.md)、[共享状态](milestone_1_shared_state/README.zh-CN.md) 和 [异常策略](milestone_1_error/README.zh-CN.md) | 仿真器驱动的进程控制、Python heap 共享与未捕获异常处理 |
@@ -58,6 +59,7 @@ native runtime 资源按文档规定的顺序释放。异常策略示例会有�
 | 在既有环境中渐进采用 | [既有 SV 环境](milestone_5_existing_env/README.zh-CN.md) | 替换窄数据边界，不替换 SV component structure |
 | Python 扩展 SV 所有的 class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | SV 发起构造，Python 实现声明的 override |
 | SV 扩展 Python 所有的 class | [Python 所有的继承](python_owned_inheritance/README.zh-CN.md) | Python 发起构造，SV 注册 factory |
+| 外部 SV class handle 与 virtual interface | [外部 handle](foreign_handles/README.zh-CN.md) | `RemoteRef` 身份传输；VIF 成员来自静态 interface/modport 类型 |
 | 目标化分层读/写/force/release | [分层信号访问](hierarchical_signal_access/README.zh-CN.md) | 每条路径都在 runtime ready 前声明并校验 |
 
 SvTypes 的随机化、coverage collection 和 UCIS 处理仍属于 SvTypes。SVX 传输

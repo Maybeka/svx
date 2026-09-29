@@ -521,6 +521,16 @@ Python mirror in SVX 1.0 because SVX has no general object reflection or
 destructor hook. Every cross-language instance therefore enters through a
 generated constructor or factory.
 
+This restriction concerns executable mirrors, not declared handle transport.
+An arbitrary existing SV class handle may be passed through a declared
+`svtypes.RemoteRef[target]` boundary and is opaque in Python: it can be
+retained, forwarded, or returned, but not constructed, introspected, or called.
+A declared virtual interface similarly crosses as `RemoteRef`, but decodes to
+a generated restricted Python view whose signal and task/function members are
+derived from its static interface/modport type. See
+[Cross-Language Handle Adapters](CROSS_LANGUAGE_HANDLE_ADAPTERS.md) and the
+[foreign handles example](../examples/foreign_handles).
+
 Python mirrors preserve every declared parameter in order. `input` receives a
 decoded value; `inout` and `output` receive mutable `svx.Inout` and
 `svx.Output` carriers. The override reads or writes carrier `.value` and
