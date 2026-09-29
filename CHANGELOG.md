@@ -19,6 +19,9 @@ All notable changes to SVX are documented in this file.
 
 ## 1.0.0 - 2026-08-14
 
+- Improves generated Python and SystemVerilog inheritance artifacts with
+  deterministic provenance headers, structural sections, readable call
+  contracts, and boundary comments without changing their runtime ABI.
 - Requires the stable SvTypes `1.x` contract and validates its runtime
   capabilities before user code runs.
 - Adds deterministic runtime initialization and shutdown states, stale process

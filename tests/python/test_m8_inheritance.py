@@ -129,8 +129,15 @@ def test_manifest_emits_language_specific_mirrors():
     assert "def drive(self, address):" in mirror_text
     assert "'unified_type_name': 'svtypes.Int'" in mirror_text
     assert "svtypes.Int()" not in mirror_text
+    assert "# Manifest: https://svx.dev/schema/inheritance-manifest/v2 v2.0.0; generator ABI 2." in mirror_text
+    assert "# Role: Python mirrors for SystemVerilog-owned classes." in mirror_text
+    assert "# --- SvTypes call contracts (private bridge metadata) ---" in mirror_text
+    assert "register_contract(\n    {" in mirror_text
 
     sv_text = emit_sv_mirrors(manifest)
+    assert "// Layout: SvTypes records, typed external handles, public projections, then lineage helpers." in sv_text
+    assert "// Private SvTypes call records" in sv_text
+    assert "// Public Python-to-SystemVerilog proxy projections" in sv_text
     assert "package svx_proxy_checks;" in sv_text
     assert "virtual class BaseMonitor implements svx_dispatchable;" in sv_text
     assert "virtual task sample();" in sv_text
@@ -185,6 +192,11 @@ def test_generated_external_handle_adapters_preserve_sv_formal_types(
     assert "svtypes_pkg::remote_ref foreign = new" in text
     assert f"{adapter}::encode(foreign)" in text
     assert f"{adapter}::decode(response_value.svx_return_value, result, error)" in text
+    assert "// Private typed endpoints; RemoteRef is the sole encoded foreign-handle value." in text
+    assert f"// {kind}: {sv_type} <-> RemoteRef[{target}]." in text
+    assert "// Preserve the concrete SV handle in this session; encode only a typed RemoteRef." in text
+    assert "// Resolve this session-scoped RemoteRef back to the declared static SV type." in text
+    assert "// Foreign handles are resolved through typed RemoteRef endpoints." in text
 
 
 def test_manifest_rejects_external_handle_without_matching_remote_ref_target():
@@ -687,6 +699,8 @@ def test_four_segment_lineage_binds_early_python_fields_at_final_mirror():
     after_a = next(name for name in stages if name.startswith("after_sv_drivers_A_"))
     before_c = next(name for name in stages if name.startswith("before_sv_drivers_C_"))
     after_c = next(name for name in stages if name.startswith("after_sv_drivers_C_"))
+    assert "// Role: lineage bridge inserted after sv://drivers/A." in stages[after_a]
+    assert "// Role: lineage bridge inserted before sv://drivers/C." in stages[before_c]
     assert "class A extends drivers::A" in stages[after_a]
     assert "class B extends A" in stages[before_c]
     assert "class C extends drivers::C" in stages[after_c]
