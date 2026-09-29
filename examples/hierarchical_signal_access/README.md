@@ -2,6 +2,8 @@
 
 [中文](README.zh-CN.md)
 
+Follow the common [example run guide](../RUNNING_EXAMPLES.md), including its direct-VPI build requirement.
+
 Use this for targeted setup, inspection, and fault injection from a Python
 test. It is intentionally not a replacement for an SV driver, monitor, or
 high-volume signal transport.

@@ -14,7 +14,7 @@ from svx.field_storage import (
 class FieldOwner(SvObject):
     count = Int()
     local = Int()
-    history = Queue(Int())
+    history = Queue[Int]()
 
 
 class RecordingTransport:

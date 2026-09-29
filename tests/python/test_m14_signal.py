@@ -44,10 +44,10 @@ def signal_module(monkeypatch):
 def test_declare_signal_uses_public_svtypes_metadata(signal_module):
     module, calls = signal_module
 
-    signal = module.declare_signal("tb.data", Bit(8))
+    signal = module.declare_signal("tb.data", Bit[8]())
 
     assert signal.path == "tb.data"
-    descriptor = __import__("svtypes").encoding_descriptor(Bit(8))
+    descriptor = __import__("svtypes").encoding_descriptor(Bit[8]())
     assert calls == [
         (
             "declare",
@@ -97,14 +97,14 @@ def test_signal_rejects_noncanonical_svtypes_payload(signal_module):
         def pack(self, value):
             return b""
 
-    signal = module.declare_signal("tb.data", BrokenBit(8))
+    signal = module.declare_signal("tb.data", BrokenBit[8]())
     with pytest.raises(SVXSignalError, match="returned 0 bytes"):
         signal.write(1)
 
 
 def test_four_state_signal_preserves_value_x_and_z_planes(signal_module):
     module, calls = signal_module
-    signal = module.declare_signal("tb.logic", Logic(8))
+    signal = module.declare_signal("tb.logic", Logic[8]())
 
     assert signal.read() == LogicValue(8, value_mask=1, x_mask=2, z_mask=4)
     signal.write(LogicValue(8, value_mask=0x80, x_mask=2, z_mask=4))

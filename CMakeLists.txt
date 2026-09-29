@@ -42,6 +42,8 @@ else()
       "SVX_REQUIRE_DIRECT_VPI is enabled but vpi_user.h was not found; "
       "set SVX_SIMULATOR_INCLUDE_DIR")
   endif()
+  message(STATUS
+    "SVX direct VPI service is unavailable; hierarchical signal access is disabled")
   target_sources(svx PRIVATE svx_runtime/src/signal_vpi_stub.cpp)
   target_compile_definitions(svx PRIVATE SVX_HAS_DIRECT_VPI=0)
 endif()

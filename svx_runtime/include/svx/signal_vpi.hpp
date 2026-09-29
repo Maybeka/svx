@@ -4,7 +4,7 @@
 
 extern "C" {
 
-int svx_vpi_signal_validate(const char *path, int width);
+int svx_vpi_signal_validate(const char *path, int width, int signed_value);
 int svx_vpi_signal_read(const char *path, int width, std::uint8_t *data,
                         int size);
 int svx_vpi_signal_deposit(const char *path, int width,

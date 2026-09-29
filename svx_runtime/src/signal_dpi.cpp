@@ -7,6 +7,13 @@
 
 #include "svx/signal_vpi.hpp"
 
+#if __has_include(<sv_vpi_user.h>)
+#include <sv_vpi_user.h>
+#define SVX_HAS_SYSTEMVERILOG_VPI 1
+#else
+#define SVX_HAS_SYSTEMVERILOG_VPI 0
+#endif
+
 namespace {
 
 std::unordered_map<std::string, vpiHandle> handles;
@@ -22,16 +29,21 @@ vpiHandle resolve(const char *path, int width) {
 
 } // namespace
 
-extern "C" int svx_vpi_signal_validate(const char *path, int width) {
+extern "C" int svx_vpi_signal_validate(const char *path, int width,
+                                         int signed_value) {
   if (path == nullptr || width <= 0) return -4;
   vpiHandle handle = vpi_handle_by_name(const_cast<PLI_BYTE8 *>(path), nullptr);
   if (handle == nullptr) return -1;
   const int type = vpi_get(vpiType, handle);
-  if ((type != vpiNet && type != vpiReg && type != vpiIntegerVar) ||
-      vpi_get(vpiSize, handle) <= 0) {
+  bool supported = type == vpiNet || type == vpiReg || type == vpiIntegerVar;
+#if SVX_HAS_SYSTEMVERILOG_VPI
+  supported = supported || type == vpiIntVar || type == vpiLongIntVar;
+#endif
+  if (!supported || vpi_get(vpiSize, handle) <= 0) {
     return -2;
   }
   if (vpi_get(vpiSize, handle) != width) return -3;
+  if ((vpi_get(vpiSigned, handle) != 0) != (signed_value != 0)) return -6;
   handles[path] = handle;
   return 1;
 }

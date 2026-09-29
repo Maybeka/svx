@@ -31,7 +31,7 @@ class ChannelItem(SvObject):
 
 @svobj
 class RandomizedChannelItem(SvObject):
-    data = Bit(8, rand=True, cov=True)
+    data = Bit[8](rand=True, cov=True)
 
 
 def test_typed_channel_transports_public_encoding_descriptor(monkeypatch):

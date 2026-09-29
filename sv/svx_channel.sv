@@ -123,8 +123,14 @@ class svx_channel_registry;
   endfunction
 endclass
 
-task automatic svx_channel_put_payload(string name, chandle payload, int process_index,
-                                       output bit cancelled);
+// These cancellable forms are native-runtime ABI.  Keep the compact two-argument
+// forms below stable for generated SvTypes helpers and handwritten SV code.
+task automatic svx_channel_put_payload_cancelable(
+  string name,
+  chandle payload,
+  int process_index,
+  output bit cancelled
+);
   cancelled = 0;
   if (process_index < 0) begin
     svx_channel_registry::get(name).put(name, payload);
@@ -140,8 +146,12 @@ task automatic svx_channel_put_payload(string name, chandle payload, int process
   disable svx_channel_put_wait;
 endtask
 
-task automatic svx_channel_get_payload(string name, int process_index,
-                                       output chandle payload, output bit cancelled);
+task automatic svx_channel_get_payload_cancelable(
+  string name,
+  int process_index,
+  output chandle payload,
+  output bit cancelled
+);
   cancelled = 0;
   payload = null;
   if (process_index < 0) begin
@@ -158,8 +168,12 @@ task automatic svx_channel_get_payload(string name, int process_index,
   disable svx_channel_get_wait;
 endtask
 
-task automatic svx_channel_peek_payload(string name, int process_index,
-                                        output chandle payload, output bit cancelled);
+task automatic svx_channel_peek_payload_cancelable(
+  string name,
+  int process_index,
+  output chandle payload,
+  output bit cancelled
+);
   cancelled = 0;
   payload = null;
   if (process_index < 0) begin
@@ -174,6 +188,21 @@ task automatic svx_channel_peek_payload(string name, int process_index,
     end
   join_any
   disable svx_channel_peek_wait;
+endtask
+
+task automatic svx_channel_put_payload(string name, chandle payload);
+  bit cancelled;
+  svx_channel_put_payload_cancelable(name, payload, -1, cancelled);
+endtask
+
+task automatic svx_channel_get_payload(string name, output chandle payload);
+  bit cancelled;
+  svx_channel_get_payload_cancelable(name, -1, payload, cancelled);
+endtask
+
+task automatic svx_channel_peek_payload(string name, output chandle payload);
+  bit cancelled;
+  svx_channel_peek_payload_cancelable(name, -1, payload, cancelled);
 endtask
 
 function automatic bit svx_channel_try_put_payload(string name, chandle payload);
@@ -332,7 +361,7 @@ task automatic svx_channel_put_bytes(
 );
   chandle payload = svx_payload_from_bytes(data, kind, type_name, content_type);
   bit cancelled;
-  svx_channel_put_payload(name, payload, -1, cancelled);
+  svx_channel_put_payload_cancelable(name, payload, -1, cancelled);
 endtask
 
 task automatic svx_channel_put_byte_queue(
@@ -352,7 +381,7 @@ task automatic svx_channel_put_byte_queue(
       payload, unified_type_name, encoding_fingerprint, binary_format_version
     );
   end
-  svx_channel_put_payload(name, payload, -1, cancelled);
+  svx_channel_put_payload_cancelable(name, payload, -1, cancelled);
 endtask
 
 function automatic bit svx_channel_try_put_bytes(
@@ -393,9 +422,9 @@ function automatic bit svx_channel_try_put_byte_queue(
   return 1;
 endfunction
 
-export "DPI-C" task svx_channel_put_payload;
-export "DPI-C" task svx_channel_get_payload;
-export "DPI-C" task svx_channel_peek_payload;
+export "DPI-C" task svx_channel_put_payload_cancelable;
+export "DPI-C" task svx_channel_get_payload_cancelable;
+export "DPI-C" task svx_channel_peek_payload_cancelable;
 export "DPI-C" function svx_channel_try_put_payload;
 export "DPI-C" function svx_channel_try_get_payload;
 

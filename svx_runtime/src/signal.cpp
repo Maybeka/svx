@@ -109,11 +109,13 @@ void validate_and_seal() {
   std::string first_path;
   std::string first_code;
   for (auto &[path, entry] : g_entries) {
-    const int result = svx_vpi_signal_validate(path.c_str(), entry.width);
+    const int result = svx_vpi_signal_validate(
+        path.c_str(), entry.width, entry.signed_value ? 1 : 0);
     if (result != 1) {
       const char *code = result == -1 ? "not_found" :
                          result == -2 ? "unsupported_kind" :
                          result == -3 ? "type_mismatch" :
+                         result == -6 ? "signedness_mismatch" :
                          result == -5 ? "capability_unavailable" : "validation_failed";
       if (first_path.empty()) {
         first_path = path;

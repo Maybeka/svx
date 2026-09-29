@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+先遵循通用的[示例运行指南](../RUNNING_EXAMPLES.zh-CN.md)，其中包括 direct-VPI 的构建要求。
+
 此接口适用于 Python 测试中的目标化 setup、检查和 fault injection，并非 SV
 driver、monitor 或高吞吐信号传输的替代品。
 
