@@ -11,8 +11,8 @@ namespace svx {
 
 inline constexpr const char *SVX_PRODUCT_VERSION = SVX_VERSION;
 
-inline constexpr std::uint32_t SVX_RUNTIME_ABI_VERSION = 1;
-inline constexpr std::uint32_t SVX_SV_RUNTIME_ABI_VERSION = 1;
+inline constexpr std::uint32_t SVX_RUNTIME_ABI_VERSION = 3;
+inline constexpr std::uint32_t SVX_SV_RUNTIME_ABI_VERSION = 3;
 
 enum class RuntimeState : std::uint8_t {
   Uninitialized,
@@ -33,7 +33,7 @@ void runtime_shutdown();
 RuntimeState runtime_state();
 const char *runtime_state_name();
 bool runtime_ready();
-std::string handle_python_exception(const char *source);
+std::string handle_python_exception(const char *source, bool apply_policy = true);
 void set_exception_policy(const char *policy);
 bool fatal_policy_enabled();
 

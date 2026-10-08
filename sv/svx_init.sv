@@ -1,7 +1,7 @@
 `ifndef SVX_INIT__SV
 `define SVX_INIT__SV
 
-localparam int unsigned SVX_SV_RUNTIME_ABI_VERSION = 1;
+localparam int unsigned SVX_SV_RUNTIME_ABI_VERSION = 3;
 localparam string SVX_SV_PRODUCT_VERSION = "1.0.0";
 
 import "DPI-C" context task svx_runtime_init(

@@ -56,12 +56,12 @@ def inheritance_close(object_id: int) -> None:
     _native().inheritance_close(object_id)
 
 
-def inheritance_call_sv(object_id: int, method_id: str, request: bytes) -> bytes:
-    return _native().inheritance_call_sv(object_id, method_id, request)
+def inheritance_call_sv(object_id: int, method_id: str, request: bytes, *, function=False) -> bytes:
+    return _native().inheritance_call_sv(object_id, method_id, request, function)
 
 
-def inheritance_call_sv_static(class_id: str, method_id: str, request: bytes) -> bytes:
-    return _native().inheritance_call_sv_static(class_id, method_id, request)
+def inheritance_call_sv_static(class_id: str, method_id: str, request: bytes, *, function=False) -> bytes:
+    return _native().inheritance_call_sv_static(class_id, method_id, request, function)
 
 
 def inheritance_create_sv(class_id: str, request: bytes) -> int:

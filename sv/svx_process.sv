@@ -3,18 +3,27 @@
 
 class svx_process_manager#(string CATEGORY = "default");
   static process procs[int];
+  static event completion_events[int];
   static event cancel_events[int];
   static bit cancel_requested_by_index[int];
   static int curr_id = -1;
 
   static function int add(process proc);
+    automatic event completed;
     curr_id++;
     procs[curr_id] = proc;
+    completion_events[curr_id] = completed;
     return curr_id;
   endfunction
 
   static function void remove(int index);
+    if (completion_events.exists(index)) begin
+      -> completion_events[index];
+      completion_events.delete(index);
+    end
     procs.delete(index);
+    cancel_events.delete(index);
+    cancel_requested_by_index.delete(index);
   endfunction
 
   static function e_proc_state status(int index);
@@ -51,9 +60,24 @@ class svx_process_manager#(string CATEGORY = "default");
   endtask
 
   static task await(int index);
-    if (procs.exists(index)) begin
-      procs[index].await();
-      remove(index);
+    event completed;
+    // Retain the event so removal can wake every outstanding waiter.
+    if (completion_events.exists(index)) begin
+      completed = completion_events[index];
+      while (procs.exists(index)) @(completed);
+    end
+  endtask
+
+  static task shutdown();
+    int indices[$];
+    // Cancel the whole wave before waiting; cleanup can create another wave.
+    while (procs.num() != 0) begin
+      indices.delete();
+      foreach (procs[index]) begin
+        indices.push_back(index);
+        request_cancel(index);
+      end
+      foreach (indices[i]) await(indices[i]);
     end
   endtask
 endclass

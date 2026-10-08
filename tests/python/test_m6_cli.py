@@ -1,10 +1,30 @@
 from io import StringIO
 from pathlib import Path
+import subprocess
+import sys
+import os
 
 import svx
 from svx.cli import main
 
 from examples.milestone_6_cli_workflow.tests.types import M6BusOp, M6BusReq, M6BusRsp
+
+
+def test_cli_expected_errors_are_concise_and_debug_keeps_traceback(tmp_path):
+    manifest = tmp_path / "invalid.json"
+    manifest.write_text("{}")
+    arguments = ["inheritance-gen", "--manifest", str(manifest)]
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+    result = subprocess.run([sys.executable, "-m", "svx", *arguments],
+                            capture_output=True, text=True, env=environment)
+    assert result.returncode == 2
+    assert "svx: error:" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+    debug = subprocess.run([sys.executable, "-m", "svx", "--debug", *arguments],
+                           capture_output=True, text=True, env=environment)
+    assert debug.returncode != 0
+    assert "Traceback" in debug.stderr
 
 
 def run_cli(*args: str) -> str:
@@ -18,7 +38,7 @@ def test_cli_discovery_commands_source_tree():
     assert share.rstrip().endswith("/sv")
 
     native_source = run_cli("native-source")
-    assert native_source.rstrip().endswith("/svx")
+    assert Path(native_source.strip()).resolve() == Path(svx.__file__).resolve().parents[2]
     assert (Path(native_source.strip()) / "CMakeLists.txt").is_file()
 
     sv_files = run_cli("sv-files")
@@ -48,6 +68,19 @@ def test_svtypes_gen_module_and_explicit_types():
     )
     assert "typedef class M6BusReq;" in explicit
     assert "class M6BusRsp" not in explicit
+
+
+def test_svtypes_gen_preserves_unchanged_output(tmp_path):
+    target = tmp_path / "types.sv"
+    args = (
+        "svtypes-gen", "--module", "examples.milestone_6_cli_workflow.tests.types",
+        "--channel-helpers", "--out", str(target),
+    )
+    run_cli(*args)
+    first = target.stat()
+    run_cli(*args)
+    second = target.stat()
+    assert (first.st_ino, first.st_mtime_ns) == (second.st_ino, second.st_mtime_ns)
 
 
 def test_committed_typed_example_outputs_are_reproducible():

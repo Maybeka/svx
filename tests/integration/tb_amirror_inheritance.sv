@@ -18,9 +18,12 @@ module tb;
   initial begin
     svx_mirror_sv_amirror_pkg_Base::Base driver;
     time before_ping;
+    string python_module;
 
     svx_init();
-    svx_load("tests.integration.amirror_inheritance_test");
+    if (!$value$plusargs("SVX_TEST_MODULE=%s", python_module))
+      python_module = "tests.integration.amirror_inheritance_test";
+    svx_load(python_module);
     driver = new();
     before_ping = $time;
     driver.ping();

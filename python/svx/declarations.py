@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from collections.abc import Mapping
+from functools import wraps
+from dataclasses import dataclass, replace
 import inspect
 import json
 from pathlib import Path
 import re
 import sys
+import weakref
 from types import ModuleType
 from typing import TYPE_CHECKING, Annotated, Any, Callable, Generic, Iterable, TypeAlias, TypeVar
 
 from .errors import SVXInheritanceError
+from ._svtypes_contract import require_type_spec_api
+from .sv_source_options import _source_parse_options
 from .inheritance import (
     EXTERNAL_FIELD_STORAGE_CAPABILITY,
     GENERATOR_ABI_VERSION,
@@ -20,9 +25,12 @@ from .inheritance import (
     SCHEMA_URI,
     SCHEMA_VERSION,
     Manifest,
+    _codec_from_spec,
+    _remote_ref_target,
+    _type_binding,
     parse_manifest,
 )
-from .sv_scan import SVVirtualInterfaceFact, scan_sv_virtual_interfaces, validate_sv_declarations
+from .sv_scan import SVVirtualInterfaceFact, discover_sv_class_declarations, normalize_sv_handle_types, resolve_sv_field_handles, scan_sv_sources, scan_sv_virtual_interfaces, validate_sv_declarations
 
 import svtypes
 from svtypes import SvObject
@@ -47,6 +55,7 @@ class _FunctionMarker:
 def _svtypes_binding(annotation: Any, *, where: str) -> dict[str, Any]:
     """Derive all manifest data from SvTypes' public boundary contract."""
 
+    require_type_spec_api(svtypes)
     try:
         if not svtypes.is_materializable_type(annotation):
             raise TypeError("not a concrete SvTypes boundary type")
@@ -267,19 +276,20 @@ def _declared_svtypes_fields(cls: type) -> list[dict[str, Any]]:
     for name, descriptor in direct:
         factory_name = f"__svx_declared_codec_{cls.__name__}_{name}"
         existing = getattr(module, factory_name, None)
-        if existing is None:
-            # Bind the descriptor as a default rather than closing over the
-            # loop variable. Each resolution must receive a fresh codec.
-            def factory(template=descriptor):
-                return copy.deepcopy(template)
-
-            factory.__name__ = factory_name
-            factory.__qualname__ = factory_name
-            setattr(module, factory_name, factory)
-        elif not callable(existing):
+        owner = (cls.__module__, cls.__name__, name)
+        if existing is not None and getattr(existing, "__svx_field_factory_owner__", None) != owner:
             raise SVXInheritanceError(
                 f"inheritance codec factory name {cls.__module__}.{factory_name} is unavailable"
             )
+        # Refresh the template when an iterative discovery process redefines
+        # the class; a module reload preserves old globals by default.
+        def factory(template=descriptor):
+            return copy.deepcopy(template)
+
+        factory.__name__ = factory_name
+        factory.__qualname__ = factory_name
+        factory.__svx_field_factory_owner__ = owner
+        setattr(module, factory_name, factory)
         try:
             fields.append(
                 {
@@ -308,19 +318,67 @@ def _declared_svtypes_fields(cls: type) -> list[dict[str, Any]]:
 class SVMirror(SvObject):
     """Executable Python base for a declared SystemVerilog mirror surface.
 
-    Generated mirror implementations extend this source declaration. The base
-    intentionally owns no foreign object by itself: construction/binding is a
+    Empty source declarations acquire a generated implementation as their base.
+    This common base owns no foreign object by itself: construction/binding is a
     generated lifecycle operation, not a side effect of importing a stub.
     """
 
     _svx_remote_object_id: int | None = None
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        cls._svx_guard_source_initializer()
+
+    @classmethod
+    def _svx_guard_source_initializer(cls) -> None:
+        if not getattr(cls, '__svx_guard_descendant_initializers__', False):
+            return
+        initializer = cls.__dict__.get('__init__')
+        if initializer is None or getattr(initializer, '__svx_initializer_guard__', False):
+            return
+
+        @wraps(initializer)
+        def initialize(instance, *args, **kwargs):
+            depth = getattr(instance, '_svx_initializer_depth', 0)
+            was_bound = getattr(instance, '_svx_remote_object_id', None) is not None
+            instance._svx_initializer_depth = depth + 1
+            try:
+                return initializer(instance, *args, **kwargs)
+            except BaseException as error:
+                # Factory-stage failures already have their own rollback. This
+                # catches the outer Python body after its SV super returned.
+                if (depth == 0 and not was_bound
+                        and getattr(instance, '_svx_target_constructor_completed', False)):
+                    from .inheritance import close_instance
+
+                    for action, cleanup in (
+                        ('close projected storage', instance._svx_release_projected_fields),
+                        ('close paired SV target', lambda: close_instance(instance)),
+                    ):
+                        try:
+                            cleanup()
+                        except BaseException as cleanup_error:
+                            error.add_note(f'construction could not {action}: {cleanup_error}')
+                raise
+            finally:
+                instance._svx_initializer_depth = depth
+
+        initialize.__svx_initializer_guard__ = True
+        cls.__init__ = initialize
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        for base in type(self).__mro__:
+            declaration = base.__dict__.get('__svx_sv_mirror__')
+            if (isinstance(declaration, dict)
+                    and declaration['canonical_id'] not in _source_mirror_implementations):
+                raise SVXInheritanceError(
+                    f"generated mirror for {declaration['canonical_id']} is not loaded")
         super().__init__(*args, **kwargs)
 
     def _svx_bind_remote_object(self, object_id: int) -> None:
-        if not isinstance(object_id, int) or object_id <= 0:
-            raise ValueError("SVX mirror object id must be a non-zero integer")
+        if (not isinstance(object_id, int) or isinstance(object_id, bool)
+                or not 0 < object_id < (1 << 64)):
+            raise ValueError("SVX mirror object id must be an unsigned non-zero 64-bit integer")
         if self._svx_remote_object_id is not None:
             raise SVXInheritanceError("SVX mirror is already bound")
         self._svx_remote_object_id = object_id
@@ -343,24 +401,141 @@ class SVMirror(SvObject):
             self,
             self._svx_remote_object_id,
             identities,
+            storage=getattr(self, "_svx_field_storage", None),
         )
 
     def _svx_release_projected_fields(self) -> None:
         """Detach external fields before the paired SV object is released."""
 
+        from .inheritance import _retire_python_receiver_reservation
+
+        _retire_python_receiver_reservation(self)
+
         storage = getattr(self, "_svx_field_storage", None)
-        self.unbind_external_storage()
-        if storage is not None:
-            storage.close()
-            self._svx_field_storage = None
+        try:
+            if storage is not None:
+                storage.close()
+        finally:
+            try:
+                session = self.codec_session
+                number = self.svtypes_object_number
+            except AttributeError:
+                # Reservation can fail before SvTypes initializes the owner.
+                pass
+            else:
+                if session.get(number) is self:
+                    session.remove(number)
+        # Keep projected fields bound to the closed backend. Detaching would
+        # silently resurrect their pre-binding Python-local values.
+
+    def _svx_retire_failed_python_companion(self, initialization_error: BaseException) -> None:
+        from .inheritance import unbind_instance
+
+        for action, cleanup in (
+            ("close projected storage", self._svx_release_projected_fields),
+            ("unbind Python companion", lambda: unbind_instance(self._svx_remote_object_id)),
+        ):
+            try:
+                cleanup()
+            except BaseException as cleanup_error:
+                initialization_error.add_note(f"construction could not {action}: {cleanup_error}")
+
+
+class _PythonRootOwner(SVMirror):
+    """Private owner portion for generated companions of Python-root classes.
+
+    Generated companions place the source class before this portion in their
+    MRO. Its normal super call initializes SvTypes in the source constructor's
+    coverage context, then binds projected fields before user code resumes.
+    """
+
+    __svx_root_field_ids__: dict[str, str] = {}
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if getattr(self, "_svx_root_owner_initialized", False):
+            return
+        if getattr(self, '_svx_reserved_owner_prepared', False):
+            self._svx_reserved_owner_prepared = False
+            self._svx_root_owner_initialized = True
+            return
+        super().__init__(*args, **kwargs)
+        self._svx_root_owner_initialized = True
+        if self.__svx_root_field_ids__:
+            self._svx_bind_projected_fields(self.__svx_root_field_ids__)
+
+    @classmethod
+    def __svx_create_from_sv__(cls, remote_object_id: int, *args: Any):
+        from .inheritance import bind_instance
+
+        instance = cls.__new__(cls)
+        instance._svx_bind_remote_object(remote_object_id)
+        # A failed bind must not retire a different object already using the ID.
+        bind_instance(remote_object_id, instance)
+        try:
+            cls.__init__(instance, *args)
+            if not getattr(instance, "_svx_root_owner_initialized", False):
+                raise SVXInheritanceError(
+                    "Python-root companion initializer did not initialize its SvTypes owner"
+                )
+        except BaseException as initialization_error:
+            SVMirror._svx_retire_failed_python_companion(instance, initialization_error)
+            raise
+        return instance
+
+
+_source_mirror_declarations: dict[str, weakref.WeakSet] = {}
+_source_mirror_implementations: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+
+def _install_source_mirror(source: type, implementation: type) -> None:
+    if source.__bases__ == (implementation,):
+        return
+    if source.__bases__ != (SVMirror,):
+        raise SVXInheritanceError(
+            f"source mirror {source.__module__}.{source.__name__} must directly extend SVMirror")
+    refresh = getattr(SvObject, 'refresh_declarations', None)
+    if not callable(refresh):
+        raise SVXInheritanceError(
+            'source mirror binding requires SvTypes SvObject.refresh_declarations()')
+    try:
+        # Keep the source class identity: already defined children and their
+        # zero-argument super() must see the same newly executable base.
+        source.__bases__ = (implementation,)
+    except TypeError as error:
+        raise SVXInheritanceError(
+            f"cannot install generated mirror for {source.__module__}.{source.__name__}: {error}") from error
+    pending = [source]
+    while pending:
+        child = pending.pop()
+        refresh.__func__(child)
+        child._svx_guard_source_initializer()
+        pending.extend(child.__subclasses__())
+    if "__init_subclass__" in implementation.__dict__:
+        from .inheritance import register_python_subclass
+        class_id = source.__dict__["__svx_sv_mirror__"]["canonical_id"]
+        for child in source.__subclasses__():
+            register_python_subclass(class_id, child)
+
+
+def _register_source_mirror_implementation(class_id: str, implementation: type) -> None:
+    if (not issubclass(implementation, SVMirror)
+            or implementation.__dict__.get("__svx_foreign_class_id__") != class_id):
+        raise SVXInheritanceError(f"invalid generated source mirror implementation for {class_id}")
+    previous = _source_mirror_implementations.get(class_id)
+    if (previous is not None and previous is not implementation
+            and _source_mirror_declarations.get(class_id)):
+        raise SVXInheritanceError(f"conflicting generated source mirror implementation for {class_id}")
+    for source in tuple(_source_mirror_declarations.get(class_id, ())):
+        _install_source_mirror(source, implementation)
+    _source_mirror_implementations[class_id] = implementation
 
 
 def sv_mirror(canonical_id: str):
     """Mark an ``SVMirror`` source class as the static view of one SV class.
 
-    The decorator does not generate code or allocate an SV instance. During
-    manifest discovery its canonical ID is matched to an explicit SV class
-    declaration, from which the full ancestor context is obtained.
+    The decorator does not generate code or allocate an SV instance. Discovery
+    matches the ID to the SV declaration. At runtime, loading the matching
+    generated mirror installs its behavior without replacing source class identity.
     """
 
     if not isinstance(canonical_id, str) or not canonical_id.startswith("sv://"):
@@ -372,6 +547,10 @@ def sv_mirror(canonical_id: str):
         if "__svx_sv_mirror__" in cls.__dict__:
             raise SVXInheritanceError(f"SV mirror {cls.__name__} is already declared")
         setattr(cls, "__svx_sv_mirror__", {"canonical_id": canonical_id})
+        _source_mirror_declarations.setdefault(canonical_id, weakref.WeakSet()).add(cls)
+        implementation = _source_mirror_implementations.get(canonical_id)
+        if implementation is not None:
+            _install_source_mirror(cls, implementation)
         return cls
 
     return decorate
@@ -504,20 +683,54 @@ def inheritance_method(
     return decorate(function)
 
 
+def _constructor_declarations_from_annotations(cls: type) -> list[dict[str, Any]]:
+    initializer = cls.__dict__.get("__init__")
+    if initializer is None:
+        return []
+    signature = list(inspect.signature(initializer).parameters.values())
+    annotations = _resolved_annotations(initializer)
+    if not any(parameter.name in annotations for parameter in signature[1:]):
+        return []
+    where = f"inheritance constructor {cls.__name__}.__init__"
+    if not signature or signature[0].name != "self":
+        raise SVXInheritanceError(f"{where} must begin with self")
+    declarations: list[dict[str, Any]] = []
+    for parameter in signature[1:]:
+        if parameter.kind not in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ):
+            raise SVXInheritanceError(
+                f"{where}.{parameter.name}: automatic constructor discovery requires "
+                "fixed positional parameters"
+            )
+        annotation = annotations.get(parameter.name, inspect.Signature.empty)
+        if annotation is inspect.Signature.empty:
+            raise SVXInheritanceError(f"{where} must annotate every non-self parameter")
+        if isinstance(annotation, _ParameterMarker):
+            if annotation.direction != "input":
+                raise SVXInheritanceError(f"{where}.{parameter.name} must be input")
+            annotation = annotation.type_declaration
+        declarations.append(inheritance_parameter(
+            parameter.name,
+            _type_declaration(annotation, where=f"{where}.{parameter.name}"),
+        ))
+    return declarations
+
+
 def inheritance_class(
     *,
     canonical_id: str | None = None,
-    constructor_parameters: Iterable[dict[str, Any]] = (),
+    constructor_parameters: Iterable[dict[str, Any]] | None = None,
     constructor_initiator: str = "python",
     base_lineage: Iterable[dict[str, Any]] | None = None,
     specialization: dict[str, Any] | None = None,
 ):
-    """Declare one explicit Python generation target for manifest generation."""
+    """Declare a target, inferring an annotated own initializer unless overridden."""
 
-    constructor = {
-        "initiator": constructor_initiator,
-        "parameters": list(constructor_parameters),
-    }
+    explicit_parameters = (
+        list(constructor_parameters) if constructor_parameters is not None else None
+    )
     normalized_lineage = list(base_lineage or ())
 
     def decorate(cls: type):
@@ -526,9 +739,16 @@ def inheritance_class(
         if "<locals>" in cls.__qualname__ or "." in cls.__qualname__:
             raise SVXInheritanceError("nested Python inheritance classes are unsupported")
         class_id = canonical_id or f"py://{cls.__module__.replace('.', '/')}/{cls.__name__}"
+        constructor = {
+            "initiator": constructor_initiator,
+            "parameters": (
+                list(explicit_parameters) if explicit_parameters is not None
+                else _constructor_declarations_from_annotations(cls)
+            ),
+        }
         mirror_bases = [
             base.__dict__["__svx_sv_mirror__"]["canonical_id"]
-            for base in cls.__mro__[1:]
+            for base in cls.__bases__
             if isinstance(base, type) and "__svx_sv_mirror__" in base.__dict__
         ]
         if len(mirror_bases) > 1:
@@ -569,6 +789,11 @@ def inheritance_class(
                 "fields": _declared_svtypes_fields(cls),
                 "base_lineage": normalized_lineage,
                 "mirror_base_ids": mirror_bases,
+                "python_base_ids": [
+                    base.__dict__["__svx_inheritance_class__"]["canonical_id"]
+                    for base in cls.__bases__
+                    if "__svx_inheritance_class__" in base.__dict__
+                ],
                 **({"specialization": specialization} if specialization is not None else {}),
             },
         )
@@ -625,46 +850,116 @@ def manifest_from_declarations(
     python_modules: Iterable[ModuleType] = (),
     sv_declaration_files: Iterable[Path] = (),
     sv_source_files: Iterable[Path] = (),
+    sv_predefines: Mapping[str, str | None] | None = None,
+    sv_undefines: Iterable[str] = (),
+    sv_compilation_unit: bool = False,
+    sv_include_dirs: Iterable[Path] = (),
 ) -> Manifest:
     """Normalize supported declaration front ends to the sole v2 manifest model."""
 
     sv_source_files = tuple(sv_source_files)
+    sv_undefines = tuple(sv_undefines) if not isinstance(sv_undefines, str) else sv_undefines
+    sv_include_dirs = tuple(sv_include_dirs) if not isinstance(sv_include_dirs, (str, bytes, Path)) else sv_include_dirs
+    if (sv_predefines or sv_undefines or sv_compilation_unit or sv_include_dirs) and not sv_source_files:
+        raise SVXInheritanceError("SV source configuration requires SV source files")
+    parse_options = _source_parse_options(sv_predefines, sv_undefines, sv_include_dirs,
+                                          discover_proxies=True) if sv_source_files else None
     # Nested method/handle dictionaries are intentionally enriched below;
     # never mutate decorator metadata retained on the user's Python classes.
+    python_modules = tuple(python_modules)
     classes = [copy.deepcopy(item) for item in _python_declarations(python_modules)]
+    # Ancestors provide discovery context, not additional generation targets.
+    python_ancestors = {}
+    for module in python_modules:
+        for value in module.__dict__.values():
+            if isinstance(value, type):
+                for base in value.__mro__:
+                    item = base.__dict__.get("__svx_inheritance_class__")
+                    if isinstance(item, dict):
+                        python_ancestors[item["canonical_id"]] = copy.deepcopy(item)
     sv_classes: list[dict[str, Any]] = []
     for path in sv_declaration_files:
         sv_classes.extend(load_sv_declarations(path))
+    sv_context = []
     if sv_source_files:
-        validate_sv_declarations(sv_classes, sv_source_files)
+        source_facts = scan_sv_sources(sv_source_files, allow_no_packages=True,
+                                       parse_options=parse_options, compilation_unit=sv_compilation_unit)
+        interface_facts = scan_sv_virtual_interfaces(sv_source_files, parse_options=parse_options,
+                                                    compilation_unit=sv_compilation_unit)
+        _enrich_python_source_handles([*classes, *python_ancestors.values()], source_facts, interface_facts)
+        explicit_ids = {item["canonical_id"] for item in sv_classes}
+        requested_ids = sorted({
+            class_id for item in python_ancestors.values()
+            for class_id in item.get("mirror_base_ids", [])
+            if class_id not in explicit_ids
+        })
+        if requested_ids:
+            value_annotations = _source_value_annotations(python_modules)
+            sv_context = discover_sv_class_declarations(
+                sv_source_files, requested_ids,
+                lambda actual, *, where: _source_semantic_type_declaration(
+                    actual, where=where, value_annotations=value_annotations),
+                parse_options=parse_options, compilation_unit=sv_compilation_unit,
+                existing=sv_classes,
+                python_context=python_ancestors.values(),
+            )
     classes.extend(sv_classes)
     if sv_source_files:
-        _enrich_virtual_interface_handles(classes, scan_sv_virtual_interfaces(sv_source_files))
-    declared_by_id = {
+        source_declarations = [*classes, *sv_context]
+        _enrich_native_handle_fields(source_declarations, sv_source_files, parse_options=parse_options,
+                                     compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
+        normalize_sv_handle_types(source_declarations, sv_source_files, parse_options=parse_options,
+                                  compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
+        validate_sv_declarations([*sv_classes, *sv_context], sv_source_files, parse_options=parse_options,
+                                 compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
+        _enrich_virtual_interface_handles(source_declarations, interface_facts)
+    declared_by_id = {**{item["canonical_id"]: item for item in sv_context}, **python_ancestors, **{
         item.get("canonical_id"): item
         for item in classes
         if isinstance(item, dict) and isinstance(item.get("canonical_id"), str)
-    }
-    for declaration in classes:
-        if declaration.get("language") != "python":
-            continue
+    }}
+    resolving = set()
+    resolved = set()
+
+    def resolve_lineage(declaration):
+        class_id = declaration["canonical_id"]
+        if class_id in resolved:
+            return
+        if class_id in resolving:
+            raise SVXInheritanceError(f"cyclic discovery lineage at {class_id}")
+        resolving.add(class_id)
+        source_base_id = declaration.pop("discovery_base_id", None)
         mirror_base_ids = declaration.pop("mirror_base_ids", [])
-        if declaration.get("base_lineage") or not mirror_base_ids:
-            continue
-        if len(mirror_base_ids) != 1:
-            raise SVXInheritanceError("Python inheritance declaration has invalid mirror bases")
-        base = declared_by_id.get(mirror_base_ids[0])
-        if not isinstance(base, dict) or base.get("language") != "sv":
-            raise SVXInheritanceError(
-                f"Python mirror base {mirror_base_ids[0]!r} has no matching SV declaration"
-            )
-        # Manifest lineage is flat. Reuse the complete SV declaration context,
-        # but never nest a lineage member inside another lineage member.
-        inherited = base.get("base_lineage", [])
-        if not isinstance(inherited, list):
-            raise SVXInheritanceError("SV mirror base has invalid base_lineage")
-        direct = {key: value for key, value in base.items() if key != "base_lineage"}
-        declaration["base_lineage"] = [*inherited, direct]
+        python_base_ids = declaration.pop("python_base_ids", [])
+        base_ids = [source_base_id] if source_base_id is not None else mirror_base_ids or python_base_ids
+        if not declaration.get("base_lineage") and base_ids:
+            if len(base_ids) != 1:
+                raise SVXInheritanceError("Python inheritance declaration has multiple logical bases")
+            base = declared_by_id.get(base_ids[0])
+            if not isinstance(base, dict):
+                raise SVXInheritanceError(
+                    f"Python mirror base {base_ids[0]!r} has no matching declaration"
+                )
+            resolve_lineage(base)
+            inherited = base.get("base_lineage", [])
+            if not isinstance(inherited, list):
+                raise SVXInheritanceError("inheritance base has invalid base_lineage")
+            direct = {key: value for key, value in base.items() if key != "base_lineage"}
+            declaration["base_lineage"] = [*inherited, direct]
+        if mirror_base_ids and python_base_ids:
+            lineage_ids = {item.get("canonical_id")
+                           for item in declaration.get("base_lineage", [])
+                           if isinstance(item, dict)}
+            missing = set(python_base_ids) - lineage_ids
+            if missing:
+                raise SVXInheritanceError(
+                    f"Python class {class_id} has bases absent from its SV mirror lineage: "
+                    + ", ".join(sorted(missing)))
+        resolving.remove(class_id)
+        resolved.add(class_id)
+
+    for declaration in classes:
+        resolve_lineage(declaration)
     def declares_fields(item: object) -> bool:
         if not isinstance(item, dict):
             return False
@@ -687,29 +982,182 @@ def manifest_from_declarations(
     )
 
 
-def _vif_type_declaration(sv_type: str, *, where: str) -> dict[str, Any]:
+def _source_value_annotations(modules) -> dict[str, tuple[type, ...]]:
+    candidates = {}
+    sources = set(modules)
+    for module in modules:
+        for value in module.__dict__.values():
+            if isinstance(value, type):
+                for base in value.__mro__:
+                    owner = sys.modules.get(base.__module__)
+                    if owner is not None:
+                        sources.add(owner)
+    for module in sources:
+        for value in module.__dict__.values():
+            if (not isinstance(value, type) or value in {svtypes.Enum, svtypes.SvStruct}
+                    or not issubclass(value, (svtypes.Enum, svtypes.SvStruct))
+                    or not svtypes.is_materializable_type(value)):
+                continue
+            codec = svtypes.materialize_type_spec(value, location="SV source value type")
+            name = svtypes.sv_type_expression(codec)
+            candidates.setdefault(name, set()).add(value)
+    return {name: tuple(values) for name, values in candidates.items()}
+
+
+def _validate_source_value_schema(actual, schema, *, where):
+    actual = actual.canonicalType
+    kind = schema["kind"]
+    if kind in {"bits", "logic", "enum"}:
+        if (not actual.isIntegral or actual.bitWidth != schema["width"]
+                or actual.isSigned != schema["signed"]
+                or actual.isFourState != (schema["state_domain"] == "4state")):
+            raise SVXInheritanceError(f"{where} differs from the SvTypes value layout")
+        if kind == "enum":
+            if actual.kind.name != "EnumType":
+                raise SVXInheritanceError(f"{where} is not the declared SvTypes enum")
+            items = tuple((member.name, int(member.value.value)) for member in actual
+                          if member.kind.name == "EnumValue" and not member.value.hasUnknown())
+            if items != tuple(tuple(item) for item in schema["items"]):
+                raise SVXInheritanceError(f"{where} enum members differ from the SvTypes declaration")
+        return
+    if kind == "struct" and actual.kind.name == "PackedStructType":
+        members = tuple(member for member in actual if member.kind.name == "Field")
+        fields = schema["fields"]
+        if tuple(member.name for member in members) != tuple(field["name"] for field in fields):
+            raise SVXInheritanceError(f"{where} struct members differ from the SvTypes declaration")
+        for member, field in zip(members, fields):
+            _validate_source_value_schema(member.type, field["type"], where=f"{where}.{member.name}")
+        return
+    raise SVXInheritanceError(f"{where} has no matching SvTypes value layout")
+
+
+def _source_semantic_type_declaration(actual: Any, *, where: str,
+                                      value_annotations=None) -> dict[str, Any]:
+    def annotation(source):
+        original = source
+        source = source.canonicalType
+        if source.kind.name in {"EnumType", "PackedStructType", "UnpackedStructType"}:
+            name = original.lexicalPath
+            candidates = (value_annotations or {}).get(name, ()) or (value_annotations or {}).get(
+                name.rsplit("::", 1)[-1], ())
+            if not candidates:
+                canonical_name = source.lexicalPath
+                candidates = (value_annotations or {}).get(canonical_name, ()) or (value_annotations or {}).get(
+                    canonical_name.rsplit("::", 1)[-1], ())
+            if len(candidates) != 1:
+                raise SVXInheritanceError(
+                    f"{where} requires one matching public SvTypes value declaration for {name}")
+            candidate = candidates[0]
+            _validate_source_value_schema(source, svtypes.schema_descriptor(candidate).schema, where=where)
+            return candidate
+        from .sv_scan import _source_handle_metadata
+        handle = _source_handle_metadata(original, where=where)
+        if handle is not None:
+            return svtypes.RemoteRef[handle["target_type_name"]]
+        kind = source.kind.name
+        if kind in {"ScalarType", "PredefinedIntegerType"}:
+            if str(source) == "int":
+                return svtypes.Int
+            if str(source) == "longint":
+                return svtypes.LongInt
+            factory = svtypes.Logic if source.isFourState else svtypes.Bit
+            return factory[source.bitWidth, svtypes.Signed if source.isSigned else svtypes.Unsigned]
+        if kind == "QueueType":
+            if source.maxBound:
+                raise SVXInheritanceError(
+                    f"{where} bounded queue requires explicit declaration metadata"
+                )
+            return svtypes.Queue[annotation(source.elementType)]
+        if kind == "DynamicArrayType":
+            return svtypes.DynArray[annotation(source.elementType)]
+        if kind == "FixedSizeUnpackedArrayType":
+            if source.range.left != 0 or source.range.right != source.range.width - 1:
+                raise SVXInheritanceError(
+                    f"{where} unpacked range {source.range} requires explicit declaration metadata"
+                )
+            return svtypes.Array[annotation(source.elementType), source.range.width]
+        if kind == "AssociativeArrayType":
+            if source.indexType is None:
+                raise SVXInheritanceError(
+                    f"{where} wildcard associative index requires explicit declaration metadata"
+                )
+            return svtypes.AssocArray[annotation(source.indexType), annotation(source.elementType)]
+        if kind == "PackedArrayType":
+            dimensions = []
+            element = source
+            while element.kind.name == "PackedArrayType":
+                if element.range.right != 0 or element.range.left != element.range.width - 1:
+                    raise SVXInheritanceError(
+                        f"{where} packed range {element.range} requires explicit declaration metadata"
+                    )
+                dimensions.append(element.range.width)
+                element = element.elementType.canonicalType
+            if str(element) not in {"bit", "logic", "bit signed", "logic signed"}:
+                raise SVXInheritanceError(f"{where} packed element {element} requires explicit declaration metadata")
+            factory = svtypes.Logic if source.isFourState else svtypes.Bit
+            return factory[tuple(dimensions), svtypes.Signed if source.isSigned else svtypes.Unsigned]
+        binding = _source_scalar_type_declaration(str(source), where=where)
+        return svtypes.type_spec_from_identity(binding["svtypes"], location=where)
+
+    result = _svtypes_binding(annotation(actual), where=where)
+    if actual.canonicalType.kind.name in {"ScalarType", "PredefinedIntegerType", "FloatingType"}:
+        result["sv"] = str(actual.canonicalType)
+    elif actual.kind.name == "TypeAlias" and actual.canonicalType.kind.name in {
+        "QueueType", "DynamicArrayType", "FixedSizeUnpackedArrayType", "AssociativeArrayType",
+        "EnumType", "PackedStructType", "UnpackedStructType",
+    }:
+        result["sv"] = actual.lexicalPath
+    return result
+
+
+def _source_scalar_type_declaration(sv_type: str, *, where: str) -> dict[str, Any]:
     """Map the supported static SV scalar subset to a public SvTypes type."""
 
     normalized = " ".join(sv_type.split())
-    match = re.fullmatch(r"(bit|logic)\s*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?", normalized)
+    def binding(annotation):
+        result = _svtypes_binding(annotation, where=where)
+        result["sv"] = normalized
+        return result
+
+    match = re.fullmatch(r"(bit|logic)(?:\s+(signed|unsigned))?\s*(?:\[\s*(\d+)\s*:\s*(\d+)\s*\])?", normalized)
     if match:
-        base, left, right = match.groups()
+        base, sign, left, right = match.groups()
         width = 1 if left is None else abs(int(left) - int(right)) + 1
-        annotation = (svtypes.Bit if base == "bit" else svtypes.Logic)[width]
-        return _svtypes_binding(annotation, where=where)
+        annotation = (svtypes.Bit if base == "bit" else svtypes.Logic)[
+            width, svtypes.Signed if sign == "signed" else svtypes.Unsigned]
+        return binding(annotation)
     scalar_types = {
         "int": svtypes.Int,
-        "integer": svtypes.Int,
+        "integer": svtypes.Logic[32, svtypes.Signed],
         "longint": svtypes.LongInt,
         "string": svtypes.String,
         "real": svtypes.Real,
+        "shortreal": svtypes.ShortReal,
+        "realtime": svtypes.RealTime,
+        "time": svtypes.Logic[64],
     }
     annotation = scalar_types.get(normalized)
+    integral = re.fullmatch(r"(byte|shortint|int|longint|integer|time)(?:\s+(signed|unsigned))?", normalized)
+    if annotation is None and integral:
+        base, sign = integral.groups()
+        width = {"byte": 8, "shortint": 16, "int": 32, "longint": 64,
+                 "integer": 32, "time": 64}[base]
+        signed = sign == "signed" or (sign is None and base != "time")
+        factory = svtypes.Logic if base in {"integer", "time"} else svtypes.Bit
+        annotation = factory[width, svtypes.Signed if signed else svtypes.Unsigned]
     if annotation is None:
         raise SVXInheritanceError(
-            f"{where} uses {sv_type!r}, which has no declared SvTypes VIF mapping"
+            f"{where} uses {sv_type!r}, which has no declared SvTypes source mapping; "
+            "provide explicit declaration metadata"
         )
-    return _svtypes_binding(annotation, where=where)
+    return binding(annotation)
+
+
+def _vif_type_declaration(sv_type: str, *, where: str) -> dict[str, Any]:
+    try:
+        return _source_scalar_type_declaration(sv_type, where=where)
+    except SVXInheritanceError as error:
+        raise SVXInheritanceError(str(error).replace("SvTypes source mapping", "SvTypes VIF mapping")) from error
 
 
 def _vif_operations(
@@ -717,6 +1165,10 @@ def _vif_operations(
     fact: SVVirtualInterfaceFact,
     modport: str | None,
 ) -> list[dict[str, Any]]:
+    if modport is not None and modport not in fact.modports:
+        raise SVXInheritanceError(
+            f"SystemVerilog interface {fact.symbol} has no modport {modport}"
+        )
     if modport is None:
         directions = {member.name: "inout" for member in fact.members}
     else:
@@ -761,7 +1213,7 @@ def _vif_operations(
                             "name": f"write_{member.name}",
                             "parameters": [{"name": "value", "type": binding, "direction": "input"}],
                             "return_type": "void",
-                            "timing": "task",
+                            "timing": "function",
                         },
                     }
                 )
@@ -789,7 +1241,7 @@ def _vif_operations(
                 }
             )
         return_type: Any = "void"
-        if member.kind == "function":
+        if member.kind == "function" and member.sv_type != "void":
             assert member.sv_type is not None
             return_type = _vif_type_declaration(
                 member.sv_type,
@@ -809,6 +1261,103 @@ def _vif_operations(
             }
         )
     return operations
+
+
+def _enrich_python_source_handles(classes, facts, interfaces):
+    def enrich(member, type_key="type", handle_key="handle"):
+        if member.get(handle_key) is not None or not isinstance(member.get(type_key), dict):
+            return
+        binding = _type_binding(member[type_key], "Python source handle", allow_void=False)
+        if not isinstance(_codec_from_spec(binding.runtime_spec()), svtypes.RemoteRef):
+            return
+        target = _remote_ref_target(binding, "Python source handle")
+        if target.startswith("sv://"):
+            symbol = target.removeprefix("sv://").replace("/", "::")
+            fact = facts.get(symbol)
+            if fact is not None:
+                if fact.parameter_kinds:
+                    raise SVXInheritanceError(f"Python source handle {target} requires explicit closed class-handle target metadata")
+                member[handle_key] = sv_class_handle(target, symbol)
+        elif target.startswith("sv-vif://"):
+            parts = target.removeprefix("sv-vif://").split("/")
+            if len(parts) == 2 and parts[0] in interfaces:
+                suffix = "" if parts[1] == "full" else "." + parts[1]
+                member[handle_key] = virtual_interface_handle(target, "virtual " + parts[0] + suffix)
+
+    for declaration in classes:
+        if declaration.get("language") != "python":
+            continue
+        for field in declaration.get("fields", []):
+            enrich(field)
+        for parameter in (declaration.get("constructor") or {}).get("parameters", []):
+            enrich(parameter)
+        for method in declaration.get("methods", []):
+            for parameter in method.get("parameters", []):
+                enrich(parameter)
+            enrich(method, "return_type", "return_handle")
+
+
+def _enrich_native_handle_fields(classes: list[dict[str, Any]], paths: Iterable[Path], *, parse_options=None,
+                                 compilation_unit=False, proxy_context=()) -> None:
+    """Discover static member endpoints without selecting additional fields/classes."""
+
+    paths = tuple(paths)
+    from .sv_scan import _python_proxy_context
+    proxy_context = tuple(proxy_context) or _python_proxy_context(classes)
+    facts = scan_sv_sources(paths, allow_no_packages=True, parse_options=parse_options,
+                            compilation_unit=compilation_unit, proxy_context=proxy_context)
+    selected = []
+
+    def visit(declaration: object) -> None:
+        if not isinstance(declaration, dict):
+            return
+        for base in declaration.get("base_lineage", []):
+            visit(base)
+        if declaration.get("language") != "sv":
+            return
+        fact = facts.get(declaration.get("symbol"))
+        if fact is None:
+            return  # Interface-only source inputs remain valid.
+        fields = []
+        for field in declaration.get("fields", []):
+            if not isinstance(field, dict):
+                continue
+            where = f"SV field {declaration['symbol']}.{field.get('name')}"
+            binding = _type_binding(field.get("type"), where, allow_void=False)
+            assert binding is not None
+            # A SvTypes object value can also have an SV class type. Only the
+            # RemoteRef contract requests native-handle inference; do not turn
+            # by-value object fields into handles because of their SV spelling.
+            if field.get("handle") is not None or isinstance(_codec_from_spec(binding.runtime_spec()), svtypes.RemoteRef):
+                fields.append(field)
+        if fields:
+            selected.append({**declaration, "fields": fields})
+
+    for declaration in classes:
+        visit(declaration)
+    handles = resolve_sv_field_handles(selected, paths, parse_options=parse_options,
+                                       compilation_unit=compilation_unit, proxy_context=proxy_context) if selected else {}
+    for declaration in selected:
+        for field in declaration.get("fields", []):
+            if not isinstance(field, dict):
+                continue
+            metadata = handles.get((id(declaration), field.get("name")))
+            if metadata is None:
+                continue
+            where = f"SV field {declaration['symbol']}.{field['name']}"
+            binding = _type_binding(field.get("type"), where, allow_void=False)
+            assert binding is not None
+            target = _remote_ref_target(binding, where)
+            handle = {**metadata, "target_type_name": target}
+            existing = field.get("handle")
+            if existing is not None:
+                if not isinstance(existing, dict) or any(existing.get(key) != handle[key] for key in ("kind", "target_type_name")):
+                    raise SVXInheritanceError(f"{where} handle metadata disagrees with its source type")
+                # Keep an explicitly supplied equivalent type spelling. Other
+                # members of the same target may use that alias as their shared
+                # endpoint contract; normalizing only this field would split it.
+            else:
+                field["handle"] = handle
 
 
 def _enrich_virtual_interface_handles(
@@ -848,6 +1397,9 @@ def _enrich_virtual_interface_handles(
         if not isinstance(declaration, dict):
             return
         constructor = declaration.get("constructor")
+        for field in declaration.get("fields", []):
+            if isinstance(field, dict):
+                enrich_handle(field.get("handle"))
         groups: list[object] = [constructor.get("parameters", [])] if isinstance(constructor, dict) else []
         for method in declaration.get("methods", []):
             if not isinstance(method, dict):
@@ -932,6 +1484,7 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
                     "sv": field.type_binding.sv,
                     "sv_packer": field.type_binding.sv_packer,
                 },
+                **({"handle": handle_declaration(field.handle)} if field.handle is not None else {}),
             }
             for field in cls.fields
         ]
@@ -999,17 +1552,24 @@ def manifest_dict(manifest: Manifest) -> dict[str, Any]:
                 _class_declaration(ancestor) for ancestor in cls.base_lineage
             ]
         classes.append(declaration)
-    return {
+    result = {
         "schema_uri": manifest.schema_uri,
         "schema_version": manifest.schema_version,
         "generator_abi_version": manifest.generator_abi_version,
         "required_runtime_capabilities": list(manifest.required_runtime_capabilities),
         "classes": classes,
     }
+    if manifest.discovery_provenance is not None:
+        result['discovery_provenance'] = manifest.discovery_provenance.as_dict()
+    return result
 
 
 def enrich_virtual_interface_manifest(
-    manifest: Manifest, *, sv_source_files: Iterable[Path]
+    manifest: Manifest, *, sv_source_files: Iterable[Path],
+    sv_predefines: Mapping[str, str | None] | None = None,
+    sv_undefines: Iterable[str] = (),
+    sv_compilation_unit: bool = False,
+    sv_include_dirs: Iterable[Path] = (),
 ) -> Manifest:
     """Attach generated VIF views to an existing normalized manifest.
 
@@ -1019,10 +1579,21 @@ def enrich_virtual_interface_manifest(
     """
 
     paths = tuple(Path(path) for path in sv_source_files)
+    sv_undefines = tuple(sv_undefines) if not isinstance(sv_undefines, str) else sv_undefines
+    sv_include_dirs = tuple(sv_include_dirs) if not isinstance(sv_include_dirs, (str, bytes, Path)) else sv_include_dirs
+    if (sv_predefines or sv_undefines or sv_compilation_unit or sv_include_dirs) and not paths:
+        raise SVXInheritanceError("SV source configuration requires SV source files")
     if not paths:
         return manifest
+    parse_options = _source_parse_options(sv_predefines, sv_undefines, sv_include_dirs,
+                                          discover_proxies=True)
     declaration = manifest_dict(manifest)
+    _enrich_native_handle_fields(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
+    normalize_sv_handle_types(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
     _enrich_virtual_interface_handles(
-        declaration["classes"], scan_sv_virtual_interfaces(paths)
+        declaration["classes"], scan_sv_virtual_interfaces(paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
     )
-    return parse_manifest(declaration)
+    # The input object has already passed file-backed provenance validation.
+    # Enrichment is an in-memory derivative, not a new discovery certification.
+    declaration.pop('discovery_provenance', None)
+    return replace(parse_manifest(declaration), discovery_provenance=manifest.discovery_provenance)

@@ -8,6 +8,36 @@
 
 namespace svx::dpi {
 
+namespace abi {
+// DPI longint unsigned and enum ports use their C ABI types, not C++ aliases.
+using ObjectId = unsigned long long;
+using ProcessStatus = int (*)(int);
+using InvokeObjectFunction = void *(*)(ObjectId, const char *, void *,
+                                      unsigned char *, const char **);
+using InvokeStaticFunction = void *(*)(const char *, const char *, void *,
+                                      unsigned char *, const char **);
+using CreateObjectFunction = ObjectId (*)(const char *, void *, unsigned char *,
+                                         const char **);
+using Delay = int (*)(double, int, int, unsigned char *);
+using Fork = int (*)(void *, void **, int);
+using ProcessAction = void (*)(int);
+using AwaitProcess = int (*)(int);
+using Fatal = void (*)(const char *, const char *);
+using ChannelPut = int (*)(const char *, void *, int, unsigned char *);
+using ChannelGet = int (*)(const char *, int, void **, unsigned char *);
+using ChannelTryPut = unsigned char (*)(const char *, void *);
+using ChannelTryGet = void *(*)(const char *);
+using InvokeObject = int (*)(ObjectId, const char *, void *, unsigned char *,
+                             void **, const char **);
+using InvokeStatic = int (*)(const char *, const char *, void *, unsigned char *,
+                             void **, const char **);
+using ReleaseObject = int (*)(ObjectId);
+using ReleaseObjectFunction = void (*)(ObjectId);
+using CreateObject = int (*)(const char *, void *, unsigned char *, ObjectId *,
+                             const char **);
+using PublishObject = int (*)(const char *, ObjectId);
+} // namespace abi
+
 inline constexpr std::size_t SVX_MAX_PAYLOAD_BYTES = 16U * 1024U * 1024U;
 
 bool delay_svx(double duration, int unit_code, int process_index);
@@ -43,10 +73,13 @@ bool svx_channel_try_put_payload(const char *name, void *payload);
 void *svx_channel_try_get_payload(const char *name);
 
 bool svx_invoke_object(std::uint64_t object_id, const char *method_id,
-                       void *request, void **response, std::string *error);
+                       void *request, void **response, std::string *error, bool function = false,
+                       bool *cancelled = nullptr);
 bool svx_invoke_static(const char *class_id, const char *method_id,
-                       void *request, void **response, std::string *error);
+                       void *request, void **response, std::string *error, bool function = false,
+                       bool *cancelled = nullptr);
 void svx_release_object(std::uint64_t object_id);
+void svx_release_object_function(std::uint64_t object_id);
 bool svx_create_object(const char *class_id, void *request,
                        std::uint64_t *object_id, std::string *error);
 void svx_publish_object(const char *name, std::uint64_t object_id);

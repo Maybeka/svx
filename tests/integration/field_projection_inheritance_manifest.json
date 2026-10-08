@@ -54,7 +54,10 @@
           "name": "mapping",
           "type": {
             "unified_type_name": "svtypes.AssocArray[key=svtypes.Int,value=svtypes.Int]",
-            "python": {"module": "tests.integration.field_projection_types", "symbol": "int_to_int", "args": [], "kwargs": {}},
+            "svtypes": {"kind": "collection", "name": "AssocArray", "args": [
+              {"kind": "scalar", "name": "Int"},
+              {"kind": "scalar", "name": "Int"}
+            ]},
             "sv": "int [int]",
             "sv_packer": "svtypes_pkg::assoc_array_packer#(int, int, svtypes_pkg::int_packer, svtypes_pkg::int_packer)",
             "encoding_descriptor": {
@@ -68,9 +71,9 @@
       "methods": []
     },
     {
-      "canonical_id": "sv://field_pkg/Final",
+      "canonical_id": "sv://field_user_pkg/Final",
       "language": "sv",
-      "symbol": "field_pkg::Final",
+      "symbol": "field_user_pkg::Final",
       "methods": [],
       "base_lineage": [
         {
@@ -117,7 +120,10 @@
               "name": "mapping",
               "type": {
                 "unified_type_name": "svtypes.AssocArray[key=svtypes.Int,value=svtypes.Int]",
-                "python": {"module": "tests.integration.field_projection_types", "symbol": "int_to_int", "args": [], "kwargs": {}},
+                "svtypes": {"kind": "collection", "name": "AssocArray", "args": [
+                  {"kind": "scalar", "name": "Int"},
+                  {"kind": "scalar", "name": "Int"}
+                ]},
                 "sv": "int [int]",
                 "sv_packer": "svtypes_pkg::assoc_array_packer#(int, int, svtypes_pkg::int_packer, svtypes_pkg::int_packer)",
                 "encoding_descriptor": {

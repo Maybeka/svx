@@ -21,6 +21,7 @@ public:
   int sv_index() const;
   bool failed() const;
   bool cancelled() const;
+  bool completed() const;
 
 private:
   PyObject *m_callable;
@@ -28,6 +29,7 @@ private:
   int m_sv_index{-1};
   bool m_failed{false};
   bool m_cancelled{false};
+  bool m_completed{false};
 };
 
 class ProcessGroup {
@@ -45,11 +47,14 @@ public:
   void kill_all();
   void invalidate();
   bool stale() const;
+  void release_handle();
+  bool reclaimable() const;
 
 private:
   std::vector<PythonProcess *> m_children;
   bool m_killed{false};
   bool m_stale{false};
+  bool m_handle_released{false};
 };
 
 ProcessGroup *create_process_group(PyObject *callables);

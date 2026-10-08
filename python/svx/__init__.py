@@ -27,6 +27,7 @@ from .roles import (
     rsp_channel,
 )
 from .primitives import delay, display, fork_join, fork_join_any, fork_join_none
+from .process import ProcessGroup, ProcessStatus
 from .test_runner import test
 from .inheritance import close_instance
 from .object_handoff import publish_object
@@ -49,6 +50,8 @@ from .signal import Signal, declare_signal
 from .runtime import RuntimeState, state as runtime_state
 
 __all__ = [
+    "ProcessGroup",
+    "ProcessStatus",
     "FATAL",
     "Function",
     "Inout",

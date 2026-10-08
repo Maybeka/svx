@@ -11,6 +11,20 @@ interface class svx_dispatchable;
   );
 endclass
 
+interface class svx_function_dispatchable;
+  pure virtual function void svx_invoke_function(
+    string method_id, input chandle request, output bit ok,
+    output chandle response, output string error
+  );
+endclass
+
+interface class svx_static_function_dispatchable;
+  pure virtual function void svx_invoke_static_function(
+    string method_id, input chandle request, output bit ok,
+    output chandle response, output string error
+  );
+endclass
+
 class svx_object_id_allocator;
   static longint unsigned next_object_id = 1;
 
@@ -33,8 +47,20 @@ interface class svx_external_handle;
   pure virtual function string svx_external_target_type();
 endclass
 
+interface class svx_session_resource;
+  pure virtual function void clear_session();
+endclass
+
 class svx_external_handle_registry;
   static svx_external_handle objects[longint unsigned];
+  static svx_session_resource resources[$];
+
+  static function void register_resource(svx_session_resource resource);
+    foreach (resources[index]) begin
+      if (resources[index] == resource) return;
+    end
+    resources.push_back(resource);
+  endfunction
 
   static function longint unsigned allocate_object_id();
     return svx_object_id_allocator::allocate();
@@ -80,17 +106,93 @@ class svx_external_handle_registry;
   endfunction
 
   static function void clear();
+    foreach (resources[index]) resources[index].clear_session();
+    resources.delete();
     objects.delete();
   endfunction
 endclass
 
 interface class svx_factory;
-  pure virtual task svx_create(
+  pure virtual function void svx_create(
     longint unsigned object_id,
     input chandle request,
     output bit ok,
     output string error
   );
+endclass
+
+class svx_construction_frame;
+  longint unsigned object_id;
+  svx_dispatchable receiver;
+  function new(longint unsigned id, svx_dispatchable value);
+    object_id = id;
+    receiver = value;
+  endfunction
+endclass
+
+class svx_construction_context;
+  static svx_construction_frame frames[$];
+
+  static function bit enter(longint unsigned object_id, svx_dispatchable receiver);
+    svx_construction_frame frame;
+    if (receiver == null) $fatal(2, "SVX construction receiver is null");
+    if (frames.size() != 0 && frames[$].receiver == receiver) begin
+      if (object_id != 0 && frames[$].object_id != object_id)
+        $fatal(2, "SVX inherited constructor changed the paired object ID");
+      return 0;
+    end
+    frame = new(object_id, receiver);
+    frames.push_back(frame);
+    return 1;
+  endfunction
+
+  static function longint unsigned current_id(svx_dispatchable receiver);
+    if (frames.size() == 0 || frames[$].receiver != receiver)
+      $fatal(2, "SVX construction receiver is outside its context");
+    return frames[$].object_id;
+  endfunction
+
+  static function void bind_id(svx_dispatchable receiver, longint unsigned object_id);
+    if (frames.size() == 0 || frames[$].receiver != receiver || object_id == 0)
+      $fatal(2, "SVX early construction receiver is outside its context");
+    if (frames[$].object_id != 0 && frames[$].object_id != object_id)
+      $fatal(2, "SVX early construction changed the paired object ID");
+    frames[$].object_id = object_id;
+  endfunction
+
+  static function void leave(svx_dispatchable receiver, bit owned);
+    svx_construction_frame frame;
+    if (!owned) return;
+    if (frames.size() == 0 || frames[$].receiver != receiver)
+      $fatal(2, "SVX construction contexts returned out of order");
+    frame = frames.pop_back();
+  endfunction
+
+  static function void retire_id(longint unsigned object_id);
+    for (int index = frames.size() - 1; index >= 0; index--)
+      if (frames[index].object_id == object_id) frames.delete(index);
+  endfunction
+
+  static function void clear();
+    frames.delete();
+  endfunction
+endclass
+
+virtual class svx_constructor_cache;
+  pure virtual function void retire_receiver(longint unsigned receiver_id);
+endclass
+
+class svx_constructor_cache_registry;
+  static svx_constructor_cache caches[$];
+
+  static function void register_cache(svx_constructor_cache cache);
+    foreach (caches[index]) if (caches[index] == cache) return;
+    caches.push_back(cache);
+  endfunction
+
+  static function void retire_id(longint unsigned receiver_id);
+    foreach (caches[index]) caches[index].retire_receiver(receiver_id);
+  endfunction
 endclass
 
 interface class svx_static_dispatchable;
@@ -286,6 +388,7 @@ class svx_inheritance_registry;
     static_objects.delete();
     factories.delete();
     published_object_ids.delete();
+    svx_construction_context::clear();
   endfunction
 
   static function void register_factory(string class_id, svx_factory factory);
@@ -359,6 +462,26 @@ task automatic svx_invoke_object(
   end
 endtask
 
+function automatic longint unsigned svx_create_object_function(
+  string class_id, input chandle request, output bit ok, output string error
+);
+  longint unsigned object_id;
+  ok = 0;
+  if (!svx_inheritance_registry::factories.exists(class_id)) begin
+    error = {"no SVX factory registered for ", class_id};
+    return 0;
+  end
+  object_id = svx_inheritance_registry::allocate_object_id();
+  svx_inheritance_registry::factories[class_id].svx_create(object_id, request, ok, error);
+  if (!ok) begin
+    svx_inheritance_registry::unbind(object_id);
+    return 0;
+  end
+  return object_id;
+endfunction
+
+export "DPI-C" function svx_create_object_function;
+
 task automatic svx_invoke_static(
   string class_id,
   string method_id,
@@ -381,6 +504,53 @@ task automatic svx_invoke_static(
     error = $sformatf("SVX1|dispatch_failed|0|%s|%s", method_id, error);
   end
 endtask
+
+function automatic chandle svx_invoke_object_function(
+  longint unsigned object_id, string method_id, input chandle request,
+  output bit ok, output string error
+);
+  svx_function_dispatchable object;
+  chandle response;
+  ok = 0;
+  response = null;
+  if (!svx_inheritance_registry::objects.exists(object_id)) begin
+    error = $sformatf("SVX1|unknown_object|%0d|%s|unknown SVX inheritance object", object_id, method_id);
+    return null;
+  end
+  if (!$cast(object, svx_inheritance_registry::objects[object_id])) begin
+    error = $sformatf("SVX1|function_unavailable|%0d|%s|object has no function dispatcher", object_id, method_id);
+    return null;
+  end
+  object.svx_invoke_function(method_id, request, ok, response, error);
+  if (!ok && error.substr(0, 4) != "SVX1|")
+    error = $sformatf("SVX1|dispatch_failed|%0d|%s|%s", object_id, method_id, error);
+  return response;
+endfunction
+
+function automatic chandle svx_invoke_static_function(
+  string class_id, string method_id, input chandle request,
+  output bit ok, output string error
+);
+  svx_static_function_dispatchable object;
+  chandle response;
+  ok = 0;
+  response = null;
+  if (!svx_inheritance_registry::static_objects.exists(class_id)) begin
+    error = {"SVX1|unknown_static_class|0|", method_id, "|unknown SVX static class"};
+    return null;
+  end
+  if (!$cast(object, svx_inheritance_registry::static_objects[class_id])) begin
+    error = {"SVX1|function_unavailable|0|", method_id, "|class has no function dispatcher"};
+    return null;
+  end
+  object.svx_invoke_static_function(method_id, request, ok, response, error);
+  if (!ok && error.substr(0, 4) != "SVX1|")
+    error = $sformatf("SVX1|dispatch_failed|0|%s|%s", method_id, error);
+  return response;
+endfunction
+
+export "DPI-C" function svx_invoke_object_function;
+export "DPI-C" function svx_invoke_static_function;
 
 import "DPI-C" context task svx_inheritance_call_python(
   longint unsigned object_id,
@@ -407,11 +577,28 @@ import "DPI-C" context task svx_inheritance_release_python(
   output string error
 );
 
+import "DPI-C" context function bit svx_inheritance_release_python_function(
+  longint unsigned object_id,
+  output string error
+);
+
 import "DPI-C" context task svx_inheritance_create_python(
   string class_id,
   longint unsigned object_id,
   input chandle request,
   output bit ok,
+  output string error
+);
+
+// Some SV-owned object models construct instances from a function context.
+// The Python constructor bridge itself never advances simulation time, so a
+// synchronous entry point is safe there.  The task entry above remains the
+// general construction path for generated classes that are allowed to run in
+// a task context.
+import "DPI-C" context function bit svx_inheritance_create_python_function(
+  string class_id,
+  longint unsigned object_id,
+  input chandle request,
   output string error
 );
 
@@ -427,7 +614,19 @@ task automatic svx_release_object(longint unsigned object_id);
   svx_inheritance_registry::unbind(object_id);
 endtask
 
+function automatic void svx_release_object_function(longint unsigned object_id);
+  bit ok;
+  string error;
+  ok = svx_inheritance_release_python_function(object_id, error);
+  // Retire the SV registry even if a user cleanup hook failed.
+  svx_inheritance_registry::unbind(object_id);
+  svx_constructor_cache_registry::retire_id(object_id);
+  svx_construction_context::retire_id(object_id);
+  if (!ok) $fatal(2, "SVX inheritance release %0d failed: %s", object_id, error);
+endfunction
+
 task automatic svx_shutdown();
+  svx_proc_man::shutdown();
   svx_inheritance_registry::clear();
   svx_external_handle_registry::clear();
   svx_inheritance_shutdown();
@@ -438,6 +637,7 @@ endtask
 export "DPI-C" task svx_invoke_object;
 export "DPI-C" task svx_invoke_static;
 export "DPI-C" task svx_release_object;
+export "DPI-C" function svx_release_object_function;
 export "DPI-C" task svx_create_object;
 export "DPI-C" task svx_publish_object;
 

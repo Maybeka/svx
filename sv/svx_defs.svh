@@ -15,9 +15,12 @@
 `define SVX_GET_OBJECT(EXPECTED_TYPE, NAME, TARGET) \
   begin \
     svx_dispatchable __svx_published_object; \
+    EXPECTED_TYPE __svx_expected_object; \
     svx_require_published_object(NAME, __svx_published_object); \
-    if (!$cast(TARGET, __svx_published_object)) \
+    if (!$cast(__svx_expected_object, __svx_published_object)) \
       $fatal(2, "SVX published object %s is not compatible with the expected type", NAME); \
+    if (!$cast(TARGET, __svx_published_object)) \
+      $fatal(2, "SVX published object %s is not compatible with the destination type", NAME); \
   end
 `endif
 

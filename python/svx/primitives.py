@@ -4,6 +4,7 @@ import math
 from collections.abc import Callable
 
 from . import _native
+from .callback_context import require_blocking_operations_allowed
 from .process import ProcessGroup
 
 _UNIT_TO_CODE: dict[str, int] = {
@@ -47,6 +48,7 @@ def display(message: object) -> None:
 
 
 def delay(value: int | float, unit: str = "ns") -> None:
+    require_blocking_operations_allowed("svx.delay()")
     duration, unit_code = _to_delay_args(value, unit)
     _native.delay(duration, unit_code)
 
@@ -62,12 +64,15 @@ def _validate_callables(callables: list[Callable[[], object]] | tuple[Callable[[
 
 
 def fork_join(callables: list[Callable[[], object]] | tuple[Callable[[], object], ...]) -> ProcessGroup:
+    require_blocking_operations_allowed("svx.fork_join()")
     return ProcessGroup(_native.fork_join(_validate_callables(callables)))
 
 
 def fork_join_any(callables: list[Callable[[], object]] | tuple[Callable[[], object], ...]) -> ProcessGroup:
+    require_blocking_operations_allowed("svx.fork_join_any()")
     return ProcessGroup(_native.fork_join_any(_validate_callables(callables)))
 
 
 def fork_join_none(callables: list[Callable[[], object]] | tuple[Callable[[], object], ...]) -> ProcessGroup:
+    require_blocking_operations_allowed("svx.fork_join_none()")
     return ProcessGroup(_native.fork_join_none(_validate_callables(callables)))

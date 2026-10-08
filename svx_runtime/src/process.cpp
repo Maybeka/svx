@@ -14,6 +14,14 @@ extern "C" int svx_python_cancellation_pending();
 namespace svx {
 namespace {
 std::unordered_set<ProcessGroup *> g_process_groups;
+
+void reap_released_groups() {
+  std::vector<ProcessGroup *> finished;
+  for (ProcessGroup *group : g_process_groups) {
+    if (group->reclaimable()) finished.push_back(group);
+  }
+  for (ProcessGroup *group : finished) delete group;
+}
 }
 
 PythonProcess::PythonProcess(PyObject *callable)
@@ -31,12 +39,20 @@ PythonProcess::~PythonProcess() {
 }
 
 int PythonProcess::exec() {
+  struct Completion {
+    bool &value;
+    ~Completion() { value = true; }
+  } completion{m_completed};
   PyThreadState *prev = PyThreadState_Swap(m_thread_state);
   ExecutionContext ctx("svx_process", m_sv_index);
   PyObject *result = PyObject_CallNoArgs(m_callable);
   if (result == nullptr) {
     if (dpi::disabled_state()) {
-      PyErr_Clear();
+      if (svx_python_cancellation_pending()) PyErr_Clear();
+      else {
+        m_failed = true;
+        handle_python_exception(ctx.source());
+      }
       m_cancelled = true;
       PyThreadState_Swap(prev);
       return 1;
@@ -64,6 +80,8 @@ int PythonProcess::sv_index() const { return m_sv_index; }
 bool PythonProcess::failed() const { return m_failed; }
 
 bool PythonProcess::cancelled() const { return m_cancelled; }
+
+bool PythonProcess::completed() const { return m_completed; }
 
 ProcessGroup::ProcessGroup(std::vector<PythonProcess *> children)
     : m_children(std::move(children)) {
@@ -144,23 +162,45 @@ void ProcessGroup::throw_if_failed() const {
 
 void ProcessGroup::kill_all() {
   if (m_stale) throw std::runtime_error("SVX process group belongs to a stopped session");
+  if (m_killed) return;
+  const int caller = ExecutionContext::current_process_index();
+  for (PythonProcess *child : m_children) {
+    if (caller >= 0 && child->sv_index() == caller)
+      throw std::runtime_error("SVX process cannot wait for its own group to stop");
+  }
   for (const PythonProcess *child : m_children) {
     if (child->sv_index() >= 0) {
       dpi::request_cancel_proc_svx(child->sv_index());
     }
   }
+  await_all();
   m_killed = true;
 }
 
 void ProcessGroup::invalidate() {
   if (m_stale) return;
-  kill_all();
+  for (PythonProcess *child : m_children) {
+    if (child->sv_index() >= 0) dpi::request_cancel_proc_svx(child->sv_index());
+  }
   m_stale = true;
 }
 
 bool ProcessGroup::stale() const { return m_stale; }
 
+bool ProcessGroup::reclaimable() const {
+  return m_handle_released && std::all_of(
+      m_children.begin(), m_children.end(),
+      [](const PythonProcess *child) { return child->completed(); });
+}
+
+void ProcessGroup::release_handle() {
+  m_handle_released = true;
+  // A suspended SV callback still owns the child thread states.
+  if (reclaimable()) delete this;
+}
+
 ProcessGroup *create_process_group(PyObject *callables) {
+  reap_released_groups();
   if (!PyTuple_Check(callables)) {
     throw std::runtime_error("fork callables must be passed as a tuple");
   }
@@ -201,6 +241,7 @@ void shutdown_process_groups() {
   for (ProcessGroup *group : g_process_groups) {
     group->invalidate();
   }
+  reap_released_groups();
 }
 
 } // namespace svx

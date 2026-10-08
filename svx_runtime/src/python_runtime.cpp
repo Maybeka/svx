@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 #include "svx/context.hpp"
 #include "svx/process.hpp"
@@ -12,12 +13,22 @@
 #include "svx/sv_dpi.hpp"
 
 extern "C" PyObject *PyInit__svx_native(void);
+extern "C" int svx_python_cancellation_pending();
 
 namespace {
 enum class ExceptionPolicy { Fatal, Report };
 
 ExceptionPolicy g_policy = ExceptionPolicy::Fatal;
 svx::RuntimeState g_runtime_state = svx::RuntimeState::Uninitialized;
+std::string g_deferred_fatal;
+
+void report_deferred_fatal() {
+  if (!g_deferred_fatal.empty() && !svx::dpi::disabled_state()) {
+    const std::string message = std::move(g_deferred_fatal);
+    g_deferred_fatal.clear();
+    svx::dpi::svx_fatal_svx("disabled Python callback", message.c_str());
+  }
+}
 
 void add_python_path(const char *path) {
   PyObject *sys_path = PySys_GetObject("path");
@@ -85,6 +96,17 @@ bool call_runtime_initialize_hook() {
   if (result == nullptr) return false;
   Py_DECREF(result);
   return true;
+}
+
+PyObject *load_runtime_module(const char *name) {
+  PyObject *runtime = PyImport_ImportModule("svx.runtime");
+  if (runtime == nullptr) return nullptr;
+  PyObject *loader = PyObject_GetAttrString(runtime, "_native_load");
+  Py_DECREF(runtime);
+  if (loader == nullptr) return nullptr;
+  PyObject *module = PyObject_CallFunction(loader, "s", name);
+  Py_DECREF(loader);
+  return module;
 }
 
 bool prepare_runtime(std::uint32_t sv_runtime_abi_version,
@@ -171,7 +193,7 @@ void runtime_init(std::uint32_t sv_runtime_abi_version,
 void runtime_load(const char *module_name) {
   if (!require_runtime_ready("svx_load")) return;
   PyGILState_STATE gstate = PyGILState_Ensure();
-  PyObject *module = PyImport_ImportModule(module_name);
+  PyObject *module = load_runtime_module(module_name);
   if (module == nullptr) {
     handle_python_exception("svx_load");
   } else {
@@ -189,7 +211,7 @@ void runtime_init_with_signal_declarations(
   bool validated = false;
   try {
     signal::begin_declarations();
-    PyObject *module = PyImport_ImportModule(module_name);
+    PyObject *module = load_runtime_module(module_name);
     if (module == nullptr) {
       handle_python_exception("svx signal declarations");
       signal::shutdown();
@@ -214,6 +236,7 @@ void runtime_init_with_signal_declarations(
 
 bool runtime_start(const char *export_name) {
   if (!require_runtime_ready("svx_start")) return false;
+  report_deferred_fatal();
   ExecutionContext ctx(std::string("svx_start('") + export_name + "')");
 
   PyGILState_STATE gstate = PyGILState_Ensure();
@@ -228,7 +251,8 @@ bool runtime_start(const char *export_name) {
   Py_DECREF(callable);
   if (result == nullptr) {
     if (dpi::disabled_state()) {
-      PyErr_Clear();
+      if (svx_python_cancellation_pending()) PyErr_Clear();
+      else handle_python_exception(ctx.source());
       PyGILState_Release(gstate);
       return true;
     }
@@ -257,6 +281,7 @@ const char *runtime_state_name() {
 bool runtime_ready() { return g_runtime_state == RuntimeState::Ready; }
 
 void runtime_shutdown() {
+  report_deferred_fatal();
   if (g_runtime_state == RuntimeState::Stopped ||
       g_runtime_state == RuntimeState::ShuttingDown) return;
   if (g_runtime_state == RuntimeState::Uninitialized) {
@@ -273,7 +298,7 @@ void runtime_shutdown() {
   g_runtime_state = RuntimeState::Stopped;
 }
 
-std::string handle_python_exception(const char *source) {
+std::string handle_python_exception(const char *source, bool apply_policy) {
   if (!PyErr_Occurred()) {
     return {};
   }
@@ -327,8 +352,9 @@ std::string handle_python_exception(const char *source) {
   Py_XDECREF(traceback);
 
   std::fprintf(stderr, "SVX Python exception [%s]:\n%s\n", source, message.c_str());
-  if (g_policy == ExceptionPolicy::Fatal) {
-    dpi::svx_fatal_svx(source, message.c_str());
+  if (apply_policy && g_policy == ExceptionPolicy::Fatal) {
+    if (dpi::disabled_state()) g_deferred_fatal = message;
+    else dpi::svx_fatal_svx(source, message.c_str());
   }
   return message;
 }

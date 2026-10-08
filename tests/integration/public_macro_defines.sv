@@ -1,0 +1,1 @@
+`define SVX_FIELD_ENABLED 1

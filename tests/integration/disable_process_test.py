@@ -25,6 +25,9 @@ def run() -> None:
     group = svx.fork_join_none((_blocked_child,))
     svx.delay(10, "ns")
     group.kill()
+    if events != ["finally"]:
+        raise AssertionError(f"kill returned before cleanup completed: {events!r}")
+    group.kill()
     if group.status().value != "killed":
         raise AssertionError(f"expected killed status, got {group.status()}")
     group.await_()
@@ -35,6 +38,9 @@ def run() -> None:
     group = svx.fork_join_none((_blocked_channel_child,))
     svx.delay(10, "ns")
     group.kill()
+    if events != ["channel-finally"]:
+        raise AssertionError(f"kill returned before channel cleanup: {events!r}")
+    group.kill_running()
     group.await_()
     if events != ["channel-finally"]:
         raise AssertionError(f"cancelled channel wait did not unwind normally: {events!r}")

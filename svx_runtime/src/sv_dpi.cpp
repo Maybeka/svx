@@ -4,6 +4,35 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <type_traits>
+
+#if defined(SVX_CHECK_DPI_EXPORT_CONTRACT)
+static_assert(std::is_same_v<svx::dpi::abi::ProcessStatus,
+                            decltype(&::proc_status_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::InvokeObjectFunction,
+                            decltype(&::svx_invoke_object_function)>);
+static_assert(std::is_same_v<svx::dpi::abi::InvokeStaticFunction,
+                            decltype(&::svx_invoke_static_function)>);
+static_assert(std::is_same_v<svx::dpi::abi::CreateObjectFunction,
+                            decltype(&::svx_create_object_function)>);
+static_assert(std::is_same_v<svx::dpi::abi::Delay, decltype(&::delay_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::Fork, decltype(&::fork_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::ProcessAction, decltype(&::kill_proc_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::ProcessAction, decltype(&::request_cancel_proc_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::AwaitProcess, decltype(&::await_proc_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::Fatal, decltype(&::svx_fatal_svx)>);
+static_assert(std::is_same_v<svx::dpi::abi::ChannelPut, decltype(&::svx_channel_put_payload_cancelable)>);
+static_assert(std::is_same_v<svx::dpi::abi::ChannelGet, decltype(&::svx_channel_get_payload_cancelable)>);
+static_assert(std::is_same_v<svx::dpi::abi::ChannelGet, decltype(&::svx_channel_peek_payload_cancelable)>);
+static_assert(std::is_same_v<svx::dpi::abi::ChannelTryPut, decltype(&::svx_channel_try_put_payload)>);
+static_assert(std::is_same_v<svx::dpi::abi::ChannelTryGet, decltype(&::svx_channel_try_get_payload)>);
+static_assert(std::is_same_v<svx::dpi::abi::InvokeObject, decltype(&::svx_invoke_object)>);
+static_assert(std::is_same_v<svx::dpi::abi::InvokeStatic, decltype(&::svx_invoke_static)>);
+static_assert(std::is_same_v<svx::dpi::abi::ReleaseObject, decltype(&::svx_release_object)>);
+static_assert(std::is_same_v<svx::dpi::abi::ReleaseObjectFunction, decltype(&::svx_release_object_function)>);
+static_assert(std::is_same_v<svx::dpi::abi::CreateObject, decltype(&::svx_create_object)>);
+static_assert(std::is_same_v<svx::dpi::abi::PublishObject, decltype(&::svx_publish_object)>);
+#endif
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -129,11 +158,11 @@ std::size_t payload_size(void *payload) {
 
 bool delay_svx(double duration, int unit_code, int process_index) {
   ScopedDpiScope scope;
-  using func_t = void (*)(double, int, int, unsigned char *);
+  using func_t = abi::Delay;
   unsigned char cancelled = 0;
-  resolve_symbol<func_t>("delay_svx")(duration, unit_code, process_index,
+  const int disabled = resolve_symbol<func_t>("delay_svx")(duration, unit_code, process_index,
                                        &cancelled);
-  return cancelled != 0 || svIsDisabledState() != 0;
+  return cancelled != 0 || disabled != 0 || svIsDisabledState() != 0;
 }
 
 bool disabled_state() { return svIsDisabledState() != 0; }
@@ -147,38 +176,38 @@ void acknowledge_disabled_state() {
 void fork_svx(void *group, void *procs[SVX_MAX_FORK_NUM],
               e_svx_fork_join_type fork_type) {
   ScopedDpiScope scope;
-  using func_t = void (*)(void *, void **, e_svx_fork_join_type);
-  resolve_symbol<func_t>("fork_svx")(group, procs, fork_type);
+  using func_t = abi::Fork;
+  resolve_symbol<func_t>("fork_svx")(group, procs, static_cast<int>(fork_type));
 }
 
 e_proc_state proc_status_svx(int index) {
   ScopedDpiScope scope;
-  using func_t = e_proc_state (*)(int);
-  return resolve_symbol<func_t>("proc_status_svx")(index);
+  return static_cast<e_proc_state>(
+      resolve_symbol<abi::ProcessStatus>("proc_status_svx")(index));
 }
 
 void kill_proc_svx(int index) {
   ScopedDpiScope scope;
-  using func_t = void (*)(int);
+  using func_t = abi::ProcessAction;
   resolve_symbol<func_t>("kill_proc_svx")(index);
 }
 
 void request_cancel_proc_svx(int index) {
   ScopedDpiScope scope;
-  using func_t = void (*)(int);
+  using func_t = abi::ProcessAction;
   resolve_symbol<func_t>("request_cancel_proc_svx")(index);
 }
 
 void await_proc_svx(int index) {
   ScopedDpiScope scope;
-  using func_t = void (*)(int);
+  using func_t = abi::AwaitProcess;
   resolve_symbol<func_t>("await_proc_svx")(index);
 }
 
 void svx_fatal_svx(const char *source, const char *message) {
   try {
     ScopedDpiScope scope;
-    using func_t = void (*)(const char *, const char *);
+    using func_t = abi::Fatal;
     resolve_symbol<func_t>("svx_fatal_svx")(source, message);
   } catch (const std::exception &) {
     std::fprintf(stderr, "SVX FATAL [%s]: %s\n", source, message);
@@ -188,94 +217,110 @@ void svx_fatal_svx(const char *source, const char *message) {
 
 bool svx_channel_put_payload(const char *name, void *payload, int process_index) {
   ScopedDpiScope scope;
-  using func_t = void (*)(const char *, void *, int, unsigned char *);
+  using func_t = abi::ChannelPut;
   unsigned char cancelled = 0;
-  resolve_symbol<func_t>("svx_channel_put_payload_cancelable")(name, payload,
+  const int disabled = resolve_symbol<func_t>("svx_channel_put_payload_cancelable")(name, payload,
                                                                  process_index, &cancelled);
-  return cancelled != 0;
+  return cancelled != 0 || disabled != 0 || svIsDisabledState() != 0;
 }
 
 void *svx_channel_get_payload(const char *name, int process_index, bool *cancelled) {
   ScopedDpiScope scope;
-  using func_t = void (*)(const char *, int, void **, unsigned char *);
+  using func_t = abi::ChannelGet;
   void *payload = nullptr;
   unsigned char was_cancelled = 0;
-  resolve_symbol<func_t>("svx_channel_get_payload_cancelable")(name, process_index,
+  const int disabled = resolve_symbol<func_t>("svx_channel_get_payload_cancelable")(name, process_index,
                                                                  &payload, &was_cancelled);
-  if (cancelled != nullptr) *cancelled = was_cancelled != 0;
+  if (cancelled != nullptr) *cancelled = was_cancelled != 0 || disabled != 0 || svIsDisabledState() != 0;
   return payload;
 }
 
 void *svx_channel_peek_payload(const char *name, int process_index, bool *cancelled) {
   ScopedDpiScope scope;
-  using func_t = void (*)(const char *, int, void **, unsigned char *);
+  using func_t = abi::ChannelGet;
   void *payload = nullptr;
   unsigned char was_cancelled = 0;
-  resolve_symbol<func_t>("svx_channel_peek_payload_cancelable")(name, process_index,
+  const int disabled = resolve_symbol<func_t>("svx_channel_peek_payload_cancelable")(name, process_index,
                                                                   &payload, &was_cancelled);
-  if (cancelled != nullptr) *cancelled = was_cancelled != 0;
+  if (cancelled != nullptr) *cancelled = was_cancelled != 0 || disabled != 0 || svIsDisabledState() != 0;
   return payload;
 }
 
 bool svx_channel_try_put_payload(const char *name, void *payload) {
   ScopedDpiScope scope;
-  using func_t = unsigned char (*)(const char *, void *);
+  using func_t = abi::ChannelTryPut;
   return resolve_symbol<func_t>("svx_channel_try_put_payload")(name, payload) != 0;
 }
 
 void *svx_channel_try_get_payload(const char *name) {
   ScopedDpiScope scope;
-  using func_t = void *(*)(const char *);
+  using func_t = abi::ChannelTryGet;
   return resolve_symbol<func_t>("svx_channel_try_get_payload")(name);
 }
 
 bool svx_invoke_object(std::uint64_t object_id, const char *method_id,
-                       void *request, void **response, std::string *error) {
+                       void *request, void **response, std::string *error, bool function,
+                       bool *cancelled) {
   ScopedDpiScope scope;
-  using func_t = void (*)(std::uint64_t, const char *, void *, unsigned char *,
-                          void **, const char **);
+  using func_t = abi::InvokeObject;
   unsigned char ok = 0;
   const char *message = "";
   void *result = nullptr;
-  resolve_symbol<func_t>("svx_invoke_object")(object_id, method_id, request,
-                                                &ok, &result, &message);
+  int disabled = 0;
+  if (function) {
+    using function_t = abi::InvokeObjectFunction;
+    result = resolve_symbol<function_t>("svx_invoke_object_function")(object_id, method_id, request, &ok, &message);
+  } else {
+    disabled = resolve_symbol<func_t>("svx_invoke_object")(object_id, method_id, request, &ok, &result, &message);
+  }
+  if (cancelled != nullptr) *cancelled = disabled != 0 || svIsDisabledState() != 0;
   if (response != nullptr) {
     *response = result;
   }
   if (error != nullptr) {
     *error = message ? message : "";
   }
-  return ok != 0;
+  return ok != 0 && disabled == 0;
 }
 
 bool svx_invoke_static(const char *class_id, const char *method_id,
-                       void *request, void **response, std::string *error) {
+                       void *request, void **response, std::string *error, bool function,
+                       bool *cancelled) {
   ScopedDpiScope scope;
-  using func_t = void (*)(const char *, const char *, void *, unsigned char *, void **,
-                          const char **);
+  using func_t = abi::InvokeStatic;
   unsigned char ok = 0;
   const char *message = "";
-  resolve_symbol<func_t>("svx_invoke_static")(class_id, method_id, request, &ok,
-                                                response, &message);
+  int disabled = 0;
+  if (function) {
+    using function_t = abi::InvokeStaticFunction;
+    *response = resolve_symbol<function_t>("svx_invoke_static_function")(class_id, method_id, request, &ok, &message);
+  } else {
+    disabled = resolve_symbol<func_t>("svx_invoke_static")(class_id, method_id, request, &ok, response, &message);
+  }
+  if (cancelled != nullptr) *cancelled = disabled != 0 || svIsDisabledState() != 0;
   if (error != nullptr) *error = message ? message : "";
-  return ok != 0;
+  return ok != 0 && disabled == 0;
 }
 
 void svx_release_object(std::uint64_t object_id) {
   ScopedDpiScope scope;
-  using func_t = void (*)(std::uint64_t);
+  using func_t = abi::ReleaseObject;
   resolve_symbol<func_t>("svx_release_object")(object_id);
+}
+
+void svx_release_object_function(std::uint64_t object_id) {
+  ScopedDpiScope scope;
+  resolve_symbol<abi::ReleaseObjectFunction>("svx_release_object_function")(object_id);
 }
 
 bool svx_create_object(const char *class_id, void *request,
                        std::uint64_t *object_id, std::string *error) {
   ScopedDpiScope scope;
-  using func_t = void (*)(const char *, void *, unsigned char *, std::uint64_t *,
-                          const char **);
+  using func_t = abi::CreateObjectFunction;
   unsigned char ok = 0;
   std::uint64_t result = 0;
   const char *message = "";
-  resolve_symbol<func_t>("svx_create_object")(class_id, request, &ok, &result, &message);
+  result = resolve_symbol<func_t>("svx_create_object_function")(class_id, request, &ok, &message);
   if (object_id != nullptr) *object_id = result;
   if (error != nullptr) *error = message ? message : "";
   return ok != 0;
@@ -283,7 +328,7 @@ bool svx_create_object(const char *class_id, void *request,
 
 void svx_publish_object(const char *name, std::uint64_t object_id) {
   ScopedDpiScope scope;
-  using func_t = void (*)(const char *, std::uint64_t);
+  using func_t = abi::PublishObject;
   resolve_symbol<func_t>("svx_publish_object")(name, object_id);
 }
 

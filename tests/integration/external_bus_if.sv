@@ -10,5 +10,11 @@ interface external_bus_if;
     return data;
   endfunction
 
-  modport master(input ready, output data, import write, read);
+  function automatic void snapshot;
+    output logic [7:0] first, second;
+    first = data;
+    second = data + 1;
+  endfunction
+
+  modport master(input ready, output data, import write, read, snapshot);
 endinterface

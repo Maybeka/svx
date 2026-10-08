@@ -4,10 +4,11 @@ include LICENSE
 include README.md
 recursive-include sv *.sv *.svh
 recursive-include svx_runtime *.cpp *.hpp
-recursive-include docs *.md
+recursive-include docs *.md *.svg *.excalidraw
 exclude docs/SVX_MILESTONE*.md
 exclude docs/review_*.md
-recursive-include examples *.py *.sv *.md
-recursive-include tests *.py *.sv *.json
+recursive-include examples *.py *.sv *.svh *.md *.json
+recursive-include tests *.py *.sv *.svh *.json *.cpp
 prune .local-sim
 prune .tmp
+prune incubator

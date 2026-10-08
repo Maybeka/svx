@@ -1,10 +1,10 @@
 `ifndef SVX_ERROR__SV
 `define SVX_ERROR__SV
 
-task automatic svx_fatal_svx(string source, string message);
+function automatic void svx_fatal_svx(string source, string message);
   $fatal(2, "SVX FATAL [%s]: %s", source, message);
-endtask
+endfunction
 
-export "DPI-C" task svx_fatal_svx;
+export "DPI-C" function svx_fatal_svx;
 
 `endif

@@ -1,6 +1,18 @@
 package field_pkg;
   virtual class Base;
-    function new();
+    int constructor_sum;
+    function new(input int self, svx_self, _native, encode_constructor,
+                 bind_instance, object_id, SVMirror, svx_object_id);
+      constructor_sum = self + svx_self + _native + encode_constructor +
+                        bind_instance + object_id + SVMirror + svx_object_id;
+    endfunction
+    function int collisions(input int self, svx_self, invoke_sv, svx_invoke_sv,
+                            invoke_sv_static, svx_invoke_sv_static);
+      return self + svx_self + invoke_sv + svx_invoke_sv + invoke_sv_static + svx_invoke_sv_static;
+    endfunction
+    static function int collisions_static(input int self, svx_self, invoke_sv, svx_invoke_sv,
+                                          invoke_sv_static, svx_invoke_sv_static);
+      return self + svx_self + invoke_sv + svx_invoke_sv + invoke_sv_static + svx_invoke_sv_static;
     endfunction
   endclass
 endpackage
@@ -13,7 +25,7 @@ package field_user_pkg;
 
   class Final extends PythonLayer;
     function new();
-      super.new();
+      super.new(1, 2, 3, 4, 5, 6, 7, 8);
     endfunction
   endclass
 endpackage
@@ -27,6 +39,9 @@ module tb;
     svx_init();
     svx_load("tests.integration.field_projection_inheritance_test");
     value = new();
+    if (value.constructor_sum != 36) begin
+      $fatal(2, "Generated constructor changed colliding parameter values");
+    end
     if (value.retry != 7) begin
       $fatal(2, "Python projected field write did not update the SV BProxy field");
     end
@@ -38,6 +53,7 @@ module tb;
     end
     svx_release_object(value.__svx_remote_object_id);
     svx_start("field_projection.check_release");
+    svx_start("field_projection.check_failed_release");
     $display("FIELD_PROJECTION_INHERITANCE_PASS");
     svx_shutdown();
     $finish;

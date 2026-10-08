@@ -13,4 +13,10 @@ class HandlePortal:
         assert vif.read_ready().value_mask == 1
         vif.write_data(0x5C)
         assert vif.read().value_mask == 0x5C
+        from svx import Output
+
+        first, second = Output(), Output()
+        vif.snapshot(first, second)
+        assert first.value.value_mask == 0x5C
+        assert second.value.value_mask == 0x5D
         return vif

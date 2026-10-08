@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 import hashlib
 import importlib
+import importlib.machinery
 import json
 import os
 from pathlib import Path
@@ -24,7 +25,7 @@ from ._svtypes_contract import (
 )
 
 
-SVX_RUNTIME_ABI_VERSION = 1
+SVX_RUNTIME_ABI_VERSION = 3
 SVX_GENERATOR_ABI_VERSION = 2
 SVX_MANIFEST_SCHEMA_MAJOR = 2
 SVX_FEATURE_BITS = frozenset(
@@ -62,6 +63,32 @@ _codec_session: Any | None = None
 _svtypes_capabilities: SvTypesCapabilities | None = None
 
 
+class _RuntimeSourceLoader(importlib.machinery.SourceFileLoader):
+    def get_code(self, fullname):
+        return self.source_to_code(self.get_data(self.path), self.path)
+
+
+class _RuntimeSourceFinder:
+    @staticmethod
+    def find_spec(fullname, path=None, target=None):
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
+        if spec is not None and type(spec.loader) is importlib.machinery.SourceFileLoader:
+            spec.loader = _RuntimeSourceLoader(fullname, spec.origin)
+        return spec
+
+
+def _native_load(module_name: str):
+    # Timestamp-based pyc validation misses same-size edits within one second.
+    finder = _RuntimeSourceFinder()
+    index = next((index for index, entry in enumerate(sys.meta_path)
+                  if entry is importlib.machinery.PathFinder), len(sys.meta_path))
+    sys.meta_path.insert(index, finder)
+    try:
+        return importlib.import_module(module_name)
+    finally:
+        sys.meta_path.remove(finder)
+
+
 def _field(value: Any, name: str) -> Any:
     if isinstance(value, Mapping):
         try:
@@ -76,7 +103,10 @@ def _field(value: Any, name: str) -> Any:
 
 def _read_svtypes_capabilities() -> SvTypesCapabilities:
     import svtypes
+    from ._svtypes_contract import require_codec_template_api, require_type_spec_api
 
+    require_type_spec_api(svtypes)
+    require_codec_template_api(svtypes)
     provider = getattr(svtypes, "runtime_capabilities", None)
     if not callable(provider):
         raise SVXError(
@@ -169,10 +199,39 @@ def _load_artifact_manifest(
             f"generated artifacts require unavailable SvTypes capabilities: {', '.join(missing)}"
         )
 
+    # Validate generated files before a codec factory can import user modules.
+    root = path.parent.resolve()
+    python_modules: list[tuple[str, Path]] = []
+    artifacts = raw.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise SVXError(f"invalid artifacts list in {path}")
+    for artifact in artifacts:
+        if not isinstance(artifact, Mapping):
+            raise SVXError(f"invalid artifact entry in {path}")
+        relative = artifact.get("path")
+        digest = artifact.get("sha256")
+        if not isinstance(relative, str) or not isinstance(digest, str):
+            raise SVXError(f"artifact path/hash is invalid in {path}")
+        candidate = (root / relative).resolve()
+        if not candidate.is_relative_to(root):
+            raise SVXError(f"artifact path escapes its manifest directory: {relative!r}")
+        try:
+            actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise SVXError(f"cannot read generated artifact {candidate}: {exc}") from exc
+        if actual != digest:
+            raise SVXError(f"generated artifact hash mismatch: {candidate}")
+        if artifact.get("language") == "python":
+            module = artifact.get("module")
+            if not isinstance(module, str) or not module:
+                raise SVXError(f"Python artifact is missing its module identity: {relative!r}")
+            python_modules.append((module, candidate))
+
     types = raw.get("types")
     if not isinstance(types, list):
         raise SVXError(f"generated artifact manifest has no type table: {path}")
     from .inheritance import (
+        _return_slot_name,
         _call_record_class_name,
         _call_record_type_id,
         _codec_from_spec,
@@ -298,10 +357,21 @@ def _load_artifact_manifest(
             entry.get("response_fields"),
             {"output", "inout", "return"},
         )
+        returns = [field for field in response_fields if field.get("direction") == "return"]
+        if len(returns) > 1:
+            raise SVXError(f"{method_id!r} response has multiple return fields")
+        formal_names = {
+            field["name"] for field in request_fields + response_fields
+            if field.get("direction") != "return"
+        }
+        return_slot = _return_slot_name(formal_names)
         for field in response_fields:
-            if (field.get("name") == "result") != (field.get("direction") == "return"):
+            is_return = field.get("direction") == "return"
+            # Retain legacy records, but never reserve a legal formal name.
+            allowed_returns = {return_slot} | ({"result"} - formal_names)
+            if is_return and field.get("name") not in allowed_returns:
                 raise SVXError(
-                    f"{method_id!r} response reserves field 'result' for return direction"
+                    f"{method_id!r} response has an invalid private return field"
                 )
         validate_record(method_id, "request", request_fields, entry.get("request_record"))
         validate_record(method_id, "response", response_fields, entry.get("response_record"))
@@ -320,33 +390,6 @@ def _load_artifact_manifest(
         request_fields = validate_fields(class_id, "request", entry.get("request_fields"))
         validate_record(class_id, "request", request_fields, entry.get("request_record"))
 
-    root = path.parent.resolve()
-    python_modules: list[tuple[str, Path]] = []
-    artifacts = raw.get("artifacts")
-    if not isinstance(artifacts, list):
-        raise SVXError(f"invalid artifacts list in {path}")
-    for artifact in artifacts:
-        if not isinstance(artifact, Mapping):
-            raise SVXError(f"invalid artifact entry in {path}")
-        relative = artifact.get("path")
-        digest = artifact.get("sha256")
-        if not isinstance(relative, str) or not isinstance(digest, str):
-            raise SVXError(f"artifact path/hash is invalid in {path}")
-        candidate = (root / relative).resolve()
-        if not candidate.is_relative_to(root):
-            raise SVXError(f"artifact path escapes its manifest directory: {relative!r}")
-        try:
-            actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
-        except OSError as exc:
-            raise SVXError(f"cannot read generated artifact {candidate}: {exc}") from exc
-        if actual != digest:
-            raise SVXError(f"generated artifact hash mismatch: {candidate}")
-        if artifact.get("language") == "python":
-            module = artifact.get("module")
-            if not isinstance(module, str) or not module:
-                raise SVXError(f"Python artifact is missing its module identity: {relative!r}")
-            python_modules.append((module, candidate))
-
     import_roots: set[Path] = set()
     for module, candidate in python_modules:
         depth = len(module.split("."))
@@ -359,8 +402,13 @@ def _load_artifact_manifest(
         root_text = str(import_root)
         if root_text not in sys.path:
             sys.path.insert(0, root_text)
-    for module, _ in python_modules:
-        importlib.import_module(module)
+    loaded = [importlib.import_module(module) for module, _ in python_modules]
+    # Source-managed modules can expose roots before importing later companions.
+    # Finish their deferred target views only after every declaration module loads.
+    for module in loaded:
+        finalize = vars(module).get('_svx_finalize_generated_types')
+        if finalize is not None:
+            finalize()
 
 
 def _load_configured_artifacts(capabilities: SvTypesCapabilities) -> None:

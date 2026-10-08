@@ -29,7 +29,7 @@ class HandlePortalImpl extends svx_proxy_external_handle_base::HandlePortal;
 endclass
 
 class HandlePortalFactory implements svx_pkg::svx_factory;
-  virtual task svx_create(
+  virtual function void svx_create(
     longint unsigned object_id,
     input chandle request,
     output bit ok,
@@ -39,12 +39,14 @@ class HandlePortalFactory implements svx_pkg::svx_factory;
     portal = new(object_id);
     ok = 1;
     error = "";
-  endtask
+  endfunction
 endclass
 
 module tb;
   import external_handle_test_pkg::*;
   import svx_pkg::*;
+  import svtypes_pkg::*;
+  import svx_external_handles_pkg::*;
 
   external_bus_if bus();
 
@@ -55,13 +57,18 @@ module tb;
     TaggedPacket source;
     Packet returned_packet;
     virtual external_bus_if.master returned_vif;
+    remote_ref old_reference, new_reference, null_reference, wrong_reference;
+    string error;
+    string python_module;
 
     svx_init();
     factory = new();
     svx_inheritance_registry::register_factory(
       "py://tests/integration/external_handle_base/HandlePortal", factory
     );
-    svx_load("tests.integration.external_handle_test");
+    if (!$value$plusargs("SVX_TEST_MODULE=%s", python_module))
+      python_module = "tests.integration.external_handle_test";
+    svx_load(python_module);
     svx_start("external_handles.run");
     svx_require_published_object("external-handles.portal", published);
     if (!$cast(portal, published)) $fatal(1, "published portal has wrong SV type");
@@ -77,8 +84,29 @@ module tb;
     returned_vif.write(8'ha6);
     if (bus.read() != 8'ha6) $fatal(1, "virtual interface handle did not round trip");
 
-    $display("EXTERNAL_HANDLES_PASS");
+    null_reference = SVXExternal_sv___external_handle_test_pkg_Packet::encode(null);
+    if (!SVXExternal_sv___external_handle_test_pkg_Packet::decode(null_reference, returned_packet, error))
+      $fatal(1, "null handle decode failed");
+    if (returned_packet != null) $fatal(1, "null handle became non-null");
+    old_reference = SVXExternal_sv___external_handle_test_pkg_Packet::encode(source);
+    wrong_reference = new("sv://other/Packet", old_reference.object_number);
+    if (SVXExternal_sv___external_handle_test_pkg_Packet::decode(wrong_reference, returned_packet, error))
+      $fatal(1, "wrong target accepted");
+    svx_external_handle_registry::clear();
+    if (SVXExternal_sv___external_handle_test_pkg_Packet::endpoints.size() != 0)
+      $fatal(1, "shutdown retained generated endpoints");
+    if (SVXExternal_sv___external_handle_test_pkg_Packet::decode(old_reference, returned_packet, error))
+      $fatal(1, "stale handle accepted");
+    new_reference = SVXExternal_sv___external_handle_test_pkg_Packet::encode(source);
+    if (new_reference.object_number == old_reference.object_number)
+      $fatal(1, "new session reused stale id");
+    if (!SVXExternal_sv___external_handle_test_pkg_Packet::decode(new_reference, returned_packet, error))
+      $fatal(1, "retained SV handle could not be encoded in new session");
+    if (returned_packet != source) $fatal(1, "new session changed handle identity");
     svx_shutdown();
+    if (SVXExternal_sv___external_handle_test_pkg_Packet::endpoints.size() != 0)
+      $fatal(1, "shutdown retained generated endpoints");
+    $display("EXTERNAL_HANDLES_PASS");
     $finish;
   end
 endmodule

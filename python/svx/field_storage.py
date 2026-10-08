@@ -15,6 +15,7 @@ import struct
 from typing import Protocol
 
 from .errors import SVXInheritanceError
+from ._inheritance_diagnostics import inheritance_boundary
 
 
 @dataclass(frozen=True)
@@ -25,8 +26,9 @@ class FieldStorageKey:
     field_id: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.object_id, int) or self.object_id <= 0:
-            raise ValueError("SVX field storage object id must be non-zero")
+        if (not isinstance(self.object_id, int) or isinstance(self.object_id, bool)
+                or not 0 < self.object_id < (1 << 64)):
+            raise ValueError("SVX field storage object id must be an unsigned non-zero 64-bit integer")
         if not isinstance(self.field_id, str) or not self.field_id:
             raise ValueError("SVX field storage field id must be non-empty")
 
@@ -77,6 +79,8 @@ def _path_wire(path: object) -> str:
         if isinstance(segment, FieldMember):
             segments.append({"kind": "member", "name": segment.name})
         elif isinstance(segment, FieldIndex):
+            if segment.index >= (1 << 64):
+                raise SVXInheritanceError("invalid SvTypes index path segment: exceeds unsigned 64-bit range")
             segments.append({"kind": "index", "index": segment.index})
         elif isinstance(segment, FieldKey):
             segments.append(
@@ -128,7 +132,8 @@ def _field_operation_wire(path: str, operation: str, payload: bytes | None) -> b
             data.append(1)
         elif kind == "index":
             value = segment.get("index")
-            if not isinstance(value, int) or value < 0:
+            if (not isinstance(value, int) or isinstance(value, bool)
+                    or not 0 <= value < (1 << 64)):
                 raise SVXInheritanceError("invalid SvTypes index path segment")
             encoded = struct.pack("<Q", value)
             data.append(2)
@@ -153,6 +158,7 @@ def _field_operation_wire(path: str, operation: str, payload: bytes | None) -> b
 
 
 class _NativeFieldTransport:
+    @inheritance_boundary('Python -> SV field read', identity='field_id')
     def read_field(self, object_id: int, field_id: str, descriptor: str, path: str) -> bytes:
         from . import _native
 
@@ -161,11 +167,13 @@ class _NativeFieldTransport:
                 object_id,
                 f"{field_id}@svx_field_operation",
                 _field_operation_wire(path, "read", None),
+                function=True,
             )
         # Reuse the manifest dispatcher rather than creating a second C->SV
         # route. The generated endpoint validates the concrete field identity.
-        return _native.inheritance_call_sv(object_id, f"{field_id}@svx_field_read", b"")
+        return _native.inheritance_call_sv(object_id, f"{field_id}@svx_field_read", b"", function=True)
 
+    @inheritance_boundary('Python -> SV field write', identity='field_id')
     def write_field(
         self,
         object_id: int,
@@ -180,12 +188,13 @@ class _NativeFieldTransport:
         if path == "[]" and operation == "set":
             if payload is None:
                 raise SVXInheritanceError("SVX field set requires SvTypes payload bytes")
-            _native.inheritance_call_sv(object_id, f"{field_id}@svx_field_set", payload)
+            _native.inheritance_call_sv(object_id, f"{field_id}@svx_field_set", payload, function=True)
             return None
         _native.inheritance_call_sv(
             object_id,
             f"{field_id}@svx_field_operation",
             _field_operation_wire(path, operation, payload),
+            function=True,
         )
         return None
 
@@ -289,7 +298,8 @@ def projected_field_identities(
     """
 
     try:
-        from svtypes import FieldIdentity
+        from svtypes import FieldIdentity, TypeBase
+        from svtypes.object import ObjectDescriptor
     except ImportError as error:  # pragma: no cover - package prerequisite
         raise SVXInheritanceError("SvTypes external field storage is unavailable") from error
     if not isinstance(field_ids_by_name, dict):
@@ -301,7 +311,8 @@ def projected_field_identities(
             raise TypeError("projected field name must be a non-empty string")
         if not isinstance(field_id, str) or not field_id:
             raise TypeError("projected field ID must be a non-empty string")
-        declaring = [cls for cls in type(owner).mro() if name in vars(cls)]
+        declaring = [cls for cls in type(owner).mro()
+                     if isinstance(vars(cls).get(name), (TypeBase, ObjectDescriptor))]
         if len(declaring) != 1:
             raise SVXInheritanceError(
                 f"projected field {type(owner).__name__}.{name} has no unique declaring class"

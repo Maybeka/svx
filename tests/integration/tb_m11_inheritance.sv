@@ -28,7 +28,7 @@ class SvCounter extends svx_proxy_m11_base::BaseMonitor;
 endclass
 
 class SvCounterFactory implements svx_pkg::svx_factory;
-  virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+  virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
     svx_proxy_m11_base::BaseMonitor::constructor_request_t constructor_request;
     int seed;
     SvCounter counter;
@@ -37,7 +37,7 @@ class SvCounterFactory implements svx_pkg::svx_factory;
     counter = new(object_id, seed);
     ok = 1;
     error = "";
-  endtask
+  endfunction
 endclass
 
 module tb;

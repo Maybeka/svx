@@ -5,6 +5,7 @@ import inspect
 from typing import Any, TypeVar
 
 from . import _native
+from .callback_context import require_blocking_operations_allowed
 from .errors import SVXChannelError
 
 
@@ -39,6 +40,7 @@ class Channel:
         type_name: str = "",
         content_type: str = "application/octet-stream",
     ) -> None:
+        require_blocking_operations_allowed("svx.Channel.put_payload()")
         payload = _coerce_payload(data, kind, type_name, content_type)
         _native.channel_put_payload(
             self.name,
@@ -52,6 +54,7 @@ class Channel:
         )
 
     def get_payload(self) -> Payload:
+        require_blocking_operations_allowed("svx.Channel.get_payload()")
         (
             kind,
             type_name,
@@ -72,6 +75,7 @@ class Channel:
         )
 
     def peek_payload(self) -> Payload:
+        require_blocking_operations_allowed("svx.Channel.peek_payload()")
         (
             kind,
             type_name,
@@ -198,6 +202,10 @@ def _codec_instance(codec_or_type: Any) -> Any:
 
     if not isinstance(codec_or_type, type):
         return codec_or_type
+    import svtypes
+
+    if issubclass(codec_or_type, svtypes.SvObject):
+        return codec_or_type.codec_template(session=codec_session())
     try:
         return codec_or_type(session=codec_session())
     except TypeError:
