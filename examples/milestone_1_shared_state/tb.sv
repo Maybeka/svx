@@ -13,6 +13,7 @@ module tb;
     svx_start("examples.milestone_1_shared_state.tests.shared_state_test.main");
     $display("SHARED TEST realtime after SVX: %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_1_shared_state");
     $finish;
   end
 endmodule

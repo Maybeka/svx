@@ -113,6 +113,7 @@ module tb;
 
     $display("M6 CLI workflow test done @ %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_6_cli_workflow");
     $finish;
   end
 endmodule

@@ -1,0 +1,51 @@
+{
+  "configuration": {
+    "python_modules": [
+      "examples.foreign_handles.python_api"
+    ],
+    "python_namespaces": [
+      {
+        "module": "examples",
+        "paths": [
+          "../.."
+        ]
+      },
+      {
+        "module": "examples.foreign_handles",
+        "paths": [
+          ".."
+        ]
+      }
+    ],
+    "python_selections": [
+      {
+        "module": "examples.foreign_handles.python_api",
+        "path": "../python_api.py"
+      }
+    ],
+    "python_sources": [],
+    "source_mode": "separate-parse-inputs",
+    "sv_declarations": [],
+    "sv_dependencies": [
+      "../bus_if.sv"
+    ],
+    "sv_include_dirs": [],
+    "sv_predefines": {},
+    "sv_sources": [
+      "../bus_if.sv"
+    ],
+    "sv_undefines": []
+  },
+  "contract_sha256": "7e359b0e7e198c37af5a8a983035c4d4015461e9fe2635caa76b1ab09612f047",
+  "schema_version": "1.0.0",
+  "sources": [
+    {
+      "path": "../bus_if.sv",
+      "sha256": "9231be005912b570ce72f7edc5c1c2446bb96100a9c0b1ae2fc7e7658a55a9c8"
+    },
+    {
+      "path": "../python_api.py",
+      "sha256": "09cd2b98c6851ebb115bcc0938085187eb7c28da6ee2b5aec664b7c48cde8ebd"
+    }
+  ]
+}

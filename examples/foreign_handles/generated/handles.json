@@ -105,7 +105,7 @@
                       ],
                       "pure_virtual": false,
                       "return_type": "void",
-                      "timing": "task",
+                      "timing": "function",
                       "virtual": false
                     },
                     "operation": "signal_write"
@@ -250,7 +250,7 @@
                   ],
                   "pure_virtual": false,
                   "return_type": "void",
-                  "timing": "task",
+                  "timing": "function",
                   "virtual": false
                 },
                 "operation": "signal_write"
@@ -358,6 +358,10 @@
       "symbol": "examples.foreign_handles.python_api.HandlePortal"
     }
   ],
+  "discovery_provenance": {
+    "path": "handles.json.svx-discovery.json",
+    "schema_version": "1.0.0"
+  },
   "generator_abi_version": 2,
   "required_runtime_capabilities": [
     "svtypes.checked-encoding-descriptor.v1",

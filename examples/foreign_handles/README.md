@@ -47,6 +47,9 @@ to `PYTHONPATH` when running the simulation.
 
 `tb.sv` verifies the class handle's dynamic-instance identity, Python VIF
 signal write/function access, and the returned VIF's continued SV usability.
+It selects the SV endpoint with generated
+`svx_proxy_python_api::HandlePortalFactory#(HandlePortalImpl)`; no handwritten
+factory, request decoding, or internal registry call is required.
 
 See [the handle-adapter contract](../../docs/CROSS_LANGUAGE_HANDLE_ADAPTERS.md)
 for lifecycle, null, and unsupported-operation rules.

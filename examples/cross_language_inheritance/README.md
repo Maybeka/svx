@@ -44,8 +44,10 @@ package.
 - Derive the Python implementation from the generated same-name mirror.
 - Put the complete SV ancestor declaration in the Python target's
   `base_lineage`; this is context, not a request to generate a second base.
-- Let the declared initiator own construction. This example uses Python
-  initiation: `PythonDriver()` creates the paired SV object.
+- Construct the Python subclass normally: `PythonDriver()` creates the paired
+  SV object. A mirror bound to an existing SV receiver reuses it instead of
+  allocating a second object; SV-origin metadata does not prohibit normal
+  Python construction of this boundary mirror.
 - `svx.publish_object("example.driver", driver)` explicitly hands a live
   object to SV. Use `` `SVX_GET_OBJECT(ExpectedType, name, target) `` in SV;
   it validates the recovered object with `$cast` before assignment.

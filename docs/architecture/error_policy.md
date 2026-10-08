@@ -45,34 +45,55 @@ current = svx.get_exception_policy()
 | Policy | 1.0 support | Behavior |
 |---|---|---|
 | `svx.FATAL` | Yes (default) | Prints the exception and traceback, then terminates simulation via `$fatal`. |
-| `svx.REPORT` | Yes | Prints the same information, preserves a failure status for the caller, and does not invoke `$fatal`. |
+| `svx.REPORT` | Yes | Reports entry/child exceptions without immediate `$fatal`; failed-child waits still fail. Generated inheritance and constructor failures remain fatal. |
 | `svx.DEFER` | No | Not a public policy. |
 | `svx.CALLBACK` | No | Not a public policy. |
 
 ### 2.3 Fatal Mechanism
 
-The default `svx.FATAL` policy reports the error and then calls a simulator-side SV task that executes `$fatal(2, message)`.
+The default `svx.FATAL` policy reports the error and then calls a simulator-side
+SV function that executes `$fatal(2, message)`.
 
-The preferred path is an exported SystemVerilog task rather than `vpi_control(vpiFinish, ...)`, because `$fatal` carries simulator-native severity and failure semantics:
+The path is an exported SystemVerilog function rather than
+`vpi_control(vpiFinish, ...)`, so it is legal from a nonblocking callback:
 
 ```cpp
 // C++ side
 void svx_fatal(const char* source, const char* error_message) {
-    vpi_printf((PLI_BYTE8*)"SVX FATAL [%s]: %s\n", source, error_message);
+    std::fprintf(stderr, "SVX FATAL [%s]: %s\n", source, error_message);
     svx_fatal_svx(source, error_message);
 }
 ```
 
 ```systemverilog
-task automatic svx_fatal_svx(string source, string message);
+function automatic void svx_fatal_svx(string source, string message);
   $fatal(2, "SVX FATAL [%s]: %s", source, message);
-endtask
-export "DPI-C" task svx_fatal_svx;
+endfunction
+export "DPI-C" function svx_fatal_svx;
 ```
 
-The severity level is fixed at 2 for the stable fatal policy.
+The severity level is fixed at 2. During an active DPI disable unwind, ordinary
+exceptions still produce a traceback, but fatal dispatch is deferred to the next
+safe `svx_start` or shutdown boundary. Cancellation is internal control flow,
+not an ordinary failure. Do not swallow it; use `finally` for cleanup.
 
 ## 3. Exception Reporting Format
+
+Cross-language method, constructor and field-access boundaries add an exception
+note beginning with `SVX call path:`. It identifies the direction, receiver ID
+and canonical method/class/field identity. Nested calls retain the deepest
+available path in one note, for example:
+
+```text
+SVX call path: SV -> Python object=1 method_id=sv://p/Base#check -> Python -> SV object=1 method_id=sv://p/Base#check
+```
+
+This note supplements the original traceback; it does not replace the user's
+exception, source location or cause. Native SV failures retain their existing
+`SVXRemoteError` code and identity. Each boundary restores its diagnostic context
+on success or failure, and cancellation is not annotated as an error. Constructor
+continuations retain their copied diagnostic context along with the original
+Python stack. This is not a new wire error protocol or general deadlock recovery.
 
 When an uncaught exception escapes an SVX execution context, the report must include:
 
@@ -99,9 +120,10 @@ SVX FATAL [svx_start('tests.basic_test.main')]:
       raise ValueError("invalid delay value: -5")
 ```
 
-## 4. Process-Level Error Handling (Post-M1)
+## 4. Unimplemented Policy Sketch (Not Public API)
 
-When the `svx.DEFER` policy is implemented:
+The following was an early proposal and is not implemented. `svx.DEFER`,
+`svx.FAILED`, and `group.error()` do not exist in the public API:
 
 ```python
 group = svx.fork_join_none([child])
@@ -111,7 +133,7 @@ if group.status() == svx.FAILED:
     print(f"Child failed: {error_info.message}")
 ```
 
-The process handle stores:
+The proposal would require storing:
 - Exception type
 - Exception message
 - Traceback string
@@ -122,4 +144,5 @@ The process handle stores:
 1. Trigger an uncaught exception in a `main()` task → verify fatal output format.
 2. Verify `SVXContextError` is raised when calling a primitive without context.
 3. Verify `SVXExportError` is raised when `svx_start` references an unregistered name.
-4. (Post-M1) Verify `svx.REPORT` policy does not terminate simulation.
+4. Verify `svx.REPORT` for an exported entry and fatal behavior for a failed
+   generated inheritance call; these policy scopes are intentionally different.

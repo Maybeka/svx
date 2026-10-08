@@ -1,3 +1,12 @@
+# Historical Type Taxonomy
+
+This is a pre-split design sketch, not SVX's type API or ownership model.
+SvTypes owns Python value declarations, codecs, object graphs, randomization,
+and coverage. SVX consumes its versioned public contracts rather than defining
+the `TypeBase` hierarchy below. For current usage see
+[the core concepts guide](../SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md) and
+[the dependency decision](../decisions/0001-svtypes-as-versioned-external-dependency.md).
+
 ### 1. Top Concept: `Package`
 
 The top concept is `Package`, which

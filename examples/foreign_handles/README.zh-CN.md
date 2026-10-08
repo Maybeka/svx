@@ -44,6 +44,9 @@ VIF 发现需要可选的 manifest frontend 依赖；执行生成的机器应安
 
 `tb.sv` 验证 class handle 的动态实例身份、Python 经 VIF 进行的信号写入和
 function 调用，以及返回 VIF 在 SV 中仍可继续使用。
+SV endpoint 通过生成的
+`svx_proxy_python_api::HandlePortalFactory#(HandlePortalImpl)` 选择，不需要
+手写 factory、解码 request 或调用内部 registry。
 
 生命周期、null 和不支持操作的规则见
 [handle adapter 契约](../../docs/CROSS_LANGUAGE_HANDLE_ADAPTERS.md)。

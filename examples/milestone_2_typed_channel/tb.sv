@@ -68,6 +68,7 @@ module tb;
 
     $display("M2 typed channel test done @ %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_2_typed_channel");
     $finish;
   end
 endmodule

@@ -75,11 +75,17 @@ _svx_native.delay(duration, unit_code)
 
 ## 4. DPI Boundary
 
+The code below illustrates unit conversion only, not the complete current ABI.
+The current SV task additionally accepts a process index and returns a
+cancellation bit; see `sv/svx_timing.sv` and
+`svx_runtime/include/svx/sv_dpi.hpp`. Native task-return types follow the
+simulator's DPI ABI rather than the abbreviated C++ sketch below.
+
 The C++ wrapper passes a floating duration and unit code to SystemVerilog:
 
 ```cpp
 void svx_delay_wrapper(double duration, int unit_code) {
-    // validate SVX execution context, release GIL, then:
+    // validate SVX execution context, then invoke the simulator-owned task:
     delay_svx(duration, unit_code);
 }
 ```

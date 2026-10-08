@@ -292,7 +292,7 @@ if state.value == "running":
 group.await_()          # 等待仍存在的 child；已被 kill 的 group 可安全收尾
 ```
 
-`ProcessGroup` 使 parent 能把 child 的生命周期收束到当前测试范围。取消时，SVX 会向对应 SV process 发出取消请求；等待 `delay` 或 channel 的 child 被唤醒并终止，而不是遗留不可见的 host 线程。child 的异常也按 SVX 异常 policy 回报到 SV，而不是默默存在线程日志中。
+`ProcessGroup` 使 parent 能把 child 的生命周期收束到当前测试范围。`kill()` 发出协作取消请求，并等待 child 的 Python 清理和 SV 进程收尾完成后返回；重复调用是安全的。等待 `delay` 或 channel 的 child 被唤醒并终止，而不是遗留不可见的 host 线程。不能同步 kill 包含自身的 group。child 的异常也按 SVX 异常 policy 回报到 SV，而不是默默存在线程日志中。
 
 ### 5.5 primitive 的上下文边界
 
@@ -369,7 +369,7 @@ SV: svx_mirror_sv_<pkg>_A::A extends A  <---- object_id ---->  Python: svx_mirro
 SV 侧保留真实基类：
 
 ```systemverilog
-package driver_pkg;
+package example_driver_pkg;
   virtual class BaseDriver;
     virtual task drive();
       $fatal(1, "BaseDriver.drive must be overridden");
@@ -378,16 +378,20 @@ package driver_pkg;
 endpackage
 ```
 
-manifest 声明跨边界的真实事实：类 ID、语言归属、构造发起方、可调用 virtual 方法、task/function 属性和每个参数的 SvTypes binding。它是生成器和 runtime 的唯一 contract。
+manifest 声明跨边界的真实事实：类 ID、语言归属、构造来源、可调用方法、
+task/function 属性和每个参数的 SvTypes binding。它是生成器和 runtime 的唯一
+contract。下面只是 SV 基类条目的片段，不是可直接传给 CLI 的完整 JSON；
+完整输入还包含版本头和 PythonDriver 的目标声明及 base_lineage，见
+[示例 manifest](../examples/cross_language_inheritance/inheritance.json)。
 
 ```json
 {
-  "canonical_id": "sv://driver_pkg/BaseDriver",
+  "canonical_id": "sv://example_driver_pkg/BaseDriver",
   "language": "sv",
-  "symbol": "driver_pkg::BaseDriver",
-  "constructor": {"initiator": "sv", "parameters": []},
+  "symbol": "example_driver_pkg::BaseDriver",
+  "constructor": {"initiator": "python", "parameters": []},
   "methods": [{
-    "canonical_id": "sv://driver_pkg/BaseDriver#drive",
+    "canonical_id": "sv://example_driver_pkg/BaseDriver#drive",
     "name": "drive",
     "parameters": [],
     "return_type": "void",
@@ -401,45 +405,56 @@ manifest 声明跨边界的真实事实：类 ID、语言归属、构造发起�
 
 ```sh
 python -m svx inheritance-gen \
-  --manifest verification/inheritance.json \
-  --python-out verification/generated/python \
-  --sv-out verification/sv/generated/inheritance_mirrors.sv \
-  --artifact-manifest verification/generated/svx-artifacts.json
+  --manifest examples/cross_language_inheritance/inheritance.json \
+  --python-out examples/cross_language_inheritance/generated/python \
+  --sv-out examples/cross_language_inheritance/generated/inheritance_mirrors.sv \
+  --artifact-manifest examples/cross_language_inheritance/generated/svx-artifacts.json
 ```
 
 Python 只继承生成的 mirror，并覆盖 manifest 中声明的方法：
 
 ```python
-# verification/python_driver.py
+# examples/cross_language_inheritance/python_checks.py
 import svx
-from svx_mirror.driver_pkg import BaseDriver
+from svx_mirror.example_driver_pkg import BaseDriver
 
 class PythonDriver(BaseDriver):
     def drive(self):
         svx.display("Python override")
         svx.delay(2, "ns")
+
+@svx.export(name="inheritance.create_driver")
+def create_driver():
+    driver = PythonDriver()
+    svx.publish_object("example.driver", driver)
 ```
 
 SV 仍按原有基类使用它：
 
 ```systemverilog
-svx_mirror_sv_driver_pkg_BaseDriver::BaseDriver driver;
+example_driver_pkg::BaseDriver driver;
 
 svx_init();
-svx_load("verification.python_driver");
-driver = new();             // 生成路径分配并绑定同一个 object_id
-driver.drive();             // SV bridge -> PythonDriver.drive()
+svx_load("examples.cross_language_inheritance.python_checks");
+svx_start("inheritance.create_driver"); // Python 构造；生成路径创建并绑定 SV 实例
+`SVX_GET_OBJECT(example_driver_pkg::BaseDriver, "example.driver", driver)
+driver.drive();             // SV 基类句柄 -> PythonDriver.drive()
 svx_shutdown();
 ```
 
 `drive` 是 task，因此 Python override 可以调用 `svx.delay`。若 manifest 将方法声明为 function，它必须是非阻塞的，不能消耗仿真时间。
+这里的 `publish_object` / `SVX_GET_OBJECT` 是显式交接已绑定对象的实验性接口，
+不用于任意 Python 对象或任意原始 SV handle，也不转移对象所有权。
+以上片段对应仓库中的完整示例；编译包含、产物路径及运行环境按
+[示例运行指南](../examples/RUNNING_EXAMPLES.zh-CN.md)配置，并设置
+`SVX_ARTIFACT_MANIFEST` 为上述生成的兼容性 manifest。
 
 ### 7.2 运行时实际发生的事
 
 ```text
-1. SV 构造 `svx_mirror_sv_driver_pkg_BaseDriver::BaseDriver` bridge。
-2. runtime 分配一个唯一 object_id，创建并绑定 Python B 实例。
-3. SV 调用 handle.drive()。
+1. SV 通过 svx_start 进入 create_driver，Python 调用 PythonDriver()。
+2. 生成的 Mirror 构造路径创建 SV 实例，将两侧绑定到唯一 object_id。
+3. Python 显式发布已绑定对象；SV 获取 BaseDriver 句柄并调用 drive()。
 4. SV bridge 把“对象 ID + method ID + SvTypes request bytes”交给 libsvx。
 5. libsvx 以活动 execution context 调用 Python override。
 6. Python 返回 SvTypes response；SV 解码 copy-out/result 并继续执行。
@@ -449,9 +464,13 @@ SV 看到的是可赋值给 `BaseDriver` 的 SV 派生对象；Python 看到的�
 
 ## 8. 跨语言继承二：SV 派生 Python 类
 
-**配图：** [SV 派生 Python 图](architecture/inheritance_sv_extends_python.excalidraw)。该图应与上一节对照阅读：构造发起方从 SV 变为 Python，SV factory 和公开 proxy 因而成为入口，而 Schema/codec、对象表、字段契约和循环拒绝保持一致。
+**配图：** [SV 派生 Python 图](architecture/inheritance_sv_extends_python.excalidraw)。该图应与上一节对照阅读：本节源基类在 Python、具体子类在 SV，SV factory 和公开 proxy 参与构造。继承方向不限制构造只能从某一侧发起；Schema/codec、对象表、字段契约和循环拒绝保持一致。
 
 对应 `inheritance_sv_extends_python.excalidraw`。适用情况是：Python 拥有可复用抽象基类或策略类，而项目希望由 SV 提供一个具体实现，且 Python 应像使用普通子类一样构造和调用它。
+图中的 BProxy、CMirror 是逻辑角色名，不是要求用户导入的实际类型名；
+实际公开路径分别为 `svx_proxy_<py_module>::<Class>` 和
+`svx_mirror.<sv_package>.<Class>`。图中的构造/绑定节点是内部机制，不是新增
+的公共函数；应用入口仍使用下面的生成类型和类型化 factory。
 
 ### 8.1 用户看到的继承关系
 
@@ -509,16 +528,14 @@ class SvCounter extends svx_proxy_base_monitor::BaseMonitor;
 endclass
 ```
 
-Python 发起构造前，SV 注册 factory。factory 由 generated protocol 接收构造 request、用同一个 object ID 创建 `SvCounter`，并报告成功或错误。
+Python 发起构造前，SV 创建生成的类型化 factory。它自动注册实现、解码构造
+request，并用同一个 object ID 创建 `SvCounter`；应用不实现内部 factory 接口。
 
 ```systemverilog
-SvCounterFactory factory;
+svx_proxy_base_monitor::BaseMonitorFactory#(SvCounter) factory;
 
 svx_init();
 factory = new();
-svx_inheritance_registry::register_factory(
-  "py://verification/BaseMonitor", factory
-);
 svx_load("verification.python_test");
 svx_start("verification.python_test.run");
 svx_shutdown();
@@ -543,16 +560,25 @@ def run():
 SVX 不具备通用 SV object reflection，也无法观察任意手写 `new` 或可靠地追踪任意析构。因此跨语言对象必须由 generated construction path 创建：
 
 ```text
-发起方 -> generated factory -> 分配 object_id -> 两侧对象创建 -> bind -> post-bind hook
+发起方 -> generated construction path -> 分配/绑定 object_id -> 按祖先阶段构造配对部分
 ```
 
 如果任一步失败，runtime 回滚部分绑定。应用代码不手写 remote ID，也不直接操作 native 对象表。
+这里没有公开的 post-bind hook API。已支持的交替继承链按阶段在同一 receiver 上
+执行各 Python 初始化体，而不是先完成所有 SV 子类构造再初始化 Python。
+不同祖先的独立构造参数路由尚未完成：直接 Python 构造可以在分配 SV 基类前
+计算 `super()` 参数；若 SV 基类已构造，后续阶段的 `super()` 参数必须与已用值
+一致，否则报错，不会静默丢弃参数或再创建一个基类对象。这是实现缺口，不是
+设计要求用户合并签名或改写自然继承语法。内部 `ConstructionRequest` 不是用户接口。
 
 ## 9. 两种继承方向共同遵守的机制
 
 ### 9.1 manifest 限制调用面
 
-不是任意方法名都可跨语言调用。只有 manifest 明确列出的 constructor、virtual method、参数方向、task/function 属性和 SvTypes 类型可被生成和分派。
+不是任意方法名都可跨语言调用。生成器使用 manifest 明确列出的 constructor、
+方法、字段、参数方向、task/function 属性和 SvTypes 类型。方法可以是 virtual、
+nonvirtual 或 static；virtual 才沿虚分派链选择实现，nonvirtual/static 保留源语言
+的绑定规则，并不因为生成桥接而变成虚方法。
 
 这样做的直接收益是：生成物可审计、类型可校验、错误在生成/启动阶段暴露，而不是在某次任意字符串反射调用时才出现。
 

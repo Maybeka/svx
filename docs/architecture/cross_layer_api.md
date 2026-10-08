@@ -2,7 +2,34 @@
 
 See [SVX_SPEC.md](../SVX_SPEC.md) Section 5 for layer descriptions.
 
-This document defines the DPI function signatures that form the contract between the C++ Runtime layer and the SystemVerilog Package layer.
+The tables below are historical M1/M2 sketches, not the current DPI signature
+contract. Application code must use [the public API](../SVX_API_REFERENCE.md),
+not hand-written calls to these private entry points.
+
+The authoritative current declarations are `sv/svx_init.sv`,
+`sv/svx_process.sv`, `sv/svx_timing.sv`, `sv/svx_channel.sv`,
+`sv/svx_inheritance.sv`, `sv/svx_error.sv`, and
+`svx_runtime/include/svx/sv_dpi.hpp`. Initialization includes product/ABI
+arguments; blocking delay/channel calls include cancellation state;
+inheritance has separate task/function gateways; fatal reporting uses a function.
+Do not infer C task-return ABI from the abbreviated SV prototypes below.
+
+An SV task has no SV value result, but the native task entry points use an
+`int` return for the task completion/disable protocol in the qualified ABI.
+It is not the Python method's return value. The current native definitions are
+checked against compiler-derived import prototypes; changing these task entries
+to C `void` would break that signature check. Ordinary function results and
+generated method response records remain separate contracts.
+
+At the C boundary, `longint unsigned` object IDs use `unsigned long long`,
+and SV enum ports use `int`. C++ object-ID and enum types are converted at the
+boundary rather than substituted into dynamically resolved function prototypes.
+The native qualification build checks all core export pointer types against
+compiler-generated C declarations, including exported tasks and the fixed-array
+fork pointer. Exported task pointers use `int`, not `void`; blocking delay and
+channel wrappers also inspect that disable result. A separate source contract
+check keeps the fixed fork-array capacity equal on both sides. These checks
+qualify the tested toolchain configuration, not every possible simulator ABI mode.
 
 ## 1. DPI Contract Table
 
@@ -116,14 +143,16 @@ Ordering guarantee: `svx_load` must complete before `svx_start` can resolve the 
 
 ## 4. Display/Logging
 
-`svx.display(message)` maps to:
+`svx.display(message)` uses native standard output in the current implementation,
+not VPI. The following was an early design sketch:
 
 ```cpp
 // C++ side — uses VPI
 vpi_printf((PLI_BYTE8*)"%s\n", message);
 ```
 
-This routes output through the simulator's `$display` channel. Formatting (newline, timestamp) is handled by the Python wrapper, not the VPI call.
+There is no current promise that output uses the simulator's `$display` channel
+or receives an automatic simulation timestamp.
 
 ## 5. Milestone 2 Additions
 
@@ -170,9 +199,11 @@ while preserving the same user-facing Python and SV APIs.
 
 ## 6. Future Additions (Post-M2)
 
-These are not required for Milestone 1 or M2 but should be designed as pure
-additions:
+These were early proposals, not public APIs or a current roadmap:
 
 - `svx_vpi_get_handle()` — VPI-backed signal access
 - `svx_vpi_get_value()` / `svx_vpi_set_value()` — signal read/write
-- Generic `svx_call_sv_task(hierarchical_name, args)` — arbitrary SV task invocation (requires type marshalling design)
+- Generic `svx_call_sv_task(hierarchical_name, args)` was not adopted. Current
+  object-method invocation uses typed generated SV dispatch, not arbitrary
+  hierarchical task reflection. Hierarchical `Signal` access is implemented
+  through direct C VPI and is a separate service.

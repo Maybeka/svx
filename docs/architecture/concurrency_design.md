@@ -21,7 +21,7 @@ svx.fork_join([       svx_fork_join()            fork_svx task
 ## 2. fork_join Semantics
 
 ```
-svx.fork_join(callables: list[Callable]) -> None
+svx.fork_join(callables: list[Callable]) -> ProcessGroup
 ```
 
 ### 2.1 Behavior
@@ -73,9 +73,8 @@ group = svx.fork_join_any([child_a, child_b, child_c])
 group.kill_running()
 ```
 
-### 3.3 Future Refinement (Post-M1)
-
-A post-M1 refinement may add an optional policy argument or an explicit `svx.disable_fork()` equivalent to clean up remaining children automatically.
+There is no public automatic sibling-cancellation policy. Callers explicitly
+await or kill the returned group when its remaining work is no longer needed.
 
 ## 4. fork_join_none Semantics
 
@@ -92,12 +91,13 @@ svx.fork_join_none(callables: list[Callable]) -> ProcessGroup
 
 ### 4.1.1 Child Startup Synchronization
 
-Milestone 1 uses a zero-delay scheduler yield (`#0`) before `fork_svx` returns
+The current implementation uses a zero-delay scheduler yield (`#0`) before `fork_svx` returns
 for `FORK_JOIN_NONE`. This gives forked child processes a delta cycle to enter
 `start_process`, call `set_proc_index`, and publish their simulator process
 indices back to C++.
 
-This is an implementation shortcut, not the final protocol.
+The current implementation does not contain an explicit startup-ack handshake.
+The following is a possible design improvement, not an implemented guarantee.
 
 The production mechanism should use an explicit event/ack handshake:
 
@@ -111,7 +111,7 @@ The production mechanism should use an explicit event/ack handshake:
 This future handshake avoids relying on delta-cycle scheduling behavior for
 handle publication.
 
-### 4.2 ProcessGroup API (M1)
+### 4.2 ProcessGroup API
 
 ```python
 class ProcessGroup:
@@ -126,7 +126,7 @@ class ProcessGroup:
         Uses trailing underscore because 'await' is a Python keyword."""
 
     def kill(self) -> None:
-        """Request cooperative termination of all children that are still running."""
+        """Request cooperative cancellation and wait for child cleanup."""
 
     def kill_running(self) -> None:
         """Alias for kill(); provided for fork_join_any readability."""
@@ -135,15 +135,31 @@ class ProcessStatus(Enum):
     FINISHED = "finished"
     RUNNING = "running"
     KILLED = "killed"
+    UNKNOWN = "unknown"
 ```
 
 ### 4.3 Implementation Notes
 
 - Each child maps to an SV `process` handle stored in `svx_process_manager`.
 - The process manager assigns integer indices, shared with the C++ side via `svx_process__set_svobj_idx`.
-- `status()` reports `KILLED` once `kill()` has requested termination for the group; otherwise it returns `RUNNING` while any child is still running or waiting, and `FINISHED` only if all children completed normally.
+- After a successful `kill()`, `status()` reports `KILLED`; kill waits for
+  child cleanup before recording that state. Otherwise it reports `RUNNING`
+  while any child remains active and `FINISHED` when all children completed.
+  `FINISHED` is scheduling status, not proof of test success: child failures
+  are reported by waiting operations. An unrecognized aggregate is `UNKNOWN`.
 - `kill()` requests cooperative termination for each child. Blocking SVX primitives observe that request, return control to Python through an internal cancellation exception, and therefore allow Python `finally` blocks to run. The child supervisor then terminates SV descendants created by that child after Python has returned.
 - `await_()` blocks the calling SV process via `process::await()` for each child.
+- Cancellation-aware delay/channel waits can wake a child for Python stack
+  unwinding. An arbitrary user SV task blocked on its own event does not acquire
+  cancellation support automatically; kill may wait for it to return. A child
+  cannot synchronously kill a group that contains itself. Shutdown cancels and
+  waits for tracked children before closing channels and object registries,
+  then invalidates process handles. It cannot finish while a non-cooperative
+  user task remains blocked, and does not start a second runtime session.
+- Dropping the Python handle is not cancellation. Active child thread states
+  remain runtime-owned; completed orphan groups are reclaimed at the next fork
+  boundary or shutdown. Capsule destruction never invokes a simulator wait.
+- Process removal also removes its cancellation event and request flag.
 
 ## 5. Process Lifecycle States
 

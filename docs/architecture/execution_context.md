@@ -4,11 +4,14 @@ See [SVX_SPEC.md](../SVX_SPEC.md) Section 4 for the architectural motivation.
 
 ## 1. Context Lifecycle
 
-An SVX execution context is a C++ RAII guard pushed onto a thread-local stack.
+An SVX execution context is a C++ RAII guard associated with the current
+CPython `PyThreadState`. Multiple simulated processes can suspend on the same
+OS thread, so an OS-thread-local stack cannot identify the active Python process.
 
 ### 1.1 Creation
 
-A context is created by the C++ runtime on every DPI entry into Python:
+A context is created when the C++ runtime enters an application callable, not
+merely because a DPI routine imports a module or initializes Python:
 
 | Entry point | Context created? |
 |---|---|
@@ -16,7 +19,12 @@ A context is created by the C++ runtime on every DPI entry into Python:
 | `fork_join` entering each child callable | Yes |
 | `fork_join_any` entering each child callable | Yes |
 | `fork_join_none` entering each child callable | Yes |
-| Any future DPI callback into Python | Yes |
+| Inheritance method and constructor callbacks | Yes |
+| `svx_load` importing a module | No new application context |
+
+Module top-level code may register exports and declare types, but must not use
+simulator primitives merely because it was imported by `svx_load`. Put timed
+work in an exported entry or another simulator-owned application callback.
 
 ### 1.2 Destruction
 
@@ -24,7 +32,11 @@ The context is destroyed (popped from the stack) when the corresponding DPI call
 
 ### 1.3 Stack Semantics
 
-Context push/pop is a LIFO stack per OS thread. This supports nested DPI calls if needed in the future, while still allowing a simple "is context present?" check for the common case.
+Nested contexts retain a previous-context link per `PyThreadState`. The guard
+restores that link on exit. Before Python resumes after an SV task, the native
+wrapper restores the suspended process's thread state. Nested inheritance
+callbacks use the same mechanism; task/function restrictions are additionally
+tracked by `python/svx/callback_context.py`.
 
 ## 2. Implementation
 
@@ -37,21 +49,20 @@ namespace svx {
 
 class ExecutionContext {
 public:
-    ExecutionContext(const char* source_description);
+    explicit ExecutionContext(std::string source, int process_index = -1);
     ~ExecutionContext();
 
     // Returns true if a valid context exists on the current thread.
     static bool is_active();
 
-    // Returns the topmost context, or nullptr.
-    static ExecutionContext* current();
+    static PyThreadState* current_thread_state();
+    static int current_process_index();
+    static void restore(PyThreadState* thread_state);
 
     // Description for error messages: "svx_start('tests.basic_test.main')"
     const char* source() const;
 
-private:
-    const char* m_source;
-    // Pushed onto thread_local stack in constructor, popped in destructor.
+    PyThreadState* thread_state() const;
 };
 
 } // namespace svx
@@ -64,14 +75,13 @@ private:
 void svx_runtime_invoke(PyObject* callable) {
     svx::ExecutionContext ctx("svx_start('<export_name>')");
 
-    PyGILState_STATE gstate = PyGILState_Ensure();
+    // The caller has already attached the correct CPython state and holds the GIL.
     PyObject* result = PyObject_CallObject(callable, nullptr);
     if (result == nullptr) {
         svx::handle_python_exception(ctx.source());
         return;
     }
     Py_DECREF(result);
-    PyGILState_Release(gstate);
     // ctx destroyed here — context no longer active.
 }
 ```
@@ -117,15 +127,27 @@ svx.fork_join() may only be called from an SVX simulator-owned execution context
 
 ## 4. Thread Safety
 
-- The context stack is `thread_local`. Each OS thread has its own independent stack.
-- Python threads created by `threading.Thread` or `asyncio` will never have a context on their stack.
-- The context check is a cheap pointer/null check — no locking required.
+For task-method bridges, the native task disable result is separate from the
+method's `ok` output and response payload. The Python bridge restores its saved
+thread state and releases payloads before raising cancellation. Python wrapper
+code must preserve that exception rather than converting it to `SVXRemoteError`.
+An imported Python task callback unwinds its context and removes its cycle-check
+frame before acknowledging disable and returning the native disable code. Only
+the expected cancellation exception is cleared; an ordinary cleanup exception
+continues through the error policy.
+
+- The native map is keyed by `PyThreadState*` and accessed while Python holds the GIL.
+- A user-created Python thread has no simulator-owned entry context and cannot call simulator services.
+- `asyncio` is not an SVX scheduling path; callbacks must be synchronous ordinary functions.
+- Native context validity and the Python function-callback guard enforce different
+  conditions: simulator ownership versus legality of task/wait operations.
 
 ## 5. Testing
 
 Unit tests (runnable without a simulator):
 
 1. Call a primitive without a context → expect `SVXContextError`.
-2. Create a context (via C++ test fixture), call a primitive → no error.
-3. Destroy the context, call a primitive again → error.
-4. Verify context stack nesting: push A, push B, pop B, verify A is still current.
+Native context/process switching requires simulator integration evidence, not
+only Python mocks. The fork, disable/scope, and nested inheritance regressions
+exercise suspension/restoration. Function-callback tests separately cover
+rejection of task and delay operations. These are distinct verification scopes.

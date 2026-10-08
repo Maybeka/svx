@@ -4,7 +4,7 @@
 
 - [RELEASE_1.0.0.md](RELEASE_1.0.0.md): supported compatibility contract,
   installation model, and release gates for SVX 1.0.0.
-- [SVX_1_0_REQUIRED_FEATURES.md](SVX_1_0_REQUIRED_FEATURES.md): proposed stable
+- [SVX_1_0_REQUIRED_FEATURES.md](SVX_1_0_REQUIRED_FEATURES.md): stable
   feature contract, SvTypes prerequisites, implementation sequence, and release
   qualification gates for SVX 1.0.0.
 - [SVX_SPEC.md](SVX_SPEC.md): project scope, architecture, concurrency model,
@@ -33,6 +33,9 @@
 - [CROSS_LANGUAGE_HANDLE_ADAPTERS.md](CROSS_LANGUAGE_HANDLE_ADAPTERS.md):
   declared `RemoteRef` transport for arbitrary SV class handles and generated
   restricted virtual-interface views.
+- [CROSS_LANGUAGE_INHERITANCE_LINEAGE.md](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md):
+  full inheritance design, target residency, construction, member semantics,
+  and explicit distinctions between implemented interfaces and planned ones.
 - [diagrams/](diagrams/): visual overview diagrams for SVX layers,
   concurrency, and typed channels.
 
@@ -42,6 +45,9 @@ lives in the external SvTypes repository.
 ## Architecture Details
 
 Detailed architecture notes live in [architecture/](architecture/).
+The binding, cross-layer API, and type-taxonomy notes retain explicitly marked
+historical sketches; use the API reference and current source declarations for
+actual build/API contracts.
 
 - [architecture/generated_wrapper_layering.md](architecture/generated_wrapper_layering.md):
   generated-code and user-code layering guidance.

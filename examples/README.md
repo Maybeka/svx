@@ -19,7 +19,7 @@ the [example run guide](RUNNING_EXAMPLES.md).
 | Move transactions across the boundary | [Typed bus testbench](milestone_7_sv_typed_helpers) | SvTypes models, generated SV helpers, request/response and monitor channels |
 | Introduce SVX into a maintained testbench | [Existing SV environment](milestone_5_existing_env) | Leave driving and monitoring in SV; move scenario and checking policy to Python |
 | Use generated types in a build | [CLI workflow](milestone_6_cli_workflow) | `svx svtypes-gen` and CLI discovery commands |
-| Derive an SV class in Python | [Cross-language inheritance](cross_language_inheritance) | Manifest validation, generated mirrors, SV-owned construction, and a timed Python override |
+| Derive an SV class in Python | [Cross-language inheritance](cross_language_inheritance) | Manifest validation, generated mirrors, Python construction, explicit SV handle handoff, and a timed Python override |
 | Derive a Python class in SV | [Python-owned inheritance](python_owned_inheritance) | Python-initiated construction, SV factory registration, and cross-language `super()` |
 | Pass an arbitrary SV class or a virtual interface | [Foreign handles](foreign_handles) | Opaque class `RemoteRef`, generated VIF view, static modport access, and handle identity |
 | Inspect or temporarily alter a hierarchy path | [Hierarchical signal access](hierarchical_signal_access) | Predeclaration, startup validation, read/write, force/release, and four-state values |
@@ -62,7 +62,7 @@ the sole exception.
 | Typed channel roles: request, response, monitor | [Typed bus testbench](milestone_7_sv_typed_helpers) | Keep timing, driving, and sampling in SV |
 | Generated model and build-input discovery | [CLI workflow](milestone_6_cli_workflow) | Derive paths and generated output from `svx` CLI |
 | Incremental adoption in an existing environment | [Existing SV environment](milestone_5_existing_env) | Replace narrow data boundaries, not the SV component structure |
-| SV-owned class extended in Python | [Cross-language inheritance](cross_language_inheritance) | SV initiates construction; Python implements declared overrides |
+| SV-owned class extended in Python | [Cross-language inheritance](cross_language_inheritance) | Python creates the instance; SV calls the override through a base-class handle |
 | Python-owned class extended in SV | [Python-owned inheritance](python_owned_inheritance) | Python initiates construction; SV registers a factory |
 | Foreign SV class handles and virtual interfaces | [Foreign handles](foreign_handles) | `RemoteRef` identity transport; VIF members come from its static interface/modport type |
 | Targeted hierarchical read/write/force/release | [Hierarchical signal access](hierarchical_signal_access) | Every path is declared and validated before runtime readiness |

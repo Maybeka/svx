@@ -11,7 +11,8 @@ from examples.python_owned_inheritance.base_monitor import BaseMonitor as _Forei
 
 # --- SvTypes call contracts (private bridge metadata) ---
 register_contract(
-    {'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample': {'parameters': (),
+    {'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample': {'timing': 'function',
+                                                                                'parameters': (),
                                                                                 'request': (),
                                                                                 'response': (('svx_return_value',
                                                                                               {'unified_type_name': 'svtypes.Int',
@@ -21,7 +22,8 @@ register_contract(
                                                                                                'svtypes': {'kind': 'scalar',
                                                                                                            'name': 'Int'}}),),
                                                                                 'external_targets': ()},
-     'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify': {'parameters': (),
+     'py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify': {'timing': 'task',
+                                                                                'parameters': (),
                                                                                 'request': (),
                                                                                 'response': (),
                                                                                 'external_targets': ()}}

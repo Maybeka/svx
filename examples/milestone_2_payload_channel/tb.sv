@@ -122,6 +122,7 @@ module tb;
 
     $display("M2 payload test done @ %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_2_payload_channel");
     $finish;
   end
 endmodule

@@ -30,6 +30,7 @@ module tb;
       $fatal(2, "Python override advanced %0t instead of 2ns", $time - before_drive);
     end
     svx_shutdown();
+    $display("CROSS_LANGUAGE_INHERITANCE_PASS");
     $finish;
   end
 endmodule

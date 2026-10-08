@@ -14,9 +14,11 @@ def test_signal_access():
     data.write(0x3C)
     svx.delay(1, "ns")
     data.force(0xA5)
-    svx.delay(1, "ns")
-    assert data.read() == 0xA5
-    data.release()
+    try:
+        svx.delay(1, "ns")
+        assert data.read() == 0xA5
+    finally:
+        data.release()
     data.write(0x3C)
     svx.delay(1, "ns")
     assert data.read() == 0x3C

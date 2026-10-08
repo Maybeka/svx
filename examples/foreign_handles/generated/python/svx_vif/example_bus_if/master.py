@@ -8,7 +8,8 @@ from svx.inheritance import invoke_sv, register_contract, register_vif_view
 
 # --- SvTypes call contracts (private bridge metadata) ---
 register_contract(
-    {'sv-vif://example_bus_if/master#read': {'parameters': (),
+    {'sv-vif://example_bus_if/master#read': {'timing': 'function',
+                                             'parameters': (),
                                              'request': (),
                                              'response': (('svx_return_value',
                                                            {'unified_type_name': 'svtypes.Logic[width=8,signed=false,state=4state]',
@@ -22,7 +23,8 @@ register_contract(
                                                                                  'name': 'Logic'},
                                                                         'kind': 'specialization'}}),),
                                              'external_targets': ()},
-     'sv-vif://example_bus_if/master#write': {'parameters': (('value',
+     'sv-vif://example_bus_if/master#write': {'timing': 'task',
+                                              'parameters': (('value',
                                                               'input',
                                                               {'unified_type_name': 'svtypes.Logic[width=8,signed=false,state=4state]',
                                                                'encoding_descriptor': {'binary_format_version': 1,
@@ -47,7 +49,8 @@ register_contract(
                                                                         'kind': 'specialization'}}),),
                                               'response': (),
                                               'external_targets': ()},
-     'sv-vif://example_bus_if/master#write_data': {'parameters': (('value',
+     'sv-vif://example_bus_if/master#write_data': {'timing': 'function',
+                                                   'parameters': (('value',
                                                                    'input',
                                                                    {'unified_type_name': 'svtypes.Logic[width=8,signed=false,state=4state]',
                                                                     'encoding_descriptor': {'binary_format_version': 1,

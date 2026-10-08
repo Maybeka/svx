@@ -56,9 +56,9 @@ The primitive validates that the current CPython thread state has an active SVX
 execution context. It then calls the exported SV task directly:
 
 ```cpp
-const ExecutionContext* ctx = ExecutionContext::current();
-PyThreadState* process_state = ctx->thread_state();
-delay_svx(duration, unit_code);
+PyThreadState* process_state = ExecutionContext::current_thread_state();
+// The native DPI helper also passes the process index and receives cancellation.
+delay_svx(duration, unit_code, process_index, cancelled);
 ExecutionContext::restore(process_state);
 ```
 

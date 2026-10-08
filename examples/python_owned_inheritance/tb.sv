@@ -21,36 +21,17 @@ class SvCounter extends svx_proxy_base_monitor::BaseMonitor;
   endtask
 endclass
 
-class SvCounterFactory implements svx_pkg::svx_factory;
-  virtual task svx_create(
-    longint unsigned object_id,
-    input chandle request,
-    output bit ok,
-    output string error
-  );
-    svx_proxy_base_monitor::BaseMonitor::constructor_request_t constructor_request;
-    SvCounter counter;
-    constructor_request = svx_proxy_base_monitor::BaseMonitor::svx_decode_constructor_request(request);
-    counter = new(object_id, constructor_request.seed);
-    ok = 1;
-    error = "";
-  endtask
-endclass
-
 module tb;
   import svx_pkg::*;
 
   initial begin
-    SvCounterFactory factory;
+    svx_proxy_base_monitor::BaseMonitorFactory#(SvCounter) factory;
     svx_init();
     factory = new();
-    svx_inheritance_registry::register_factory(
-      "py://examples/python_owned_inheritance/base_monitor/BaseMonitor",
-      factory
-    );
     svx_load("examples.python_owned_inheritance.python_test");
     svx_start("python-owned-inheritance.run");
     svx_shutdown();
+    $display("PYTHON_OWNED_INHERITANCE_PASS");
     $finish;
   end
 endmodule

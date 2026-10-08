@@ -14,8 +14,8 @@ SvTypes checkout as the source of the data contract:
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install pytest
-PYTHONPATH=../svtypes/python python -m pip install -e .
+python -m pip install -e ../svtypes
+python -m pip install -e '.[dev,manifest]'
 ```
 
 Build the native runtime:
@@ -43,8 +43,10 @@ inheritance examples produce both an SV source file and a Python package. Add
 those generated files to the compilation/import inputs exactly as that README
 states.
 
-Generation should also be part of a project build gate. For inheritance
-artifacts, check that committed output is current:
+Generation should also be part of a project build gate. For a manifest discovered
+from source declarations, first run its original `inheritance-manifest` command
+with `--check`, using the same modules, declarations and source/compiler options.
+Only if discovery passes, check its generated artifacts:
 
 ```sh
 PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
@@ -54,6 +56,13 @@ PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
   --artifact-manifest <example>/generated/svx-artifacts.json \
   --check
 ```
+
+An artifact check verifies output against the supplied manifest; it does not
+rediscover edited Python declarations. Refreshing artifact input hashes against
+an old manifest cannot replace the discovery check. Handwritten manifests have
+no discovery command: update their contracts explicitly before checking output.
+See [Iterative Development](../docs/SVX_USER_MANUAL.md#21-iterative-development)
+for the ordered commands and body-only edit workflow.
 
 ## 3. Compile and Load
 

@@ -12,8 +12,8 @@
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install pytest
-PYTHONPATH=../svtypes/python python -m pip install -e .
+python -m pip install -e ../svtypes
+python -m pip install -e '.[dev,manifest]'
 ```
 
 构建 native runtime：
@@ -39,7 +39,9 @@ cmake --build build -j2
 channel helper 生成一个 SV 源文件；继承示例同时生成 SV 源文件和 Python package。
 按示例 README 的规定，把这些生成物加入编译和导入输入。
 
-生成也应进入项目 build gate。继承产物可用下列形式检查是否过期：
+生成也应进入项目 build gate。如果 manifest 来自源码声明发现，应先执行
+原来的 `inheritance-manifest` 命令并加 `--check`，使用相同模块、声明及
+源码/解析选项。发现检查通过后，再检查继承生成物：
 
 ```sh
 PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
@@ -49,6 +51,11 @@ PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
   --artifact-manifest <example>/generated/svx-artifacts.json \
   --check
 ```
+
+产物检查只验证其与给定 manifest 是否一致，不会重新发现已编辑的 Python
+声明。对旧 manifest 刷新输入摘要不能代替发现检查。手写 manifest 没有
+发现命令，需先显式更新契约，再检查产物。两阶段命令和仅修改方法体的流程见
+[迭代开发](../docs/SVX_USER_MANUAL.md#21-iterative-development)。
 
 ## 3. 编译与加载
 

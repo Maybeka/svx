@@ -87,9 +87,9 @@ package m2_typed_pkg;
       end
       result = $sformatf("M2Transaction#%0d{", __svtypes_object_number);
       result = {result, "addr="};
-      result = {result, $sformatf("%0h", addr)};
+      result = {result, $sformatf("%0h", this.addr)};
       result = {result, ", data="};
-      result = {result, $sformatf("%0d", data)};
+      result = {result, $sformatf("%0d", this.data)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;

@@ -10,12 +10,12 @@
       "language": "python",
       "module": "svx_mirror.example_driver_pkg",
       "path": "python/svx_mirror/example_driver_pkg.py",
-      "sha256": "f31f01b83aaf3fb759a8231034f40f8c5f1309ac560349b8113c817103b9c518"
+      "sha256": "2f6ce8705bb4cde1dc8d561786b06b99358de3f99547b53c49c310a15c4429ca"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "82f6e5bd6dd13b871fa267393cff8d117199b2f13f4e180dd194f4101a11ca9f"
+      "sha256": "0ad12af3ee193499502d4304607756041dfbe84dbaf47f1499304608975d1fa9"
     }
   ],
   "callables": [
@@ -52,6 +52,18 @@
       "python_fqn": "svx_mirror.example_driver_pkg.BaseDriver"
     }
   ],
+  "generation_inputs": {
+    "manifest": {
+      "path": "../inheritance.json",
+      "sha256": "10f077f11a179a868b20bd120da07ac36b9d8776c83b69c32a2be42cb27f52c0"
+    },
+    "source_mode": "separate-parse-inputs",
+    "sv_dependencies": [],
+    "sv_include_dirs": [],
+    "sv_predefines": {},
+    "sv_sources": [],
+    "sv_undefines": []
+  },
   "generator_abi_version": 2,
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
@@ -68,6 +80,6 @@
   "svtypes": {
     "required_package_major": 1
   },
-  "svx_runtime_abi_version": 1,
+  "svx_runtime_abi_version": 3,
   "types": []
 }

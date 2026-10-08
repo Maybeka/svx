@@ -40,8 +40,9 @@ PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
 - 从生成的同名 Python mirror 派生 Python implementation。
 - 在 Python target 的 `base_lineage` 中完整写出 SV ancestor；它仅提供上下文，
   不会额外生成一个 base class。
-- 让声明的 initiator 独占构造；本例使用 Python initiator，`PythonDriver()`
-  会创建配对的 SV 对象。
+- 正常构造 Python 子类；本例的 `PythonDriver()`
+  会创建配对的 SV 对象。已绑定现有 SV receiver 的镜像会复用该实例，
+  不会分配第二个对象；SV-origin 元数据不禁止正常构造此边界镜像。
 - 使用 `svx.publish_object("example.driver", driver)` 显式把存活对象交给
   SV；SV 使用 `` `SVX_GET_OBJECT(ExpectedType, name, target) `` 取回，宏会在
   赋值前以 `$cast` 验证类型。

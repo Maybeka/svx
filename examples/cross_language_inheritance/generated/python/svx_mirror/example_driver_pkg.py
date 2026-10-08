@@ -5,15 +5,20 @@
 
 from __future__ import annotations
 from svx import _native
-from svx.declarations import SVMirror
+from svx.declarations import SVMirror, _register_source_mirror_implementation
 from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass
 
 # --- SvTypes call contracts (private bridge metadata) ---
 register_contract(
-    {'sv://example_driver_pkg/BaseDriver#drive': {'parameters': (),
+    {'sv://example_driver_pkg/BaseDriver#drive': {'timing': 'task',
+                                                  'parameters': (),
                                                   'request': (),
                                                   'response': (),
                                                   'external_targets': ()}}
+)
+# --- SvTypes call contracts (private bridge metadata) ---
+register_contract(
+    {}
 )
 # --- Construction contract ---
 register_constructor('sv://example_driver_pkg/BaseDriver', ())
@@ -21,18 +26,20 @@ register_constructor('sv://example_driver_pkg/BaseDriver', ())
 class BaseDriver(SVMirror):
     """Executable Python base view of example_driver_pkg::BaseDriver."""
     __svx_foreign_class_id__ = 'sv://example_driver_pkg/BaseDriver'
+    __svx_guard_descendant_initializers__ = True
     __svx_projected_fields_by_class_id__ = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        if BaseDriver in cls.__bases__:
+        if any(base is BaseDriver or base.__dict__.get('__svx_sv_mirror__', {}).get('canonical_id') == 'sv://example_driver_pkg/BaseDriver' for base in cls.__bases__):
             register_python_subclass('sv://example_driver_pkg/BaseDriver', cls)
 
     def _svx_bind_active_projected_fields(self):
         # Project only fields selected for this concrete alternating-lineage target.
         declaration = getattr(type(self), '__svx_inheritance_class__', {})
         class_id = declaration.get('canonical_id') if isinstance(declaration, dict) else None
-        field_ids = self.__svx_projected_fields_by_class_id__.get(class_id)
+        field_ids = {}
+        field_ids.update(self.__svx_projected_fields_by_class_id__.get(class_id, {}))
         if field_ids:
             self._svx_bind_projected_fields(field_ids)
 
@@ -46,14 +53,15 @@ class BaseDriver(SVMirror):
         try:
             instance._svx_bind_active_projected_fields()
             cls.__init__(instance, *args)
-        except BaseException:
-            instance._svx_release_projected_fields()
-            from svx.inheritance import unbind_instance
-            unbind_instance(remote_object_id)
+        except BaseException as initialization_error:
+            SVMirror._svx_retire_failed_python_companion(instance, initialization_error)
             raise
         return instance
 
     def __init__(self):
+        from svx.inheritance import _suspend_natural_constructor as _suspend_natural_constructor
+        if _suspend_natural_constructor(self, 'sv://example_driver_pkg/BaseDriver', {}):
+            return
         if self._svx_remote_object_id is not None:
             return
         SVMirror.__init__(self)
@@ -62,11 +70,13 @@ class BaseDriver(SVMirror):
         self._svx_bind_remote_object(object_id)
         try:
             bind_instance(object_id, self)
-            self._svx_bind_active_projected_fields()
+            self._svx_bind_projected_fields({})
         except BaseException:
             self._svx_release_projected_fields()
             _native.inheritance_close(object_id)
             raise
+        self._svx_target_constructor_completed = True
 
     def drive(self):
         return invoke_sv(self._svx_remote_object_id, 'sv://example_driver_pkg/BaseDriver#drive', {})
+_register_source_mirror_implementation('sv://example_driver_pkg/BaseDriver', BaseDriver)

@@ -16,7 +16,7 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
   import example_driver_pkg::*;
 
   // Generated AMirror for sv://example_driver_pkg/BaseDriver.
-  class BaseDriver extends example_driver_pkg::BaseDriver implements svx_dispatchable;
+  class BaseDriver extends example_driver_pkg::BaseDriver implements svx_dispatchable, svx_function_dispatchable;
     longint unsigned __svx_remote_object_id;
 
     function new(input longint unsigned object_id = 0);
@@ -27,18 +27,18 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
       super.new();
       if (object_id == 0) begin
         // SV owns construction: allocate and bind the object ID before entering Python.
-        __svx_remote_object_id = svx_inheritance_registry::allocate_object_id();
-        svx_inheritance_registry::register_object(__svx_remote_object_id, this);
+        this.__svx_remote_object_id = svx_inheritance_registry::allocate_object_id();
+        svx_inheritance_registry::register_object(this.__svx_remote_object_id, this);
         request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
-        svx_inheritance_create_python("sv://example_driver_pkg/BaseDriver", __svx_remote_object_id, request, ok, error);
+        ok = svx_inheritance_create_python_function("sv://example_driver_pkg/BaseDriver", this.__svx_remote_object_id, request, error);
         svx_payload_destroy(request);
         if (!ok) begin
-          svx_inheritance_registry::unbind(__svx_remote_object_id);
+          svx_inheritance_registry::unbind(this.__svx_remote_object_id);
           $fatal(2, "SVX AMirror construction sv://example_driver_pkg/BaseDriver failed: %s", error);
         end
       end else begin
         // Python supplied the paired object ID during its construction path.
-        __svx_remote_object_id = object_id;
+        this.__svx_remote_object_id = object_id;
         svx_inheritance_registry::register_object(object_id, this);
       end
     endfunction
@@ -51,7 +51,7 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
       byte unsigned bytes[$];
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
-      svx_inheritance_call_python(__svx_remote_object_id, "sv://example_driver_pkg/BaseDriver#drive", request, ok, response, error);
+      svx_inheritance_call_python(this.__svx_remote_object_id, "sv://example_driver_pkg/BaseDriver#drive", request, ok, response, error);
       svx_payload_destroy(request);
       if (!ok) begin
         $fatal(2, "SVX inheritance callback sv://example_driver_pkg/BaseDriver#drive failed: %s", error);
@@ -83,6 +83,20 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
         end
       endcase
     endtask
+
+    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+      byte unsigned bytes[$];
+      int offset;
+      response = null;
+      svx_payload_to_byte_queue(request, bytes);
+      offset = 0;
+      case (method_id)
+        default: begin
+          ok = 0;
+          error = {"member is not available as a function: ", method_id};
+        end
+      endcase
+    endfunction
   endclass : BaseDriver
 
   class BaseDriver_factory implements svx_factory;
@@ -90,12 +104,12 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
       svx_inheritance_registry::register_factory("sv://example_driver_pkg/BaseDriver", this);
     endfunction
 
-    virtual task svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
-      BaseDriver instance;
-      instance = new(object_id);
+    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+      BaseDriver svx_instance;
+      svx_instance = new(object_id);
       ok = 1;
       error = "";
-    endtask
+    endfunction
   endclass : BaseDriver_factory
 
   function void register_BaseDriver_factory();

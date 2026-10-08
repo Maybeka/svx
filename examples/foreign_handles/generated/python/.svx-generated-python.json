@@ -1,0 +1,7 @@
+[
+  "svx_py/__init__.py",
+  "svx_py/examples/foreign_handles/python_api.py",
+  "svx_vif/__init__.py",
+  "svx_vif/example_bus_if/__init__.py",
+  "svx_vif/example_bus_if/master.py"
+]

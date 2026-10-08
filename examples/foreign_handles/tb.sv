@@ -9,20 +9,6 @@ class HandlePortalImpl extends svx_proxy_python_api::HandlePortal;
   endfunction
 endclass
 
-class HandlePortalFactory implements svx_pkg::svx_factory;
-  virtual task svx_create(
-    longint unsigned object_id,
-    input chandle request,
-    output bit ok,
-    output string error
-  );
-    HandlePortalImpl portal;
-    portal = new(object_id);
-    ok = 1;
-    error = "";
-  endtask
-endclass
-
 module tb;
   import example_packet_pkg::*;
   import svx_pkg::*;
@@ -30,7 +16,7 @@ module tb;
   example_bus_if bus();
 
   initial begin
-    HandlePortalFactory factory;
+    svx_proxy_python_api::HandlePortalFactory#(HandlePortalImpl) factory;
     svx_dispatchable published;
     HandlePortalImpl portal;
     TaggedPacket source;
@@ -39,9 +25,6 @@ module tb;
 
     svx_init();
     factory = new();
-    svx_inheritance_registry::register_factory(
-      "py://examples/foreign_handles/HandlePortal", factory
-    );
     svx_load("examples.foreign_handles.python_test");
     svx_start("foreign_handles.run");
     svx_require_published_object("foreign-handles.portal", published);
@@ -58,6 +41,7 @@ module tb;
     if (bus.read() != 8'ha6) $fatal(1, "VIF handle did not round trip");
 
     svx_shutdown();
+    $display("FOREIGN_HANDLES_PASS");
     $finish;
   end
 endmodule

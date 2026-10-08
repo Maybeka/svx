@@ -10,6 +10,12 @@ documentation, and the external SvTypes dependency.
 
 ## 2. Target Layout
 
+The detailed tree below is the original layout proposal, not a current file
+inventory. Separate `fork.cpp`, `timing.cpp`, `display.cpp`, `context.py`,
+`tools/build_svx.py`, and similar entries were not materialized. The current
+ownership map is Section 4; installed build inputs are located by the public
+CLI. Do not use proposed tool filenames as operational instructions.
+
 ```text
 svx/
 ├── README.md
@@ -143,7 +149,8 @@ This directory owns:
 - channel registry and payload transfer
 - DPI/VPI bridge implementation
 
-Public C++ headers live under `svx_runtime/include/svx`.
+Native implementation headers live under `svx_runtime/include/svx`; they are
+not an independent stable application C++ API.
 
 Implementation files live under `svx_runtime/src`.
 

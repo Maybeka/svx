@@ -10,7 +10,7 @@ SystemVerilog 提供具体 derived class。
 `BaseMonitor` 是普通 Python base class；其生成的 SV projection 是
 `svx_proxy_base_monitor::BaseMonitor`。`SvCounter` 从该类型派生，重载一个 nonblocking function 和一个
 timed task，并在两个方向调用 `super()`。Python 构造 `BaseMonitor(9)` 后，SVX
-请求已注册的 `SvCounterFactory` 用相同 constructor 参数创建并绑定 SV partner。
+请求生成的 `BaseMonitorFactory#(SvCounter)` 用相同 constructor 参数创建并绑定 SV partner。
 
 ## 生成镜像
 
@@ -28,10 +28,12 @@ package。
 
 manifest 的 top-level target 是 Python `BaseMonitor`，而不是 `SvCounter`。
 `tb.sv` 中的用户代码负责让 `SvCounter` 继承生成的
-`svx_proxy_base_monitor::BaseMonitor`，实现
-`svx_pkg::svx_factory`，并以 `BaseMonitor` 的 canonical ID 注册该 factory。
-factory 使用生成 projection 的 constructor-request decoder 将 `seed` 传入
-`SvCounter.new(object_id, seed)`；应用代码不应手动分配 object ID。
+`svx_proxy_base_monitor::BaseMonitor`，启动时创建
+`svx_proxy_base_monitor::BaseMonitorFactory#(SvCounter)`。生成的 factory 自动
+注册、解码 constructor request，并将 `seed` 传入
+`SvCounter.new(object_id, seed)`。应用代码只把收到的 opaque ID 传给
+`super.new`，不分配 ID、不解码传输记录，也不调用内部 registry。
+本示例为 Python root 选择一个具体 SV 实现，并未声明完整的 Python-root 交替 lineage。
 
 ## 验证内容
 

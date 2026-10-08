@@ -19,6 +19,7 @@ module tb;
       "test_signal_access"
     );
     svx_shutdown();
+    $display("HIERARCHICAL_SIGNAL_ACCESS_PASS");
     $finish;
   end
 endmodule

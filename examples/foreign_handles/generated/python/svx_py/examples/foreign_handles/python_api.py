@@ -11,7 +11,8 @@ from examples.foreign_handles.python_api import HandlePortal as _ForeignHandlePo
 
 # --- SvTypes call contracts (private bridge metadata) ---
 register_contract(
-    {'py://examples/foreign_handles/HandlePortal#retain_packet': {'parameters': (('packet',
+    {'py://examples/foreign_handles/HandlePortal#retain_packet': {'timing': 'function',
+                                                                  'parameters': (('packet',
                                                                                   'input',
                                                                                   {'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]',
                                                                                    'encoding_descriptor': {'binary_format_version': 1,
@@ -35,7 +36,8 @@ register_contract(
                                                                                              'target': 'sv://example_packet_pkg/Packet'}}),),
                                                                   'external_targets': ('sv://example_packet_pkg/Packet',
                                                                                        'sv://example_packet_pkg/Packet')},
-     'py://examples/foreign_handles/HandlePortal#exercise_bus': {'parameters': (('bus',
+     'py://examples/foreign_handles/HandlePortal#exercise_bus': {'timing': 'function',
+                                                                 'parameters': (('bus',
                                                                                  'input',
                                                                                  {'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]',
                                                                                   'encoding_descriptor': {'binary_format_version': 1,

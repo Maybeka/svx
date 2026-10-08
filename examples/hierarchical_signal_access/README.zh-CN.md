@@ -18,6 +18,12 @@ codec。`tb.sv` 用该 module 名调用 `svx_init_with_signal_declarations`，�
 - 使用 `LogicValue` 对四态 `Logic` 读写；
 - 仅在 testbench 需要推进仿真时显式延时。
 
+force 区间使用 `try/finally`，即使 Python 抛出异常，也会在离开有效运行时
+上下文前尝试显式 release。垃圾回收和 shutdown 都不会自动 release；shutdown
+只对仍记录为 active 的 force 发出警告，不会恢复之前的信号值。SVX 按声明
+路径记录 force 状态，而不是按 Python handle 记录，也不提供嵌套 force 栈。
+多个调用者共享同一路径时，需要自行协调。
+
 示例在 `tb.sv` 中将二态路径声明为 `reg` 和 packed `reg`，Python 侧使用
 `Bit` codec。这是当前 SVX VPI signal service 所接受的可移植 packed variable
 形式。

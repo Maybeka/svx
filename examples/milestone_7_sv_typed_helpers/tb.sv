@@ -108,6 +108,7 @@ module tb;
 
     $display("M7 SV typed helper test done @ %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_7_sv_typed_helpers");
     $finish;
   end
 endmodule

@@ -16,10 +16,60 @@ Normative terms `MUST`, `MUST NOT`, `SHOULD`, and `MAY` describe the intended
 `1.0.0` contract. A feature is not stable until its implementation,
 documentation, generated artifacts, and required simulator regressions agree.
 
+### Implementation Conformance Note
+
+This is the required contract, not evidence that every requirement is already
+implemented. Current development-source qualification covers:
+
+- source-managed empty Mirror/Proxy declarations, complete ancestor metadata,
+  selective target generation, formal-type binding and interface/body refresh;
+- alternating Python/SV roots, heterogeneous per-ancestor constructor records,
+  single-evaluation synchronous continuation, shared identity and initialization
+  failure cleanup;
+- addressed nested-field operations, container mutation, fixed-array slices and
+  class/virtual-interface handle containers, including null and alias identity;
+- declared scalar, four-state, struct and fixed-array initializers, bound-owner
+  randomization and constraints, paused/cyclic random state, original-receiver
+  callbacks and current-storage nested/indexed coverage sampling; and
+- original error/source diagnostics and cross-language call paths. A uniform
+  structured diagnostic-code and per-call identity protocol remains deferred;
+  it is not a prerequisite for the agreed core diagnostic behavior.
+
+These are qualified scenarios, not a claim about arbitrary user inheritance or
+constructor shapes. The lineage document and tests define their supported
+contracts. Explicit record fields, nested packers and repeated object identities
+are also covered by the development dependency and channel-composition tests.
+Candidate wheels have passed isolated installation, consumer runtime builds,
+examples, source discovery and handle-container checks. The intended released
+SvTypes dependency is `1.4.2` or newer. Qualification must use the exact release
+inputs; source results do not qualify an older package with the same number.
+
+Shutdown is cleanup before simulator exit, not an independently reusable runtime
+session. Retaining the embedded interpreter until process exit is intentional;
+explicit interpreter finalization and arbitrary live-task draining are not
+additional release requirements.
+
+These qualification boundaries do not relax the requirements below. A version label or passing
+subset of regressions must not be used as proof of full conformance. For the
+currently usable public surface, consult the API reference, operational manual,
+and tested examples; the lineage document marks planned interfaces explicitly.
+
 ## 1. Release Relationship With SvTypes
 
 SVX `1.0.0` MUST depend on a released SvTypes `1.x` version and MUST consume
 SvTypes only through its stable public APIs and installed runtime artifacts.
+The current package minimum is SvTypes `1.4.2`, which supplies the public
+`is_materializable_type`, `materialize_type_spec`, `type_spec_identity`, and
+`type_spec_from_identity` APIs used by SVX. Startup and type-generation entry
+points reject a dependency missing these callable APIs, even if its format
+capability handshake would otherwise match.
+Startup also requires the public `SvObject.codec_template()` API before creating
+a codec session. The development fixes use this API to create descriptor-only
+object codecs without consuming a live object identity or executing user
+constructors. SvTypes `1.4.2` also fixes detached external snapshots, null/shared
+handle publication and nested slice binding; `1.4.1` is not sufficient.
+Field bridge generation also uses the public `sv_codegen_context()` API to
+render nested collection packer arguments and local types consistently.
 SvTypes is the sole contract for typed arguments, results, channel values,
 constructor payloads, remote references, and hierarchical signal values.
 
@@ -140,12 +190,13 @@ signal operation may run before initialization completes. A failed
 initialization MUST roll back partial registries and report all actionable
 compatibility or declaration failures available at that point.
 
-Shutdown MUST reject new work, deterministically resolve or fail active work,
-report leaked foreign instances and active forces, clear signal, inheritance,
-channel, process, export, and SvTypes session state in a defined order, and
-finalize Python only after Python-owned references have been released. Repeated
-shutdown calls MUST be harmless. Handles retained after shutdown MUST fail as
-stale and MUST NOT attach to a later session.
+Shutdown is the cleanup boundary before simulator exit. It MUST reject new work,
+report leaked foreign instances and active forces, and clear signal, inheritance,
+channel, process, export, and SvTypes session state in a defined order. Repeated
+shutdown calls MUST be harmless and retained handles MUST be invalidated.
+Normal test work should finish before this boundary. Shutdown is not required to
+forcibly unwind arbitrary SV tasks or Python frames, finalize CPython explicitly,
+or support restarting the runtime inside the same simulator process.
 
 ### 4.2 Execution context
 
@@ -427,8 +478,10 @@ invocation of an SV class method by hierarchy or string is not part of the
 contract.
 
 Methods classified as timing-capable MUST use simulator task transport and may
-consume simulation time. Methods classified as functions MUST be nonblocking
-and MUST be rejected if their generated path can suspend. A Python call into a
+consume simulation time. Methods classified as functions MUST be nonblocking.
+Users choose task/function classifications consistently with their implementation;
+SVX MUST reject its recognized blocking/timing operations in a function callback.
+This does not require static analysis of arbitrary Python call graphs. A Python call into a
 foreign method requires an active SVX execution context.
 
 A Python callback entered from SystemVerilog is always a synchronous ordinary
@@ -447,8 +500,11 @@ or execution context.
 
 ### 7.6 Construction and lifetime
 
-Each constructible pair has one declared initiator and MUST use its generated
-constructor or factory. The generator allocates one object ID, constructs the
+Every construction MUST use its generated constructor or factory. Constructor
+origin metadata is not an exclusive permission: a constructible SV mirror can
+allocate its paired receiver from Python, while a generated SV construction can
+bind its existing receiver. An already bound Python initializer MUST reuse that
+receiver rather than allocate a second SV object. The generator allocates one object ID, constructs the
 required SV portion, registers the ID, binds the Python companion, then runs
 the Python initializer. Foreign virtual calls before registration and binding
 complete are rejected. A construction failure unbinds projected fields and
@@ -471,10 +527,11 @@ language boundaries, for example `A(SV) -> B(Python) -> C(SV) -> D(Python)`.
 It emits only required SV bridges and public same-name projections for the
 actual language boundaries;
 it never generates every ancestor just because it appears in lineage context.
-Cross-language multiple inheritance, Python mixins in a generated lineage,
+Multiple unrelated logical base chains, Python mixins in a generated lineage,
 method overloads, undeclared members, field hiding, open parameterized classes,
 and direct synchronization of arbitrary foreign attributes are rejected at
-generation time.
+generation time. Python multiple bases that reconcile generated views of the
+same validated linear lineage are not unrelated logical multiple inheritance.
 
 ## 8. Hierarchical Signal Access
 

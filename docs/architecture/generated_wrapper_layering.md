@@ -73,16 +73,32 @@ types, but they do not create a component framework.
 Generated SV channel helpers provide typed get/put functions around the same
 payload contract. These helpers remain separate from user drivers and monitors.
 
-## 5. Future Typed API Layer
+## 5. Typed API Layer
 
-A later milestone may introduce declarative typed APIs inspired by generated
-wrapper patterns from other projects. That layer should be built on top of this
-separation:
+Manifest-driven cross-language inheritance now supplies declarative typed
+method adapters in addition to these channel helpers. That layer preserves the
+same separation:
 
 - generated interfaces describe callable boundaries
 - generated bridge code handles marshalling
 - user SV code implements hardware-coupled behavior
 - user Python code implements test intent and checking
 
-That future work must still preserve the SVX rule that Python is not a
+The generated adapters preserve the SVX rule that Python is not a
 simulator scheduler.
+
+Generated Python method adapters preserve declared parameter names and order.
+The implicit instance receiver is renamed when an SV parameter is named
+`self`; it is not part of the foreign method's argument contract. If a parameter
+shadows `invoke_sv` or `invoke_sv_static`, the adapter uses a collision-free
+local import alias. These implementation names must not require users to rename
+legal source-method parameters. Constructor wrappers and SV record generation
+have separate naming scopes and require their own collision checks.
+
+Generated Python constructors also isolate their receiver, bridge imports and
+object-ID temporary from declared formals. Before SV generation or runtime call
+record construction, SVX compares the public SvTypes schema's ordered fields
+with the declared contract. Missing, renamed or reordered fields are a dependency
+contract error, not permission to drop a user parameter. The current dependency
+does not preserve underscore-prefixed explicit RecordSchema fields; complete
+construction with such formals remains unqualified despite the wrapper fix.

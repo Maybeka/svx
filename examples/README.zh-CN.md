@@ -16,7 +16,7 @@ milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界�
 | 跨边界传输 transaction | [Typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md) | SvTypes 模型、生成的 SV helper、请求/响应与 monitor channel |
 | 在既有 SV testbench 中采用 SVX | [既有 SV 环境](milestone_5_existing_env/README.zh-CN.md) | 驱动和监控保留在 SV；场景和检查策略移至 Python |
 | 在构建中使用生成类型 | [CLI 工作流](milestone_6_cli_workflow/README.zh-CN.md) | `svx svtypes-gen` 和 CLI 定位命令 |
-| 在 Python 中派生 SV class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | manifest 校验、生成镜像、SV 发起构造与 Python timed override |
+| 在 Python 中派生 SV class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | manifest 校验、生成镜像、Python 构造、显式 SV handle 交接与 Python timed override |
 | 在 SV 中派生 Python class | [Python 所有的继承](python_owned_inheritance/README.zh-CN.md) | Python 发起构造、SV factory 注册与跨语言 `super()` |
 | 传递任意 SV class 或 virtual interface | [外部 handle](foreign_handles/README.zh-CN.md) | 不透明 class `RemoteRef`、生成的 VIF view、静态 modport 访问与 handle 身份 |
 | 检查或临时修改层次路径 | [分层信号访问](hierarchical_signal_access/README.zh-CN.md) | 预声明、启动校验、读/写、force/release 和四态值 |
@@ -57,7 +57,7 @@ native runtime 资源按文档规定的顺序释放。异常策略示例会有�
 | Typed channel role：request、response、monitor | [typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md) | timing、driving 和 sampling 留在 SV |
 | 生成 model 和 build-input discovery | [CLI 工作流](milestone_6_cli_workflow/README.zh-CN.md) | 从 `svx` CLI 获取路径和生成产物 |
 | 在既有环境中渐进采用 | [既有 SV 环境](milestone_5_existing_env/README.zh-CN.md) | 替换窄数据边界，不替换 SV component structure |
-| Python 扩展 SV 所有的 class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | SV 发起构造，Python 实现声明的 override |
+| Python 扩展 SV 所有的 class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | Python 创建实例，SV 通过基类句柄调用 override |
 | SV 扩展 Python 所有的 class | [Python 所有的继承](python_owned_inheritance/README.zh-CN.md) | Python 发起构造，SV 注册 factory |
 | 外部 SV class handle 与 virtual interface | [外部 handle](foreign_handles/README.zh-CN.md) | `RemoteRef` 身份传输；VIF 成员来自静态 interface/modport 类型 |
 | 目标化分层读/写/force/release | [分层信号访问](hierarchical_signal_access/README.zh-CN.md) | 每条路径都在 runtime ready 前声明并校验 |

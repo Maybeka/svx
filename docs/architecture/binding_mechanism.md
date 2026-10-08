@@ -2,6 +2,30 @@
 
 See [SVX_PROJECT_LAYOUT.md](../SVX_PROJECT_LAYOUT.md) Section 3 and Section 7.
 
+## Current Implementation Boundary
+
+The detailed sketches below are historical early-design material, **not current
+build instructions or a public ABI**. In particular, their file inventory,
+`context.py`, `tools/build_svx.py`, and miniature CMake project are not present
+in the current repository. Do not copy those examples into application builds.
+Use [the user manual](../SVX_USER_MANUAL.md), [the API reference](../SVX_API_REFERENCE.md),
+and the installed `svx native-source` / `svx compile-flags` commands instead.
+
+The current root `CMakeLists.txt` builds the runtime with the CPython C API.
+When SVX initializes CPython itself, `prepare_runtime` in
+`svx_runtime/src/python_runtime.cpp` registers `_svx_native` with
+`PyImport_AppendInittab` before `Py_Initialize`; module registration does not
+happen simply because the shared library was loaded. Importing the pure-Python
+`svx` package does not require loading the native library until a native service
+is requested. If an external host already initialized Python, its integration
+must make the native module available without loading a second runtime instance.
+
+Context ownership is per CPython thread state, not an OS-thread-local stack;
+see [execution_context.md](execution_context.md). Signal and handle services
+already exist; the future-binding suggestions below are not pending commitments.
+
+## Historical Design Sketches
+
 ## 1. Binding Technology
 
 SVX uses the **CPython C API directly** (`<Python.h>`) for the Python↔C++ binding. No third-party binding framework (pybind11, nanobind, ctypes, cffi) is required.

@@ -13,6 +13,7 @@ module tb;
     svx_start("examples.milestone_1_fork.tests.fork_test.main");
     $display("FORK TEST realtime after SVX: %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_1_fork");
     $finish;
   end
 endmodule

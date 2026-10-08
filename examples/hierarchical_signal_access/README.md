@@ -20,6 +20,13 @@ The test demonstrates:
 - four-state `Logic` read/write using `LogicValue`;
 - explicit delays only where the testbench needs simulation to advance.
 
+The force interval uses `try/finally` so a Python exception still attempts
+explicit release before leaving the active runtime context. Neither garbage
+collection nor shutdown releases a force automatically. Shutdown warns about
+forces still recorded as active; it does not restore previous signal values.
+SVX tracks force state per declared path, not per Python handle, and provides
+no nested force stack. Coordinate callers sharing a path.
+
 The example declares two-state paths as `reg` and packed `reg` in `tb.sv`;
 they use the `Bit` codec on the Python side. This is the portable packed
 variable form accepted by the current SVX VPI signal service.

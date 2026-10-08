@@ -117,7 +117,9 @@ task svx_load(string module_name);
 ```
 
 - Calls `PyImport_Import(module_name)` from the C++ runtime.
-- If the module cannot be imported (ImportError), raises `SVXExportError` on the SV side (via `$fatal` or return status).
+- If the module cannot be imported, the native runtime reports the Python
+  import exception according to the exception policy. SV does not receive a
+  Python exception object.
 - Side effect: `@svx.export` decorators in the module execute, populating the registry.
 
 ### 4.2 svx_start
@@ -159,11 +161,14 @@ svx_load("tests.basic_test");        // too late
 }
 ```
 
-This is implemented as `list(_registry.items())` and is available when running Python outside the simulator (no context required).
+This returns a snapshot dictionary and is available outside the simulator
+(no execution context required).
 
 ## 6. Exported Function Signature
 
-Exported functions must accept zero arguments (for M1). Any required configuration should be captured via module-level state, configuration objects, or (post-M1) function parameters with type marshalling:
+Exported entry functions must accept zero parameters. Configuration is obtained
+from module state or application configuration objects. Typed method parameters
+belong to the separate generated inheritance interface, not `svx_start`:
 
 ```python
 # M1: no arguments
@@ -171,10 +176,7 @@ Exported functions must accept zero arguments (for M1). Any required configurati
 def main():
     ...
 
-# Post-M1 (planned): keyword arguments with SvTypes marshalling
-@svx.export
-def main(*, addr: Bit(32), data: Bit(64)):
-    ...
+# A parameterized entry is rejected at registration, even if it has defaults.
 ```
 
 ## 7. Testing

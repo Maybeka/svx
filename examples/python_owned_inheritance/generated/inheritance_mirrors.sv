@@ -80,7 +80,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_39a3c03013ca5ac1a853_Request#%0d{", __svtypes_object_number);
       result = {result, "seed="};
-      result = {result, $sformatf("%0d", seed)};
+      result = {result, $sformatf("%0d", this.seed)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -100,7 +100,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request", "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::int_packer::pack(seed, bytes);
+      svtypes_pkg::int_packer::pack(this.seed, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -122,7 +122,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request", "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::int_packer::unpack(seed, bytes, offset);
+      svtypes_pkg::int_packer::unpack(this.seed, bytes, offset);
     endfunction
 
     class SVXCall_39a3c03013ca5ac1a853_Request__svtypes_coverage;
@@ -299,7 +299,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_9a2f5982598a02ada022_Response#%0d{", __svtypes_object_number);
       result = {result, "svx_return_value="};
-      result = {result, $sformatf("%0d", svx_return_value)};
+      result = {result, $sformatf("%0d", this.svx_return_value)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -319,7 +319,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response", "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::int_packer::pack(svx_return_value, bytes);
+      svtypes_pkg::int_packer::pack(this.svx_return_value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -341,7 +341,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response", "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::int_packer::unpack(svx_return_value, bytes, offset);
+      svtypes_pkg::int_packer::unpack(this.svx_return_value, bytes, offset);
     endfunction
 
     class SVXCall_9a2f5982598a02ada022_Response__svtypes_coverage;
@@ -458,7 +458,7 @@ package svx_proxy_base_monitor;
   import svx_call_records_pkg::*;
 
   // Generated SV projection for py://examples/python_owned_inheritance/base_monitor/BaseMonitor
-  virtual class BaseMonitor implements svx_dispatchable;
+  virtual class BaseMonitor implements svx_dispatchable, svx_function_dispatchable;
     longint unsigned __svx_remote_object_id;
 
     function new(longint unsigned object_id);
@@ -491,7 +491,7 @@ package svx_proxy_base_monitor;
       int result;
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
-      response = svx_inheritance_call_python_function(__svx_remote_object_id, "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample", request, ok, error);
+      response = svx_inheritance_call_python_function(this.__svx_remote_object_id, "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample", request, ok, error);
       svx_payload_destroy(request);
       if (!ok) begin
         $fatal(2, "SVX inheritance callback py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample failed: %s", error);
@@ -518,7 +518,7 @@ package svx_proxy_base_monitor;
       byte unsigned bytes[$];
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
-      svx_inheritance_call_python(__svx_remote_object_id, "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify", request, ok, response, error);
+      svx_inheritance_call_python(this.__svx_remote_object_id, "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify", request, ok, response, error);
       svx_payload_destroy(request);
       if (!ok) begin
         $fatal(2, "SVX inheritance callback py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify failed: %s", error);
@@ -564,7 +564,51 @@ package svx_proxy_base_monitor;
         end
       endcase
     endtask
+
+    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+      byte unsigned bytes[$];
+      int offset;
+      response = null;
+      svx_payload_to_byte_queue(request, bytes);
+      offset = 0;
+      case (method_id)
+        "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample": begin
+          // Decode the typed request, invoke the declared target, then encode its response.
+          SVXCall_9a2f5982598a02ada022_Response response_value;
+          int result;
+          svx_require_unpacked_all("py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample", "inheritance request", "call request", offset, bytes.size());
+          result = sample();
+          bytes.delete();
+          response_value = new();
+          response_value.svx_return_value = result;
+          response_value.pack(bytes);
+          ok = 1;
+          error = "";
+          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+        end
+        default: begin
+          ok = 0;
+          error = {"member is not available as a function: ", method_id};
+        end
+      endcase
+    endfunction
   endclass : BaseMonitor
+
+  // Public typed factory: specialize with the application's SV-derived class.
+  class BaseMonitorFactory #(type Implementation = BaseMonitor) implements svx_factory;
+    function new();
+      svx_inheritance_registry::register_factory("py://examples/python_owned_inheritance/base_monitor/BaseMonitor", this);
+    endfunction
+
+    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+      BaseMonitor::constructor_request_t constructor_request;
+      Implementation svx_instance;
+      constructor_request = BaseMonitor::svx_decode_constructor_request(request);
+      svx_instance = new(object_id, constructor_request.seed);
+      ok = 1;
+      error = "";
+    endfunction
+  endclass : BaseMonitorFactory
 endpackage : svx_proxy_base_monitor
 
 `endif // SVX_PROXY_BASE_MONITOR__SV

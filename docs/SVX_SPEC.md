@@ -1,6 +1,6 @@
 # SVX Project Specification
 
-Status: architectural baseline. The normative proposed `1.0.0` feature and
+Status: architectural baseline. The normative `1.0.0` feature and
 release contract is [SVX_1_0_REQUIRED_FEATURES.md](SVX_1_0_REQUIRED_FEATURES.md).
 
 ## 1. Purpose
@@ -84,8 +84,11 @@ SV tasks, access simulator objects, or use SVX process primitives.
 
 ## 4. SVX Execution Context
 
-An SVX execution context is created when the SystemVerilog simulator enters
-Python through an SVX-managed DPI path.
+An SVX execution context is created when the SystemVerilog simulator invokes
+an application callable through an SVX-managed entry or callback service.
+Not every DPI entry creates an application context: `svx_load` imports modules
+without creating one. Module-level declarations may register exports and types,
+but ordinary module initialization must not call timing or process primitives.
 
 SVX primitive APIs are legal only inside an SVX execution context.
 
@@ -148,7 +151,9 @@ The SVX runtime is the C++/DPI/VPI bridge loaded by the simulator.
 
 It is responsible for:
 
-- Embedded CPython interpreter startup and shutdown.
+- Embedded CPython startup and the SVX runtime shutdown boundary; currently
+  the embedded interpreter remains alive until simulator exit, rather than being
+  finalized by `svx_shutdown()`.
 - Python module loading.
 - Python export registration lookup.
 - Managed Python callback entry.
@@ -277,7 +282,16 @@ be used to query, await, or kill simulator-owned work.
 ## 9. Error Policy
 
 Uncaught Python exceptions in SVX execution contexts are handled by a
-configurable exception policy.
+configurable exception policy for exported entry functions and process children.
+`REPORT` prints the exception without invoking the fatal reporter; failed children
+still report failure when awaited. Generated inheritance and constructor gateways
+terminate simulation on failed callbacks regardless of this policy, because no
+valid return/copy-out value is available.
+
+Cancellation is internal control flow, not an ordinary user exception. If an
+ordinary exception occurs while DPI is disabled, SVX still prints its traceback
+and records process failure. A fatal policy is delivered at the next safe runtime
+start or shutdown boundary; no new SV call is made from the disabled stack.
 
 The default policy is fatal.
 

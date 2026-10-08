@@ -121,6 +121,7 @@ module tb;
 
     $display("M5 existing-environment integration test done @ %0.3f ns", $realtime);
     svx_shutdown();
+    $display("SVX_EXAMPLE_PASS milestone_5_existing_env");
     $finish;
   end
 endmodule

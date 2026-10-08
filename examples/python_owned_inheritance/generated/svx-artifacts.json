@@ -10,12 +10,12 @@
       "language": "python",
       "module": "svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "3316daffa394f423d98fefc145d26deadc7d538ff424fb98ebf2f6d9ff7ea523"
+      "sha256": "d53cc8e428ed46f467c589aa846e363351db543b0c88e578ff678b0111f5d20b"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "7e694d12111d529b8c1b4c2e4d44192c6a6ab6c16ed3bb0fad4fb4dacb811f96"
+      "sha256": "5af48fb42ceca2b211dc5f49a55315c12a53e7163548e95bbdc1bcef37e24fed"
     }
   ],
   "callables": [
@@ -79,6 +79,18 @@
       "systemverilog_fqn": "svx_proxy_base_monitor::BaseMonitor"
     }
   ],
+  "generation_inputs": {
+    "manifest": {
+      "path": "../inheritance.json",
+      "sha256": "5e4ba62e276d5811405837f5a9f12b2fb256ad6870695ea242908500a4313e17"
+    },
+    "source_mode": "separate-parse-inputs",
+    "sv_dependencies": [],
+    "sv_include_dirs": [],
+    "sv_predefines": {},
+    "sv_sources": [],
+    "sv_undefines": []
+  },
   "generator_abi_version": 2,
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
@@ -95,7 +107,7 @@
   "svtypes": {
     "required_package_major": 1
   },
-  "svx_runtime_abi_version": 1,
+  "svx_runtime_abi_version": 3,
   "types": [
     {
       "encoding_descriptor": {

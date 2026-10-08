@@ -8,7 +8,7 @@ and simulator-visible concurrency.
 ## Supported Contract
 
 - Python: 3.11 or newer.
-- SvTypes: `>=1.3.0,<2.0.0`.
+- SvTypes: `>=1.4.2,<2.0.0`.
 - Simulator: a SystemVerilog simulator with the DPI and VPI C interfaces used
   by SVX, including resumable calls through exported DPI tasks.
 - Runtime model: SystemVerilog owns clocks, resets, drivers, monitors, UVM
@@ -34,6 +34,18 @@ sibling repository at `../svtypes` as the editable dependency.
 - Small-scale, predeclared hierarchical signal read, write, force, and release
   through a direct VPI C service invoked from an SV DPI context.
 
+The existing Python-owned inheritance example selects one SV implementation
+with a typed factory; it is not the complete Python-root alternating-lineage
+workflow. The public `--sv-source` / `--sv-integrated-dir` generation path supports
+qualified Python-root alternating chains; it is not a guarantee for arbitrary
+lineages or independent ancestor constructor routing. Python-source static
+function/task bridges in standalone proxies and SV-root alternating projections
+use generated class-level dispatch without allocating source instances.
+Remaining gaps are not intended inheritance
+restrictions. Check the [current conformance note](docs/SVX_1_0_REQUIRED_FEATURES.md#implementation-conformance-note)
+before adopting a deeper chain; the version number and passing examples alone
+do not establish complete conformance.
+
 Hierarchical signal access is intentionally for temporary, targeted operations
 such as setup checks and fault injection. It is not a replacement for SV
 drivers, monitors, or bulk signal databases.
@@ -45,14 +57,15 @@ Create a development environment with the sibling SvTypes package visible:
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install pytest
-PYTHONPATH=../svtypes/python python -m pip install -e .
+python -m pip install -e ../svtypes
+python -m pip install -e '.[dev,manifest]'
 ```
 
 Build the simulator-loadable runtime:
 
 ```sh
 cmake -S . -B build \
+  -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
   -DSVX_SIMULATOR_INCLUDE_DIR=/path/to/simulator/include \
   -DSVX_REQUIRE_DIRECT_VPI=ON
 cmake --build build -j2
@@ -61,6 +74,9 @@ cmake --build build -j2
 After installing a wheel, locate its CMake and native source tree with
 `svx native-source`, then use that directory as the CMake `-S` argument. The
 wheel ships portable build sources rather than a prebuilt simulator library.
+Use the same Python interpreter for installation, native compilation and the
+simulator-hosted runtime. Reconfigure in a fresh build directory when changing
+interpreters; an existing CMake cache can retain another Python ABI.
 
 Run the Python and native build checks:
 

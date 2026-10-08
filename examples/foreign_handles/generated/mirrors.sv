@@ -72,7 +72,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_ce732f2bbaebb926684d_Request#%0d{", __svtypes_object_number);
       result = {result, "packet="};
-      result = {result, (packet.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", packet.target_type_name, packet.object_number))};
+      result = {result, (this.packet.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", this.packet.target_type_name, this.packet.object_number))};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -92,7 +92,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.request", "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::remote_ref_packer::pack(packet, bytes);
+      svtypes_pkg::remote_ref_packer::pack(this.packet, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -114,7 +114,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.request", "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::remote_ref_packer::unpack(packet, bytes, offset);
+      svtypes_pkg::remote_ref_packer::unpack(this.packet, bytes, offset);
     endfunction
   endclass
 
@@ -183,7 +183,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_7e64c571b8c6a2bf1d36_Response#%0d{", __svtypes_object_number);
       result = {result, "svx_return_value="};
-      result = {result, (svx_return_value.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", svx_return_value.target_type_name, svx_return_value.object_number))};
+      result = {result, (this.svx_return_value.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", this.svx_return_value.target_type_name, this.svx_return_value.object_number))};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -203,7 +203,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.response", "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::remote_ref_packer::pack(svx_return_value, bytes);
+      svtypes_pkg::remote_ref_packer::pack(this.svx_return_value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -225,7 +225,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.response", "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::remote_ref_packer::unpack(svx_return_value, bytes, offset);
+      svtypes_pkg::remote_ref_packer::unpack(this.svx_return_value, bytes, offset);
     endfunction
   endclass
 
@@ -294,7 +294,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_0b6441f07486f0ac15e8_Request#%0d{", __svtypes_object_number);
       result = {result, "bus="};
-      result = {result, (bus.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", bus.target_type_name, bus.object_number))};
+      result = {result, (this.bus.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", this.bus.target_type_name, this.bus.object_number))};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -314,7 +314,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.request", "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::remote_ref_packer::pack(bus, bytes);
+      svtypes_pkg::remote_ref_packer::pack(this.bus, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -336,7 +336,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.request", "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::remote_ref_packer::unpack(bus, bytes, offset);
+      svtypes_pkg::remote_ref_packer::unpack(this.bus, bytes, offset);
     endfunction
   endclass
 
@@ -405,7 +405,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_6bb62ea46d23364d236c_Response#%0d{", __svtypes_object_number);
       result = {result, "svx_return_value="};
-      result = {result, (svx_return_value.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", svx_return_value.target_type_name, svx_return_value.object_number))};
+      result = {result, (this.svx_return_value.object_number == 0 ? "null" : $sformatf("RemoteRef(%s,%0d)", this.svx_return_value.target_type_name, this.svx_return_value.object_number))};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -425,7 +425,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.response", "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::remote_ref_packer::pack(svx_return_value, bytes);
+      svtypes_pkg::remote_ref_packer::pack(this.svx_return_value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -447,7 +447,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.response", "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::remote_ref_packer::unpack(svx_return_value, bytes, offset);
+      svtypes_pkg::remote_ref_packer::unpack(this.svx_return_value, bytes, offset);
     endfunction
   endclass
 
@@ -524,7 +524,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_dffe6bf6062aa29df590_Response#%0d{", __svtypes_object_number);
       result = {result, "svx_return_value="};
-      result = {result, $sformatf("%0h", svx_return_value)};
+      result = {result, $sformatf("%0h", this.svx_return_value)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -544,7 +544,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.d4538390dc75b90a85b0934102cbc47b6300285b704e77d773add594270d725b.response", "8af3356c12d73e99d46c45e6bf066c02aaecfbd86feea79dcedf5c5472eebafd", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::logic_packer#(logic [7:0])::pack(svx_return_value, bytes);
+      svtypes_pkg::logic_packer#(logic [7:0])::pack(this.svx_return_value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -566,7 +566,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.d4538390dc75b90a85b0934102cbc47b6300285b704e77d773add594270d725b.response", "8af3356c12d73e99d46c45e6bf066c02aaecfbd86feea79dcedf5c5472eebafd", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::logic_packer#(logic [7:0])::unpack(svx_return_value, bytes, offset);
+      svtypes_pkg::logic_packer#(logic [7:0])::unpack(this.svx_return_value, bytes, offset);
     endfunction
 
     class SVXCall_dffe6bf6062aa29df590_Response__svtypes_coverage;
@@ -743,7 +743,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_2c480da62c7bd3110609_Request#%0d{", __svtypes_object_number);
       result = {result, "value="};
-      result = {result, $sformatf("%0h", value)};
+      result = {result, $sformatf("%0h", this.value)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -763,7 +763,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.ed96fcd873106450a1583aa34ea16c02e2e2d82d01417a2799d254c818dbb73c.request", "8af3356c12d73e99d46c45e6bf066c02aaecfbd86feea79dcedf5c5472eebafd", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::logic_packer#(logic [7:0])::pack(value, bytes);
+      svtypes_pkg::logic_packer#(logic [7:0])::pack(this.value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -785,7 +785,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.ed96fcd873106450a1583aa34ea16c02e2e2d82d01417a2799d254c818dbb73c.request", "8af3356c12d73e99d46c45e6bf066c02aaecfbd86feea79dcedf5c5472eebafd", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::logic_packer#(logic [7:0])::unpack(value, bytes, offset);
+      svtypes_pkg::logic_packer#(logic [7:0])::unpack(this.value, bytes, offset);
     endfunction
 
     class SVXCall_2c480da62c7bd3110609_Request__svtypes_coverage;
@@ -962,7 +962,7 @@ package svx_call_records_pkg;
       end
       result = $sformatf("SVXCall_7112d19836c87fc4d532_Request#%0d{", __svtypes_object_number);
       result = {result, "value="};
-      result = {result, $sformatf("%0h", value)};
+      result = {result, $sformatf("%0h", this.value)};
       result = {result, "}"};
       svtypes_pkg::end_dump_object();
       return result;
@@ -982,7 +982,7 @@ package svx_call_records_pkg;
       ensure_svtypes_object_number();
       svtypes_pkg::register_object(this);
       svtypes_pkg::pack_object_header("svx.call.181d2d4dfbd4c30072c7650dfaae4df749ccaece4e89eab46deec33c653e97b6.request", "8af3356c12d73e99d46c45e6bf066c02aaecfbd86feea79dcedf5c5472eebafd", 1, __svtypes_object_number, bytes);
-      svtypes_pkg::logic_packer#(logic [7:0])::pack(value, bytes);
+      svtypes_pkg::logic_packer#(logic [7:0])::pack(this.value, bytes);
     endfunction
 
     virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
@@ -1004,7 +1004,7 @@ package svx_call_records_pkg;
       svtypes_pkg::unpack_object_header("svx.call.181d2d4dfbd4c30072c7650dfaae4df749ccaece4e89eab46deec33c653e97b6.request", "8af3356c12d73e99d46c45e6bf066c02aaecfbd86feea79dcedf5c5472eebafd", 1, incoming_svtypes_object_number, bytes, offset);
       __svtypes_object_number = incoming_svtypes_object_number;
       svtypes_pkg::register_object(this);
-      svtypes_pkg::logic_packer#(logic [7:0])::unpack(value, bytes, offset);
+      svtypes_pkg::logic_packer#(logic [7:0])::unpack(this.value, bytes, offset);
     endfunction
 
     class SVXCall_7112d19836c87fc4d532_Request__svtypes_coverage;
@@ -1117,7 +1117,7 @@ package svx_external_handles_pkg;
   import svx_call_records_pkg::*;
 
   // virtual_interface: virtual example_bus_if.master <-> RemoteRef[sv-vif://example_bus_if/master].
-  class SVXExternal_sv_vif___example_bus_if_masterEndpoint implements svx_external_handle, svx_dispatchable;
+  class SVXExternal_sv_vif___example_bus_if_masterEndpoint implements svx_external_handle, svx_dispatchable, svx_function_dispatchable;
     virtual example_bus_if.master value;
     longint unsigned object_id;
 
@@ -1183,15 +1183,62 @@ package svx_external_handles_pkg;
         end
       endcase
     endtask
+
+    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+      byte unsigned bytes[$];
+      int offset;
+      response = null;
+      svx_payload_to_byte_queue(request, bytes);
+      offset = 0;
+      case (method_id)
+        "sv-vif://example_bus_if/master#read": begin
+          // Decode the typed request, invoke the declared target, then encode its response.
+          SVXCall_dffe6bf6062aa29df590_Response response_value;
+          logic [7:0] result;
+          svx_require_unpacked_all("sv-vif://example_bus_if/master#read", "inheritance request", "call request", offset, bytes.size());
+          result = this.value.read();
+          bytes.delete();
+          response_value = new();
+          response_value.svx_return_value = result;
+          response_value.pack(bytes);
+          ok = 1;
+          error = "";
+          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+        end
+        "sv-vif://example_bus_if/master#write_data": begin
+          SVXCall_7112d19836c87fc4d532_Request request_value;
+          logic [7:0] value_to_write;
+          request_value = new();
+          request_value.unpack(bytes, offset);
+          value_to_write = request_value.value;
+          svx_require_unpacked_all("sv-vif://example_bus_if/master#write_data", "VIF signal write", "call request", offset, bytes.size());
+          value.data = value_to_write;
+          bytes.delete();
+          ok = 1;
+          error = "";
+          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+        end
+        default: begin
+          ok = 0;
+          error = {"member is not available as a function: ", method_id};
+        end
+      endcase
+    endfunction
   endclass : SVXExternal_sv_vif___example_bus_if_masterEndpoint
 
-  class SVXExternal_sv_vif___example_bus_if_master;
+  class SVXExternal_sv_vif___example_bus_if_master implements svx_session_resource;
     static SVXExternal_sv_vif___example_bus_if_masterEndpoint endpoints[$];
+    static SVXExternal_sv_vif___example_bus_if_master session_resource = new();
+
+    virtual function void clear_session();
+      endpoints.delete();
+    endfunction
 
     static function remote_ref encode(virtual example_bus_if.master value);
       longint unsigned object_id;
       SVXExternal_sv_vif___example_bus_if_masterEndpoint endpoint;
       remote_ref reference;
+      svx_external_handle_registry::register_resource(session_resource);
       // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
       if (value == null) begin
         reference = new("sv-vif://example_bus_if/master", 0);
@@ -1219,6 +1266,10 @@ package svx_external_handles_pkg;
       value = null;
       error = "";
       // Resolve this session-scoped RemoteRef back to the declared static SV type.
+      if (reference != null && reference.target_type_name != "" && reference.target_type_name != "sv-vif://example_bus_if/master") begin
+        error = "external handle target mismatch";
+        return 0;
+      end
       if (reference == null || reference.object_number == 0) return 1;
       if (!svx_external_handle_registry::resolve(reference.object_number, "sv-vif://example_bus_if/master", raw, error)) return 0;
       if (!$cast(endpoint, raw)) begin
@@ -1244,13 +1295,19 @@ package svx_external_handles_pkg;
     endfunction
   endclass : SVXExternal_sv___example_packet_pkg_PacketEndpoint
 
-  class SVXExternal_sv___example_packet_pkg_Packet;
+  class SVXExternal_sv___example_packet_pkg_Packet implements svx_session_resource;
     static SVXExternal_sv___example_packet_pkg_PacketEndpoint endpoints[$];
+    static SVXExternal_sv___example_packet_pkg_Packet session_resource = new();
+
+    virtual function void clear_session();
+      endpoints.delete();
+    endfunction
 
     static function remote_ref encode(example_packet_pkg::Packet value);
       longint unsigned object_id;
       SVXExternal_sv___example_packet_pkg_PacketEndpoint endpoint;
       remote_ref reference;
+      svx_external_handle_registry::register_resource(session_resource);
       // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
       if (value == null) begin
         reference = new("sv://example_packet_pkg/Packet", 0);
@@ -1277,6 +1334,10 @@ package svx_external_handles_pkg;
       value = null;
       error = "";
       // Resolve this session-scoped RemoteRef back to the declared static SV type.
+      if (reference != null && reference.target_type_name != "" && reference.target_type_name != "sv://example_packet_pkg/Packet") begin
+        error = "external handle target mismatch";
+        return 0;
+      end
       if (reference == null || reference.object_number == 0) return 1;
       if (!svx_external_handle_registry::resolve(reference.object_number, "sv://example_packet_pkg/Packet", raw, error)) return 0;
       if (!$cast(endpoint, raw)) begin
@@ -1302,7 +1363,7 @@ package svx_proxy_python_api;
   import svx_external_handles_pkg::*;
 
   // Generated SV projection for py://examples/foreign_handles/HandlePortal
-  virtual class HandlePortal implements svx_dispatchable;
+  virtual class HandlePortal implements svx_dispatchable, svx_function_dispatchable;
     longint unsigned __svx_remote_object_id;
 
     function new(longint unsigned object_id);
@@ -1326,7 +1387,7 @@ package svx_proxy_python_api;
       request_value.pack(bytes);
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
-      response = svx_inheritance_call_python_function(__svx_remote_object_id, "py://examples/foreign_handles/HandlePortal#retain_packet", request, ok, error);
+      response = svx_inheritance_call_python_function(this.__svx_remote_object_id, "py://examples/foreign_handles/HandlePortal#retain_packet", request, ok, error);
       svx_payload_destroy(request);
       if (!ok) begin
         $fatal(2, "SVX inheritance callback py://examples/foreign_handles/HandlePortal#retain_packet failed: %s", error);
@@ -1363,7 +1424,7 @@ package svx_proxy_python_api;
       request_value.pack(bytes);
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
-      response = svx_inheritance_call_python_function(__svx_remote_object_id, "py://examples/foreign_handles/HandlePortal#exercise_bus", request, ok, error);
+      response = svx_inheritance_call_python_function(this.__svx_remote_object_id, "py://examples/foreign_handles/HandlePortal#exercise_bus", request, ok, error);
       svx_payload_destroy(request);
       if (!ok) begin
         $fatal(2, "SVX inheritance callback py://examples/foreign_handles/HandlePortal#exercise_bus failed: %s", error);
@@ -1445,7 +1506,83 @@ package svx_proxy_python_api;
         end
       endcase
     endtask
+
+    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+      byte unsigned bytes[$];
+      int offset;
+      response = null;
+      svx_payload_to_byte_queue(request, bytes);
+      offset = 0;
+      case (method_id)
+        "py://examples/foreign_handles/HandlePortal#retain_packet": begin
+          // Decode the typed request, invoke the declared target, then encode its response.
+          SVXCall_ce732f2bbaebb926684d_Request request_value;
+          SVXCall_7e64c571b8c6a2bf1d36_Response response_value;
+          example_packet_pkg::Packet packet;
+          example_packet_pkg::Packet result;
+          // Foreign handles are resolved through typed RemoteRef endpoints.
+          request_value = new();
+          request_value.unpack(bytes, offset);
+          if (!SVXExternal_sv___example_packet_pkg_Packet::decode(request_value.packet, packet, error)) begin
+            ok = 0;
+            response = null;
+            return;
+          end
+          svx_require_unpacked_all("py://examples/foreign_handles/HandlePortal#retain_packet", "inheritance request", "call request", offset, bytes.size());
+          result = retain_packet(packet);
+          bytes.delete();
+          response_value = new();
+          response_value.svx_return_value = SVXExternal_sv___example_packet_pkg_Packet::encode(result);
+          response_value.pack(bytes);
+          ok = 1;
+          error = "";
+          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+        end
+        "py://examples/foreign_handles/HandlePortal#exercise_bus": begin
+          // Decode the typed request, invoke the declared target, then encode its response.
+          SVXCall_0b6441f07486f0ac15e8_Request request_value;
+          SVXCall_6bb62ea46d23364d236c_Response response_value;
+          virtual example_bus_if.master bus;
+          virtual example_bus_if.master result;
+          // Foreign handles are resolved through typed RemoteRef endpoints.
+          request_value = new();
+          request_value.unpack(bytes, offset);
+          if (!SVXExternal_sv_vif___example_bus_if_master::decode(request_value.bus, bus, error)) begin
+            ok = 0;
+            response = null;
+            return;
+          end
+          svx_require_unpacked_all("py://examples/foreign_handles/HandlePortal#exercise_bus", "inheritance request", "call request", offset, bytes.size());
+          result = exercise_bus(bus);
+          bytes.delete();
+          response_value = new();
+          response_value.svx_return_value = SVXExternal_sv_vif___example_bus_if_master::encode(result);
+          response_value.pack(bytes);
+          ok = 1;
+          error = "";
+          response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+        end
+        default: begin
+          ok = 0;
+          error = {"member is not available as a function: ", method_id};
+        end
+      endcase
+    endfunction
   endclass : HandlePortal
+
+  // Public typed factory: specialize with the application's SV-derived class.
+  class HandlePortalFactory #(type Implementation = HandlePortal) implements svx_factory;
+    function new();
+      svx_inheritance_registry::register_factory("py://examples/foreign_handles/HandlePortal", this);
+    endfunction
+
+    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+      Implementation svx_instance;
+      svx_instance = new(object_id);
+      ok = 1;
+      error = "";
+    endfunction
+  endclass : HandlePortalFactory
 endpackage : svx_proxy_python_api
 
 `endif // SVX_PROXY_PYTHON_API__SV
