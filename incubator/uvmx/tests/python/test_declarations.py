@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+import svx
+from uvmx import Test, declared_tests, uvm_test
+
+
+def test_declaration_registers_empty_phase_contracts() -> None:
+    @uvm_test(
+        canonical_id="py://uvmx/unit/RegisteredTest",
+        factory_name="uvmx_registered_test",
+    )
+    class RegisteredTest(Test):
+        def build_phase(self) -> None:
+            pass
+
+        def run_phase(self) -> None:
+            pass
+
+    declaration = next(
+        item for item in declared_tests() if item.canonical_id == "py://uvmx/unit/RegisteredTest"
+    )
+    assert declaration.factory_name == "uvmx_registered_test"
+    assert declaration.function_phases == ("build_phase",)
+    assert declaration.task_phases == ("run_phase",)
+
+
+def test_rejects_phase_with_user_parameters() -> None:
+    with pytest.raises(TypeError, match="exactly one self"):
+
+        @uvm_test(
+            canonical_id="py://uvmx/unit/BadPhase",
+            factory_name="uvmx_bad_phase",
+        )
+        class BadPhase(Test):
+            def run_phase(self, value: int) -> None:
+                pass
+
+
+def test_rejects_duplicate_factory_name() -> None:
+    @uvm_test(
+        canonical_id="py://uvmx/unit/FirstDuplicate",
+        factory_name="uvmx_duplicate_factory",
+    )
+    class FirstDuplicate(Test):
+        pass
+
+    with pytest.raises(ValueError, match="duplicate UVMX factory_name"):
+
+        @uvm_test(
+            canonical_id="py://uvmx/unit/SecondDuplicate",
+            factory_name="uvmx_duplicate_factory",
+        )
+        class SecondDuplicate(Test):
+            pass
+
+
+def test_function_phase_rejects_delay_before_entering_native_runtime() -> None:
+    @uvm_test(
+        canonical_id="py://uvmx/unit/BlockingBuild",
+        factory_name="uvmx_blocking_build",
+    )
+    class BlockingBuild(Test):
+        def build_phase(self) -> None:
+            svx.delay(1, "ns")
+
+    with pytest.raises(svx.SVXContextError, match="UVMX function phase build_phase"):
+        BlockingBuild().__svx_dispatch_foreign__("build_phase")
+
+
+def test_constructor_rejects_delay_before_entering_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    bound: list[object] = []
+    monkeypatch.setattr(svx.inheritance, "bind_instance", lambda _id, value: bound.append(value))
+    monkeypatch.setattr(svx.inheritance, "unbind_instance", lambda _id: None)
+
+    class BlockingConstructor(Test):
+        def __init__(self) -> None:
+            svx.delay(1, "ns")
+
+    with pytest.raises(svx.SVXContextError, match="UVMX Python test construction"):
+        BlockingConstructor.__svx_create_from_sv__(1)
+    assert len(bound) == 1
+
+
+def test_generator_emits_deterministic_factory_proxy(tmp_path: Path) -> None:
+    module = tmp_path / "generated_test.py"
+    module.write_text(
+        "from uvmx import Test, uvm_test\n"
+        "@uvm_test(canonical_id='py://uvmx/unit/Generated', factory_name='uvmx_generated')\n"
+        "class Generated(Test):\n"
+        "    def build_phase(self): pass\n"
+        "    def run_phase(self): pass\n",
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("generated_test", module)
+    assert spec is not None and spec.loader is not None
+    imported = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(imported)
+
+    tool = Path(__file__).parents[2] / "tools" / "uvmx_gen.py"
+    spec = importlib.util.spec_from_file_location("uvmx_gen", tool)
+    assert spec is not None and spec.loader is not None
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    declarations = declared_tests("generated_test")
+    output = generator.render_sv(declarations, "uvmx_generated_pkg")
+    assert "class uvmx_generated extends uvm_pkg::uvm_test" in output
+    assert "uvmx_bridge_bind(\"py://uvmx/unit/Generated\", this)" in output
+    assert "phase.raise_objection" in output
+
+
+def test_generator_emits_each_supported_phase(tmp_path: Path) -> None:
+    module = tmp_path / "all_phases.py"
+    module.write_text(
+        "from uvmx import Test, uvm_test\n"
+        "@uvm_test(canonical_id='py://uvmx/unit/AllPhases', factory_name='uvmx_all_phases')\n"
+        "class AllPhases(Test):\n"
+        "    def build_phase(self): pass\n"
+        "    def connect_phase(self): pass\n"
+        "    def end_of_elaboration_phase(self): pass\n"
+        "    def start_of_simulation_phase(self): pass\n"
+        "    def run_phase(self): pass\n",
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("all_phases", module)
+    assert spec is not None and spec.loader is not None
+    imported = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(imported)
+
+    tool = Path(__file__).parents[2] / "tools" / "uvmx_gen.py"
+    spec = importlib.util.spec_from_file_location("uvmx_gen_all_phases", tool)
+    assert spec is not None and spec.loader is not None
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    output = generator.render_sv(declared_tests("all_phases"), "uvmx_generated_pkg")
+    for phase in (
+        "build_phase",
+        "connect_phase",
+        "end_of_elaboration_phase",
+        "start_of_simulation_phase",
+        "run_phase",
+    ):
+        assert f"virtual {'task' if phase == 'run_phase' else 'function void'} {phase}" in output
