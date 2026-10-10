@@ -136,14 +136,19 @@ task automatic svx_channel_put_payload_cancelable(
     svx_channel_registry::get(name).put(name, payload);
     return;
   end
-  fork : svx_channel_put_wait
-    svx_channel_registry::get(name).put(name, payload);
+  // Confine cancellation to this invocation, not other channel waiters.
+  fork
     begin
-      svx_proc_man::wait_for_cancel(process_index);
-      cancelled = 1;
+      fork
+        svx_channel_registry::get(name).put(name, payload);
+        begin
+          svx_proc_man::wait_for_cancel(process_index);
+          cancelled = 1;
+        end
+      join_any
+      disable fork;
     end
-  join_any
-  disable svx_channel_put_wait;
+  join
 endtask
 
 task automatic svx_channel_get_payload_cancelable(
@@ -158,14 +163,18 @@ task automatic svx_channel_get_payload_cancelable(
     svx_channel_registry::get(name).get(payload);
     return;
   end
-  fork : svx_channel_get_wait
-    svx_channel_registry::get(name).get(payload);
+  fork
     begin
-      svx_proc_man::wait_for_cancel(process_index);
-      cancelled = 1;
+      fork
+        svx_channel_registry::get(name).get(payload);
+        begin
+          svx_proc_man::wait_for_cancel(process_index);
+          cancelled = 1;
+        end
+      join_any
+      disable fork;
     end
-  join_any
-  disable svx_channel_get_wait;
+  join
 endtask
 
 task automatic svx_channel_peek_payload_cancelable(
@@ -180,14 +189,18 @@ task automatic svx_channel_peek_payload_cancelable(
     svx_channel_registry::get(name).peek(payload);
     return;
   end
-  fork : svx_channel_peek_wait
-    svx_channel_registry::get(name).peek(payload);
+  fork
     begin
-      svx_proc_man::wait_for_cancel(process_index);
-      cancelled = 1;
+      fork
+        svx_channel_registry::get(name).peek(payload);
+        begin
+          svx_proc_man::wait_for_cancel(process_index);
+          cancelled = 1;
+        end
+      join_any
+      disable fork;
     end
-  join_any
-  disable svx_channel_peek_wait;
+  join
 endtask
 
 task automatic svx_channel_put_payload(string name, chandle payload);

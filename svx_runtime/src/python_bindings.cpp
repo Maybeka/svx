@@ -652,14 +652,18 @@ PyObject *py_channel_put_payload(PyObject *, PyObject *args) {
                                         binary_format_version);
   PyBuffer_Release(&data);
 
+  PyThreadState *thread_state = svx::ExecutionContext::current_thread_state();
+  if (thread_state == nullptr) thread_state = PyThreadState_Get();
   try {
     const bool cancelled = svx::dpi::svx_channel_put_payload(
         name, payload, svx::ExecutionContext::current_process_index());
+    svx::ExecutionContext::restore(thread_state);
     if (cancelled) {
       svx::dpi::payload_destroy(payload);
-      return raise_cancellation(svx::ExecutionContext::current_thread_state());
+      return raise_cancellation(thread_state);
     }
   } catch (const std::exception &e) {
+    svx::ExecutionContext::restore(thread_state);
     svx::dpi::payload_destroy(payload);
     PyErr_SetString(PyExc_RuntimeError, e.what());
     return nullptr;

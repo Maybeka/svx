@@ -10,9 +10,11 @@ class svx_process_manager#(string CATEGORY = "default");
 
   static function int add(process proc);
     automatic event completed;
+    automatic event cancelled;
     curr_id++;
     procs[curr_id] = proc;
     completion_events[curr_id] = completed;
+    cancel_events[curr_id] = cancelled;
     return curr_id;
   endfunction
 
@@ -96,12 +98,11 @@ endfunction
 
 task automatic start_process(chandle proc);
   int index;
-  begin : svx_process_supervisor
-    index = set_proc_index(proc);
-    svx_process__exec(proc);
-    if (svx_proc_man::cancel_requested(index)) begin
-      disable svx_process_supervisor;
-    end
+  index = set_proc_index(proc);
+  svx_process__exec(proc);
+  if (svx_proc_man::cancel_requested(index)) begin
+    // Kill this process's descendants, not other start_process invocations.
+    disable fork;
   end
   svx_proc_man::remove(index);
 endtask
