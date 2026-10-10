@@ -4,8 +4,9 @@
 
 These examples are arranged by the workflow a verification engineer normally
 adopts, rather than by the historical milestone in which a capability was
-introduced. Start with the typed-bus example, then choose the focused example
-for the boundary you need.
+introduced. Start with [Register Lab](register_lab/README.md), one small DUT
+with a complete transaction loop and both inheritance directions. Then choose
+the focused example for the boundary you need.
 
 For one complete, bottom-up path through these examples, read the
 [SVX Cookbook (Chinese)](../docs/SVX_COOKBOOK.zh-CN.md). It explains the
@@ -15,6 +16,7 @@ the [example run guide](RUNNING_EXAMPLES.md).
 
 | Goal | Start here | What it demonstrates |
 |---|---|---|
+| Learn the complete project workflow | [Register Lab](register_lab/README.md) | Real DUT, typed driver/monitor, processes, inheritance/fields, handles, signal diagnostics, callbacks and generation checks |
 | Run one Python test from an SV testbench | [Basic bootstrap](milestone_1_basic) | `svx_init`, `svx_run_test`, display, and simulator-owned delay |
 | Move transactions across the boundary | [Typed bus testbench](milestone_7_sv_typed_helpers) | SvTypes models, generated SV helpers, request/response and monitor channels |
 | Introduce SVX into a maintained testbench | [Existing SV environment](milestone_5_existing_env) | Leave driving and monitoring in SV; move scenario and checking policy to Python |
@@ -31,15 +33,16 @@ compatibility. They are not a recommended learning sequence.
 
 Every normally completing example calls `svx_shutdown()` before `$finish` so
 that Python and native runtime resources are released in the documented order.
-The error-policy example intentionally terminates through its fatal path and is
-the sole exception.
+Intentional error cases terminate through the fatal path instead. Register Lab
+also offers a source-only optional UVM startup path with its own teardown.
 
 ## Learning Path
 
 1. Read [Basic bootstrap](milestone_1_basic) to understand the runtime entry
    boundary and simulator-owned time.
-2. Run [Typed bus testbench](milestone_7_sv_typed_helpers) to learn the
-   default transaction path for a clocked SV environment.
+2. Run [Register Lab](register_lab/README.md) and follow its reading order and
+   pass markers. Use [Typed bus testbench](milestone_7_sv_typed_helpers) for a
+   smaller transaction-only reference.
 3. Use [Existing SV environment](milestone_5_existing_env) or [CLI workflow]
    (milestone_6_cli_workflow) when integrating that path into a maintained
    project and its build.

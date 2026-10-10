@@ -68,11 +68,18 @@ their construction factories. Its combined runtime control qualifies both
 construction origins, independent targets, fields, callbacks and cleanup.
 The old single-file and manual-stage renderers retain their separate-package
 and executable-lineage restrictions; those restrictions do not describe the
-integrated output mode. Source-only discovery without import bootstrap,
-source-declared executable mirror interfaces, canonical-class-keyed
-heterogeneous ancestor constructor records and arbitrary source/build forms
-remain incomplete. The detailed controls below establish individual behaviors,
-not complete qualification of every inheritance shape.
+integrated output mode. Source-managed discovery accepts initially empty Mirror
+stubs and binds them to generated types on subsequent imports; complete ancestor
+metadata does not add unwanted generation targets. Per-ancestor heterogeneous
+constructor records and natural argument routing are implemented in this path.
+Arbitrary source/build forms and every possible inheritance shape are not
+implied. See the current
+[conformance note](SVX_1_0_REQUIRED_FEATURES.md#implementation-conformance-note).
+
+The staged-construction observations below are historical implementation
+evidence. Their narrower qualifications and then-pending integration statements
+do not supersede the current constructor-routing and source-integrated status
+above.
 An internal SV-root `A -> B -> C` staged-construction fixture now constructs
 the terminal C view from either language with one receiver and initializes B
 after A but before C's constructor body. It also checks the residency contrast:

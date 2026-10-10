@@ -25,6 +25,11 @@ cmake -S . -B build
 cmake --build build -j2
 ```
 
+Installation, native compilation and embedded Python must use the same
+interpreter. With multiple Python installations, add
+`-DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"` to the
+first CMake configuration. Use a new build directory when changing the ABI.
+
 The hierarchical-signal example additionally needs a runtime built with the
 target tool's VPI headers and direct VPI service enabled:
 
@@ -66,7 +71,7 @@ for the ordered commands and body-only edit workflow.
 
 ## 3. Compile and Load
 
-Ask the installed SVX package for its simulator-neutral integration inputs:
+Ask the installed SVX package for its integration inputs:
 
 ```sh
 PYTHONPATH=python:../svtypes/python:. python -m svx sv-files
@@ -77,6 +82,10 @@ SVX_LIB_DIR="$PWD/build" PYTHONPATH=python:../svtypes/python:. python -m svx lib
 Compile the selected example's `tb.sv`, the files printed by `svx sv-files`,
 and any generated SV file named in that example README. Use the target tool's
 normal DPI mechanism to load the library printed by `svx libs`.
+If `tb.sv` already includes those files, compile that top with the required
+include directories instead of compiling the same package/interface twice.
+Register Lab uses this arrangement, requires the direct-VPI runtime, and sets
+`SVX_ARTIFACT_MANIFEST` as shown in its README.
 
 The simulator process needs this baseline import path:
 
@@ -92,8 +101,10 @@ host timers.
 
 Run the compiled testbench normally. A successful ordinary example reaches
 `svx_shutdown()` and then `$finish` without an `ERROR` display or a fatal
-report. `milestone_1_error` and explicitly named expected-failure testbenches
-are different: their documented fatal diagnostic is the expected result.
+report. Intentional fault cases, including Register Lab's `corrupt_read` and
+`function_wait`, require their specific documented fatal diagnostic instead.
+Reject a normal pass marker, timeout or crash. An exit status alone, whether
+zero or nonzero, does not qualify an expected failure.
 
 The testbench is the sole owner of initialization and shutdown. Python tests
 must not call `svx_shutdown()` themselves.

@@ -23,6 +23,10 @@ cmake -S . -B build
 cmake --build build -j2
 ```
 
+安装、构建和仿真内嵌 Python 应使用同一解释器。存在多个 Python 时，在首次
+CMake 配置加入 `-DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')"`；
+切换解释器使用新 build 目录，避免旧 ABI 缓存。
+
 分层信号示例还要求 runtime 能使用目标工具的 VPI header，并启用 direct VPI
 service：
 
@@ -69,6 +73,9 @@ SVX_LIB_DIR="$PWD/build" PYTHONPATH=python:../svtypes/python:. python -m svx lib
 
 编译所选示例的 `tb.sv`、`svx sv-files` 输出的文件，以及该示例 README 所列的
 生成 SV 文件。使用目标工具的正常 DPI 机制加载 `svx libs` 输出的 library。
+若 `tb.sv` 已用 include 包含这些文件，只编译该顶层并提供 include 路径，不要
+再把同一 package/interface 作为独立源文件重复编译。寄存器小项目采用这种方式，
+也要求直接 VPI 运行库。按其 README 设置 `SVX_ARTIFACT_MANIFEST`。
 
 仿真进程至少应有以下 import path：
 
@@ -83,8 +90,9 @@ SVX_LIB_DIR="$PWD/build" PYTHONPATH=python:../svtypes/python:. python -m svx lib
 
 按常规方式运行已编译的 testbench。正常示例成功时会在没有 `ERROR` display 或
 fatal report 的情况下，依次到达 `svx_shutdown()` 与 `$finish`。
-`milestone_1_error` 和明确命名为 expected-failure 的 testbench 不同：其 README
-规定的 fatal diagnostic 才是预期结果。
+故意失败的用例不同：其 README 规定的具体 fatal diagnostic 才是预期结果。
+例如寄存器项目的 `corrupt_read` 和 `function_wait`。同时拒绝正常通过标记、
+超时和崩溃；进程退出码为零或非零都不能单独证明负面用例通过。
 
 testbench 是初始化和关闭的唯一所有者。Python 测试不得自行调用 `svx_shutdown()`。
 

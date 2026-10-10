@@ -19,8 +19,11 @@
   SV helpers, lifecycle rules, debug flow, cross-language inheritance, signal
   access, and anti-patterns.
 - [SVX_COOKBOOK.zh-CN.md](SVX_COOKBOOK.zh-CN.md): a standalone, step-by-step
-  Chinese cookbook that builds the SVX model from runtime foundations through
-  typed channels, inheritance, and hierarchical signal access.
+  Chinese cookbook with a five-step Register Lab project route, a capability
+  index and focused chapters on runtime, channels, inheritance and signals.
+- [../examples/register_lab/README.md](../examples/register_lab/README.md):
+  one runnable register-peripheral project, with bilingual instructions,
+  generation/check commands and positive/negative result criteria.
 - [SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md](SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md):
   Chinese concept guide that connects the architecture diagrams to runnable
   examples for SvTypes data contracts, SVX primitives, typed channels, signals,

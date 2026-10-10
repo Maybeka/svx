@@ -392,8 +392,12 @@ paths.
 ## 16. Reference Examples
 
 Start with [the examples index](../examples/README.md). The recommended first
-end-to-end path is the typed bus testbench, followed by the focused
-cross-language inheritance and hierarchical signal-access examples as needed.
+end-to-end path is [Register Lab](../examples/register_lab/README.md): one real
+four-register DUT with typed driver/monitor traffic, both inheritance directions,
+field ownership, handles, signal diagnostics and callback integration. Its
+README supplies the reading order, generation commands and positive/negative
+results. Use the smaller typed-bus and focused inheritance/signal examples when
+investigating one boundary rather than the whole project.
 
 Prepare the existing-environment example:
 
@@ -636,17 +640,17 @@ the existing SV endpoint intact. This does not generate a new SV helper or make
 arbitrary source instances automatically mirrorable. Prefer declared constructors
 and generated factories for application code.
 
-Independent ancestor constructor argument routing is not complete. A direct
-Python construction can compute arguments in `super().__init__(...)` before
-allocating its SV base. In a later initializer stage of an already-constructed
-SV descendant, those arguments must match the values used by the completed SV
-base; a mismatch is rejected, not silently ignored or used to allocate a second
-base object. This is an implementation gap, not a restriction on the intended
-natural inheritance model. Do not flatten different ancestor signatures or
-rewrite source `super()` expressions to work around it. The internal
-`ConstructionRequest` transport is not a public constructor API and is not yet
-wired into generated construction. See the
-[construction design and current evidence](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md#construction).
+Source-integrated generation supports independent ancestor constructor arguments.
+Each Python initializer executes once and suspends at its generated SV mirror's
+`super().__init__(...)` boundary. The evaluated arguments are passed to the
+corresponding SV `super.new(...)`; after that portion's field initialization and
+binding, the same Python initializer resumes. Ancestors may have different
+signatures, including computed scalar, string and handle arguments. Do not
+flatten signatures or replay initializers. Constructor records and continuation
+state are private implementation details. Use complete manifest lineage and
+ordered source inputs; see
+[constructor routing](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md#constructor-routing)
+for the supported paths and qualification boundaries.
 
 This restriction concerns executable mirrors, not declared handle transport.
 An arbitrary existing SV class handle may be passed through a declared
@@ -712,24 +716,23 @@ one implementation of the Python root; it does not infer the SV descendant's
 full lineage from its name.
 
 This factory example is not the complete Python-root alternating-lineage
-workflow. Public generation currently rejects a complete Python-root crossing
-plan. Standalone and SV-root projected Python-source static function/task bridges are publicly generated
+workflow. Complete Python-root crossing plans use `--sv-source` and
+`--sv-integrated-dir` with complete lineage and ordered inputs; compile the
+generated `source.sv` instead of the original source. Standalone and projected
+Python-source static function/task bridges are publicly generated
 and require importing their generated Python module to register the source
 `@staticmethod`, without constructing a source instance. Projected sources are
 resolved from their declared manifest symbol on the first callback, avoiding a
 circular eager import between a user class and its generated mirror. Qualified
 static calls select that source class, not a more-derived instance. Internal staged
-constructor regressions do not make the complete lineage workflows
-available. These are implementation gaps rather than restrictions imposed by
-the inheritance design; see the
+constructor regressions are historical; the integrated workflow supports
+declared alternating chains, not arbitrary source layouts or inheritance shapes.
+See the
 [conformance note](SVX_1_0_REQUIRED_FEATURES.md#implementation-conformance-note).
 
-Natural constructor argument transformations across multiple portions are also
-not fully routed. The internal staged path compares a Python base initializer's
-arguments with an already completed SV base constructor and rejects a mismatch;
-it cannot send newly computed arguments back to that completed constructor.
-This is not a design restriction against `super().__init__(seed + 1)`, and the
-single implementation-selector example does not establish that broader support.
+Natural constructor argument transformations are routed by the continuation
+mechanism described above. The single implementation-selector example remains
+a narrower workflow, not a replacement for full lineage generation.
 
 Supported today: declared task and nonblocking function calls in both
 directions, SvTypes payloads, task/function-base `super()` calls, direct

@@ -45,7 +45,7 @@ def test_operational_lifecycle_docs_match_terminal_cooperative_shutdown():
     assert 'Embedded CPython interpreter startup and shutdown.' not in spec
 
 
-def test_operational_constructor_docs_do_not_invent_hooks_or_complete_ancestor_routing():
+def test_operational_constructor_docs_describe_natural_routing_without_public_hooks():
     manual = Path('docs/SVX_USER_MANUAL.md').read_text()
     concepts = Path('docs/SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md').read_text()
     assert 'There is no public post-bind hook API.' in manual
@@ -53,11 +53,15 @@ def test_operational_constructor_docs_do_not_invent_hooks_or_complete_ancestor_r
     assert 'is the sole owner and exposes the generated public factory' not in manual
     assert 'then runs the post-bind hook' not in manual
     assert 'they do not necessarily wait until every SV descendant constructor has returned.' in manual
-    assert 'Independent ancestor constructor argument routing is not complete.' in manual
-    assert 'a mismatch is rejected, not silently ignored' in manual
+    assert 'Source-integrated generation supports independent ancestor constructor arguments.' in manual
+    assert 'Each Python initializer executes once and suspends' in manual
+    assert 'corresponding SV `super.new(...)`' in manual
+    assert 'Independent ancestor constructor argument routing is not complete.' not in manual
     assert '没有公开的 post-bind hook API' in concepts
     assert 'bind -> post-bind hook' not in concepts
-    assert '不同祖先的独立构造参数路由尚未完成' in concepts
+    assert '源码集成生成路径支持不同祖先的独立构造参数' in concepts
+    assert '每段只执行一次' in concepts
+    assert '不同祖先的独立构造参数路由尚未完成' not in concepts
     assert '方法可以是 virtual、' in concepts
     assert 'nonvirtual 或 static' in concepts
 
@@ -153,11 +157,12 @@ def test_development_recipe_installs_editable_dependency_and_source_frontend(doc
     assert any(requirement.startswith("pyslang") for requirement in extras["manifest"])
 
 
-def test_public_document_relative_links_resolve_to_tracked_sources():
-    inventory = subprocess.run(["git", "ls-files", "-z"], text=True,
+def test_public_document_relative_links_resolve_to_publishable_sources():
+    inventory = subprocess.run(["git", "ls-files", "--cached", "--others",
+                                "--exclude-standard", "-z"], text=True,
                                capture_output=True)
     if inventory.returncode:
-        pytest.skip("tracked-file inventory requires a Git checkout")
+        pytest.skip("publishable-file inventory requires a Git checkout")
     tracked = set(inventory.stdout.split("\0"))
     if not {"README.md", "docs/README.md"} <= tracked:
         pytest.skip("tracked-file inventory requires the repository root")
@@ -230,6 +235,7 @@ def test_examples_index_covers_current_adoption_paths():
         "hierarchical_signal_access",
         "Capability Matrix",
         "SVX Cookbook (Chinese)",
+        "register_lab",
     ):
         assert capability in index
 
@@ -288,6 +294,7 @@ def test_cookbook_is_linked_and_covers_every_core_example_boundary():
         "python_owned_inheritance",
         "foreign_handles",
         "hierarchical_signal_access",
+        "register_lab",
     ):
         assert f"../examples/{path}" in cookbook
 
@@ -298,6 +305,23 @@ def test_cookbook_is_linked_and_covers_every_core_example_boundary():
     assert "put_payload(" in cookbook
     assert "原始字节必须使用" in cookbook
     assert "示例运行指南" in cookbook
+
+
+def test_register_lab_guides_match_sources_and_fault_cases():
+    project = EXAMPLES / "register_lab"
+    sources = "\n".join(path.read_text() for path in project.glob("*.py"))
+    sources += (project / "tb.sv").read_text()
+    cookbook = Path("docs/SVX_COOKBOOK.zh-CN.md").read_text()
+    markers = set(re.findall(r"REGISTER_LAB_[A-Z_]+", cookbook))
+    assert len(markers) >= 14
+    assert all(marker in sources for marker in markers)
+    for name in ("README.md", "README.zh-CN.md"):
+        guide = (project / name).read_text()
+        assert "python -m examples.register_lab.generate --check" in guide
+        assert "SVX_ARTIFACT_MANIFEST" in guide
+        assert "corrupt_read" in guide and "function_wait" in guide
+        assert "REGISTER_LAB_MISMATCH" in guide and "Checker#compare" in guide
+        assert "incubator/uvmx/examples/register_lab" in guide
 
 
 def test_operational_docs_do_not_require_duplicating_observed_discovery_sources():

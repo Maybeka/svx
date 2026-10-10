@@ -566,10 +566,12 @@ SVX 不具备通用 SV object reflection，也无法观察任意手写 `new` 或
 如果任一步失败，runtime 回滚部分绑定。应用代码不手写 remote ID，也不直接操作 native 对象表。
 这里没有公开的 post-bind hook API。已支持的交替继承链按阶段在同一 receiver 上
 执行各 Python 初始化体，而不是先完成所有 SV 子类构造再初始化 Python。
-不同祖先的独立构造参数路由尚未完成：直接 Python 构造可以在分配 SV 基类前
-计算 `super()` 参数；若 SV 基类已构造，后续阶段的 `super()` 参数必须与已用值
-一致，否则报错，不会静默丢弃参数或再创建一个基类对象。这是实现缺口，不是
-设计要求用户合并签名或改写自然继承语法。内部 `ConstructionRequest` 不是用户接口。
+源码集成生成路径支持不同祖先的独立构造参数：Python 初始化体在生成镜像的
+`super().__init__(...)` 边界暂停，已求值的参数交给对应 SV 基类的 `super.new(...)`，
+字段初始化与绑定完成后恢复同一初始化体。每段只执行一次，使用各自的签名和
+SvTypes 构造记录，不重放用户代码，也不额外创建基类对象。内部构造记录与
+暂停状态不是用户接口；完整链需提供完整 lineage 与有序源码输入，见
+[构造参数路由](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md#constructor-routing)。
 
 ## 9. 两种继承方向共同遵守的机制
 

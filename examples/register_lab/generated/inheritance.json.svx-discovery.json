@@ -1,0 +1,59 @@
+{
+  "configuration": {
+    "python_modules": [
+      "examples.register_lab.extensions"
+    ],
+    "python_namespaces": [
+      {
+        "module": "examples",
+        "paths": [
+          "../.."
+        ]
+      }
+    ],
+    "python_selections": [
+      {
+        "module": "examples.register_lab",
+        "path": "../__init__.py"
+      },
+      {
+        "module": "examples.register_lab.extensions",
+        "path": "../extensions.py"
+      }
+    ],
+    "python_sources": [],
+    "source_mode": "separate-parse-inputs",
+    "sv_declarations": [],
+    "sv_dependencies": [
+      "../policy_types.sv",
+      "../register_if.sv"
+    ],
+    "sv_include_dirs": [],
+    "sv_predefines": {},
+    "sv_sources": [
+      "../register_if.sv",
+      "../policy_types.sv"
+    ],
+    "sv_undefines": []
+  },
+  "contract_sha256": "df8a730e28cb4f367b35994df0408c7f3c2b1c8a8869b68820a0806405ac4fbf",
+  "schema_version": "1.0.0",
+  "sources": [
+    {
+      "path": "../__init__.py",
+      "sha256": "86a80e5da03eb1e50a66b00783032c48b83866d36f84434f2915ee16496a00b4"
+    },
+    {
+      "path": "../extensions.py",
+      "sha256": "ee54c44beaffae776fdc8c848fe1b1ca9d9654768b9f5f333dc59510cec44a67"
+    },
+    {
+      "path": "../policy_types.sv",
+      "sha256": "b755b011ab8c917d35100be9e5711b9bd858e18e4ae4a9030e22188b5ad9895c"
+    },
+    {
+      "path": "../register_if.sv",
+      "sha256": "4919fa72ccbd5d6974295fed1defb24b44e6d8268f141a50c12510d9b9a81198"
+    }
+  ]
+}

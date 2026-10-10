@@ -1,12 +1,59 @@
 # SVX Cookbook：从运行时基础到跨语言验证
 
-本 Cookbook 是一条可顺序执行的 SVX 上手路径。它不要求重构已有
+本 Cookbook 按能力的依赖顺序组织 SVX 上手路径。它不要求重构已有
 SystemVerilog 验证环境：先建立一个由仿真器调度的 Python 入口，再逐步
 加入 SvTypes 数据、通道、继承和层次信号访问。
 
+建议先按下面的项目路线运行一个完整事务闭环，再按章节理解各个边界。
 每一步都说明三件事：应放在 SystemVerilog 还是 Python、为何如此，以及
-如何在本仓库的完整示例中验证。除非一节明确说明，否则继续使用上一节建立
-的环境。
+如何在本仓库的完整示例中验证。各专项示例有自己的 testbench 和生成输入，
+不是把前一节的片段直接追加到同一文件；运行时使用对应 README 的完整工程。
+可以依次学习各章，也可以按验证需求选择专项边界。
+
+## 项目路线：四寄存器外设
+
+[寄存器小项目](../examples/register_lab/README.zh-CN.md)把主要能力放在同一
+可运行工程中，而不是串联不相关片段。先完成第 1 节环境准备，再按项目 README
+生成、编译并运行 `smoke`。SV driver 驱动真实 DUT，独立 monitor 采样；Python
+维护预期值，检查四次写入和四次读回。正常总线访问不经过层次信号服务。
+
+建议分五次读代码，每次都保留已通过的完整工程：
+
+1. **事务闭环：** `models.py` → `dut.sv` / `register_if.sv` → `tb.sv` 的
+   driver/monitor → `scenarios.py::check_bus`。先确认八个响应与八个观察。
+2. **调度与退出：** 看 `check_processes`、`check_independent_waits` 和
+   `lab.env.done`。Python 堆共享不等于调用栈共享；最后一个响应也不等于
+   所有 SV 进程已退出。
+3. **对象扩展：** 看 `extensions.py`、`policy_types.sv`、`checker.sv`，沿
+   两个方向追踪虚调用、`super`、字段驻留和 handle 身份。不要先读生成桥接。
+4. **诊断与集成：** 看 `signals.py`、raw trace 和 `reporting.py`。分别运行
+   `corrupt_read`、`function_wait`，确认有指定错误且没有正常通过标记。
+5. **维护构建：** 看 `generate.py`，运行生成与 `--check`。先发现声明再检查
+   桥接；修改方法体也不能跳过来源检查。生成输出不要手工修补。
+
+| 能力 | 项目入口 | 正常运行的检查点 | 继续阅读 |
+|---|---|---|---|
+| 初始化、测试入口、收尾 | `tb.sv` / `smoke` | `REGISTER_LAB_PASS case=smoke` | 第 2、8 节 |
+| 同步延时、fork/join、kill、finally、共享堆 | `check_processes` | `REGISTER_LAB_PROCESSES_PASS` | 第 3 节 |
+| 独立 get/peek 等待 | `check_independent_waits` | `REGISTER_LAB_INDEPENDENT_WAITS_PASS` | 第 5 节 |
+| SvTypes 事务、SV helper、独立 monitor | `check_bus` / driver / monitor | `REGISTER_LAB_BUS_PASS transactions=8 observations=8` | 第 4、5、7 节 |
+| SV 基类 → Python 派生、SV 虚调用、super、字段 | `PythonPolicy` | `REGISTER_LAB_SV_CALLBACK_PASS`、`REGISTER_LAB_POLICY_CLOSE_PASS` | 第 9.1 节 |
+| Python 基类 → SV 派生、function/task | `Checker` / `RegisterChecker` | `REGISTER_LAB_CHECKER_PASS` | 第 9.2 节 |
+| Input/Output/Inout、静态方法 | `calibrate` / `word_bytes` | `REGISTER_LAB_POLICY_CREATED`、`REGISTER_LAB_SV_CALLBACK_PASS` | 第 9.3 节 |
+| 不透明 class handle、受限 VIF | `check_handles` | `REGISTER_LAB_HANDLES_PASS` | 第 9.4 节 |
+| 路径声明、四态读写、force/release | `check_signals` | `REGISTER_LAB_SIGNALS_PASS` | 第 10 节 |
+| bytes/payload、peek、非阻塞操作 | `check_raw_trace` | `REGISTER_LAB_PAYLOAD_PASS` | 第 6 节 |
+| 无参数 function/task 回调 | `Report` | `REGISTER_LAB_REPORT_FUNCTION_PASS`、`REGISTER_LAB_REPORT_TASK_PASS` | 第 7 节 |
+| 源码发现、正式 stub 绑定、生成物检查 | `generate.py` | `REGISTER_LAB_GENERATED`、`REGISTER_LAB_ARTIFACTS_CURRENT` | 第 11 节 |
+
+这个项目覆盖采用路径，不枚举每一种类型和继承形状。参数化类、交替 lineage、
+更深的容器与随机化/覆盖率规则继续查阅第 9 节引用及专项测试，不能由上述标记
+推断所有组合都已在本项目使用。当前对象交接采用实验性的 `publish_object` /
+`SVX_GET_OBJECT`；字段和方法传输仍使用正式 SvTypes 契约。
+
+可选的临时 UVM 入口位于源码 `incubator/uvmx/examples/register_lab`，复用同一
+工程并通过 `+UVM_TESTNAME` 选择 Python 或 SV Test。它不随 SVX 包导出；先完成
+不依赖 UVM 的主路线，再按该目录的中英文指南运行。
 
 ## 0. 先记住三个设计规则
 
@@ -334,6 +381,15 @@ UVM 环境同样保留其 component hierarchy、phase、objection、sequencer �
 SVX 只用于窄的事务边界；不要把 `raise_objection`、时钟等待或 monitor sampling
 搬到 Python。
 
+已有 SV 框架只需要调用几个无参数 Python 实例方法时，可用公开
+`svx.callbacks.CallbackAdapter`，不必手写 DPI glue。寄存器项目的 `reporting.py`
+声明 `completed` 为 function、`settle` 为 task；生成步骤用 `render_sv("Report")`
+放入导入 `svx_pkg` 的 SV package。SV 初始化并加载模块后，Python 入口调用
+`register_type(Report)`，SV 才执行 `new()` 与方法调用。
+function 不能等待，task 保持同步、可使用 `svx.delay()`；参数、返回值、字段和
+继承需求仍用继承生成器，不能硬塞进这个窄接口。完整契约见
+[Callback 集成接口](SVX_API_REFERENCE.md#callback-integration-generator)。
+
 **检查点：**
 [既有环境示例](../examples/milestone_5_existing_env) 是可直接参照的完整小型
 环境：SV 管理时钟、driver、monitor 和 memory，Python 管理四笔事务与检查策略。
@@ -447,12 +503,12 @@ manifest 和有序源文件，编译生成的 `source.sv` 代替原始源码，�
 独立 Python 源类及 SV-root 交替投影的静态 function/task 已可公开生成；
 导入生成 Python 模块后无需创建源类实例。投影的静态回调按 manifest 中的
 symbol 解析声明类，避免镜像与源类相互导入；同名派生方法不会改变声明类的
-限定静态调用。另一个构造缺口是多段
-继承中的参数计算：内部阶段式路径会检查 Python `super().__init__(...)`
-的参数是否与已完成的 SV 基类构造一致，不能把 Python 初始化体新计算的
-参数送回已经执行完的基类构造。这不意味着设计禁止 `super(seed + 1)`；
-自然构造顺序和独立祖先参数路由仍需完整实现。下面的单一 factory 示例
-不能作为这些路径已经可用的证明。
+限定静态调用。源码集成生成路径支持多段继承中的自然构造参数计算：Python
+初始化体只执行一次，在生成的镜像 `super().__init__(...)` 边界暂停，将已经
+求值的参数交给对应 SV 基类的 `super.new(...)`；字段初始化与绑定完成后继续
+执行。同一链的各段可有不同的参数列表，不需要扁平化签名或改写计算表达式。
+下面的单一 factory 示例只演示实现选择；完整交替链应使用上述源码集成流程，
+其顺序与验证范围见[构造参数路由](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md#constructor-routing)。
 
 1. 在 manifest 中声明**Python base**、`constructor.initiator: "python"` 和全部
    crossing 方法。此方向的 manifest canonical class ID 是该 Python base，而不是
@@ -493,7 +549,8 @@ symbol 解析声明类，避免镜像与源类相互导入；同名派生方法�
 - `virtual` 方法用于跨边界动态分派。非 virtual 和静态方法仍可按 manifest
   包装调用，但不会改变 SV 的正常静态分派。当前公开生成器支持 SV 源静态
   方法，以及独立 Python 源 Proxy 和 SV-root 交替投影的静态 function/task。
-  完整 Python-root 交替链仍受前述生成流程缺口影响。
+  完整 Python-root 交替链使用前述源码集成生成流程，不能用单一 factory 示例
+  代替完整 lineage 声明与源码输入。
 - `input`、`output`、`inout` 和返回值使用 SvTypes response；`ref` 与
   `const ref` 跨继承边界不支持。
 - 不支持把任意已经存在的 SV handle 接管为镜像。每个跨语言对象都必须由生成的
@@ -621,6 +678,14 @@ read/write、force/release 和启动期失败的完整路径。
 
 ## 11. 把每个新能力变成可维护的构建输入
 
+### 11.1 日常工作只走一条固定路径
+
+寄存器项目把固定输入收在 `generate.py`。第一次运行或修改声明后，执行
+`python -m examples.register_lab.generate`；两阶段均成功后再编译。
+验收已有产物则执行同一命令加 `--check`，失败时不要运行旧二进制。
+修改 Python 方法体也要刷新来源记录；桥接未变时复用已编译 SV，然后启动
+新的仿真进程。第 11.2 节说明检查边界，不需要用户另写一套依赖管理器。
+
 重复生成不会改写内容相同的产物或更新时间戳。生成器在写入前验证契约、
 metadata、目标路径和已有文件的归属；不会覆盖普通用户 JSON 作为 artifact
 manifest。已知的路径冲突或契约失败不会更新已有产物，也不会删除旧生成模块。
@@ -639,6 +704,11 @@ manifest。已知的路径冲突或契约失败不会更新已有产物，也不
 把发现和生成命令及其参数固定在项目构建脚本中，生成与检查
 复用同一组参数，不要每次手工输入两套命令。当前 CLI 不会自动恢复发现命令
 或推断完整源码依赖，因此构建脚本仍需维护这些输入。
+
+### 11.2 来源与生成物检查的详细边界
+
+<details>
+<summary>展开查看缓存、源码选择、失败恢复与历史生成物归属规则</summary>
 
 若需要显式源码审计，可在 `inheritance-gen` 中重复传入
 `--python-source FILE`，记录项目选定的 Python 声明、实现或 codec 工厂文件
@@ -747,6 +817,10 @@ Python 标准库、SVX/SvTypes 及源码解析器的实现模块不列入自动�
 若历史 inventory 与 artifact manifest 都丢失，不能凭当前声明推断旧文件归属，
 因此应将这些 metadata 一并保留，而不是自动清空输出目录。
 
+</details>
+
+### 11.3 项目验收清单
+
 将以下项目纳入项目构建或 CI：
 
 1. 使用 `svx svtypes-gen` 生成 SvTypes SV 类型及通道辅助任务。
@@ -757,14 +831,15 @@ Python 标准库、SVX/SvTypes 及源码解析器的实现模块不列入自动�
 5. 在目标仿真配置中运行对应的 SV/Python integration source。
 6. 对启用层次信号访问的 build 使用直接 VPI 原生库配置。
 
-推荐的采用顺序是：第 2 步最小入口 -> 第 4、5 步类型化通道 -> 第 7 步接入现有
-环境 -> 按需选择第 9 步继承或第 10 步信号访问。这样每次只增加一个边界，也最容易
-定位契约、调度或编码问题。
+推荐先按开篇项目路线完成寄存器工程，再用第 2 至 10 节定位具体边界。
+只需要最小采用路径时，按入口 → 类型化通道 → 既有环境推进，不必同时启用
+继承或信号服务。
 
 ## 12. 按需查找完整示例
 
 | 需求 | 示例 |
 |---|---|
+| 同一 DUT 的综合学习与维护路径 | [寄存器验证小项目](../examples/register_lab/README.zh-CN.md) |
 | 最小初始化、加载、启动和延时 | [基础启动](../examples/milestone_1_basic) |
 | fork/join、等待与停止 | [fork/join](../examples/milestone_1_fork) |
 | Python 堆共享 | [共享状态](../examples/milestone_1_shared_state) |

@@ -150,8 +150,10 @@ manifest symbol. The first callback resolves that exact source class, never a
 dynamic derived receiver; generated modules avoid eagerly importing a source
 that itself imports its mirror. Qualified static calls retain class ownership
 when an SV or Python child hides the same name. Source-integrated generation
-supports qualified Python-root alternating chains; arbitrary lineage shapes and
-independent ancestor constructor routing remain incomplete.
+supports qualified Python-root alternating chains and independent per-ancestor
+constructor signatures. Natural Python `super().__init__(...)` arguments are
+evaluated once and routed before the corresponding SV base construction;
+arbitrary lineage shapes and source layouts are not implied.
 
 Foreign class and virtual-interface formals use a concrete
 `svtypes.RemoteRef[target]` as the SvTypes type. Add
@@ -171,9 +173,9 @@ and SV-initiated construction encodes native handles before Python initializatio
 VIF arguments reach Python as generated views, including a transport-only view
 when no operations were exposed. Nulls retain the ordinary RemoteRef null
 representation; unknown or incompatible handles fail rather than constructing
-an object with a reinterpreted pointer. This does not implement the separately
-planned per-ancestor construction records or qualify arbitrary alternating
-constructor shapes. Qualified Python-root chains use the integrated source path.
+an object with a reinterpreted pointer. Per-ancestor constructor records are
+private generated transport, not a user-facing constructor API. Qualified
+alternating chains, including Python-root chains, use the integrated source path.
 
 ## Experimental Python API
 

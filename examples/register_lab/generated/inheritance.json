@@ -1,0 +1,1267 @@
+{
+  "classes": [
+    {
+      "base_lineage": [
+        {
+          "canonical_id": "sv://register_policy_pkg/RegisterPolicy",
+          "constructor": {
+            "initiator": "sv",
+            "parameters": [
+              {
+                "direction": "input",
+                "name": "mask",
+                "type": {
+                  "encoding_descriptor": {
+                    "binary_format_version": 1,
+                    "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                    "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                  },
+                  "sv": "bit [31:0]",
+                  "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                  "svtypes": {
+                    "args": [
+                      [
+                        32
+                      ],
+                      {
+                        "kind": "signedness",
+                        "value": "unsigned"
+                      }
+                    ],
+                    "base": {
+                      "kind": "packed",
+                      "name": "Bit"
+                    },
+                    "kind": "specialization"
+                  },
+                  "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                }
+              }
+            ]
+          },
+          "fields": [
+            {
+              "name": "mask",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                  "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                },
+                "sv": "bit [31:0]",
+                "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                "svtypes": {
+                  "args": [
+                    [
+                      32
+                    ],
+                    {
+                      "kind": "signedness",
+                      "value": "unsigned"
+                    }
+                  ],
+                  "base": {
+                    "kind": "packed",
+                    "name": "Bit"
+                  },
+                  "kind": "specialization"
+                },
+                "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+              }
+            },
+            {
+              "name": "calls",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "svtypes_pkg::int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            },
+            {
+              "name": "history",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "9e48d2be43492e85f07460d11e431afa295cb5d7fb374f0fdbd47d8e6c226466",
+                  "unified_type_name": "svtypes.Queue[elem=svtypes.Int]"
+                },
+                "sv": "int [$]",
+                "sv_packer": "svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)",
+                "svtypes": {
+                  "args": [
+                    {
+                      "kind": "scalar",
+                      "name": "Int"
+                    }
+                  ],
+                  "kind": "collection",
+                  "name": "Queue"
+                },
+                "unified_type_name": "svtypes.Queue[elem=svtypes.Int]"
+              }
+            },
+            {
+              "handle": {
+                "kind": "sv_class",
+                "sv_type": "register_policy_pkg::PacketTag",
+                "target_type_name": "sv://register_policy_pkg/PacketTag"
+              },
+              "name": "packet",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "d75fb75bfc519c9cccfaacecc5bfc87caf68f3c71b0bd92c2bdadb5fe857adc4",
+                  "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+                },
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "svtypes": {
+                  "kind": "remote_ref",
+                  "target": "sv://register_policy_pkg/PacketTag"
+                },
+                "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+              }
+            },
+            {
+              "handle": {
+                "kind": "virtual_interface",
+                "operations": [
+                  {
+                    "member": "address",
+                    "method": {
+                      "canonical_id": "sv-vif://register_if/diagnostics#read_address",
+                      "name": "read_address",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "833eed22451cc16dc3dec016d3aa568e144aaf89b84ebc7b6dc3d5da3b478d4f",
+                          "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                        },
+                        "sv": "bit [7:0]",
+                        "sv_packer": "svtypes_pkg::bit_packer#(bit [7:0])",
+                        "svtypes": {
+                          "args": [
+                            8,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Bit"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "signal_read"
+                  },
+                  {
+                    "member": "rdata",
+                    "method": {
+                      "canonical_id": "sv-vif://register_if/diagnostics#read_rdata",
+                      "name": "read_rdata",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                          "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                        },
+                        "sv": "logic [31:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                        "svtypes": {
+                          "args": [
+                            32,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "signal_read"
+                  },
+                  {
+                    "member": "read_data",
+                    "method": {
+                      "canonical_id": "sv-vif://register_if/diagnostics#read_data",
+                      "name": "read_data",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                          "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                        },
+                        "sv": "logic [31:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                        "svtypes": {
+                          "args": [
+                            32,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "function"
+                  }
+                ],
+                "sv_type": "virtual register_if.diagnostics",
+                "target_type_name": "sv-vif://register_if/diagnostics"
+              },
+              "name": "bus",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "d79c841919d064cb8ca02f86ed583a82a3a67f1177b208d2c233662e3dbd110c",
+                  "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+                },
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "svtypes": {
+                  "kind": "remote_ref",
+                  "target": "sv-vif://register_if/diagnostics"
+                },
+                "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+              }
+            }
+          ],
+          "language": "sv",
+          "methods": [
+            {
+              "canonical_id": "sv://register_policy_pkg/RegisterPolicy#normalize",
+              "name": "normalize",
+              "parameters": [
+                {
+                  "direction": "input",
+                  "name": "value",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                      "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                    },
+                    "sv": "bit [31:0]",
+                    "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                    "svtypes": {
+                      "args": [
+                        [
+                          32
+                        ],
+                        {
+                          "kind": "signedness",
+                          "value": "unsigned"
+                        }
+                      ],
+                      "base": {
+                        "kind": "packed",
+                        "name": "Bit"
+                      },
+                      "kind": "specialization"
+                    },
+                    "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                  }
+                }
+              ],
+              "pure_virtual": false,
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                  "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                },
+                "sv": "bit [31:0]",
+                "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                "svtypes": {
+                  "args": [
+                    [
+                      32
+                    ],
+                    {
+                      "kind": "signedness",
+                      "value": "unsigned"
+                    }
+                  ],
+                  "base": {
+                    "kind": "packed",
+                    "name": "Bit"
+                  },
+                  "kind": "specialization"
+                },
+                "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+              },
+              "timing": "function",
+              "virtual": true
+            },
+            {
+              "canonical_id": "sv://register_policy_pkg/RegisterPolicy#calibrate",
+              "name": "calibrate",
+              "parameters": [
+                {
+                  "direction": "input",
+                  "name": "delta",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "svtypes_pkg::int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "direction": "output",
+                  "name": "observed",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "svtypes_pkg::int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                },
+                {
+                  "direction": "inout",
+                  "name": "budget",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                      "unified_type_name": "svtypes.Int"
+                    },
+                    "sv": "int",
+                    "sv_packer": "svtypes_pkg::int_packer",
+                    "svtypes": {
+                      "kind": "scalar",
+                      "name": "Int"
+                    },
+                    "unified_type_name": "svtypes.Int"
+                  }
+                }
+              ],
+              "pure_virtual": false,
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "svtypes_pkg::int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              },
+              "timing": "function",
+              "virtual": true
+            },
+            {
+              "canonical_id": "sv://register_policy_pkg/RegisterPolicy#echo_packet",
+              "name": "echo_packet",
+              "parameters": [
+                {
+                  "direction": "input",
+                  "handle": {
+                    "kind": "sv_class",
+                    "sv_type": "register_policy_pkg::PacketTag",
+                    "target_type_name": "sv://register_policy_pkg/PacketTag"
+                  },
+                  "name": "value",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "d75fb75bfc519c9cccfaacecc5bfc87caf68f3c71b0bd92c2bdadb5fe857adc4",
+                      "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+                    },
+                    "sv": "svtypes_pkg::remote_ref",
+                    "sv_packer": "svtypes_pkg::remote_ref_packer",
+                    "svtypes": {
+                      "kind": "remote_ref",
+                      "target": "sv://register_policy_pkg/PacketTag"
+                    },
+                    "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+                  }
+                }
+              ],
+              "pure_virtual": false,
+              "return_handle": {
+                "kind": "sv_class",
+                "sv_type": "register_policy_pkg::PacketTag",
+                "target_type_name": "sv://register_policy_pkg/PacketTag"
+              },
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "d75fb75bfc519c9cccfaacecc5bfc87caf68f3c71b0bd92c2bdadb5fe857adc4",
+                  "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+                },
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "svtypes": {
+                  "kind": "remote_ref",
+                  "target": "sv://register_policy_pkg/PacketTag"
+                },
+                "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+              },
+              "timing": "function",
+              "virtual": false
+            },
+            {
+              "canonical_id": "sv://register_policy_pkg/RegisterPolicy#echo_bus",
+              "name": "echo_bus",
+              "parameters": [
+                {
+                  "direction": "input",
+                  "handle": {
+                    "kind": "virtual_interface",
+                    "operations": [
+                      {
+                        "member": "address",
+                        "method": {
+                          "canonical_id": "sv-vif://register_if/diagnostics#read_address",
+                          "name": "read_address",
+                          "parameters": [],
+                          "pure_virtual": false,
+                          "return_type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "833eed22451cc16dc3dec016d3aa568e144aaf89b84ebc7b6dc3d5da3b478d4f",
+                              "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                            },
+                            "sv": "bit [7:0]",
+                            "sv_packer": "svtypes_pkg::bit_packer#(bit [7:0])",
+                            "svtypes": {
+                              "args": [
+                                8,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Bit"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                          },
+                          "timing": "function",
+                          "virtual": false
+                        },
+                        "operation": "signal_read"
+                      },
+                      {
+                        "member": "rdata",
+                        "method": {
+                          "canonical_id": "sv-vif://register_if/diagnostics#read_rdata",
+                          "name": "read_rdata",
+                          "parameters": [],
+                          "pure_virtual": false,
+                          "return_type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                              "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                            },
+                            "sv": "logic [31:0]",
+                            "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                            "svtypes": {
+                              "args": [
+                                32,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Logic"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                          },
+                          "timing": "function",
+                          "virtual": false
+                        },
+                        "operation": "signal_read"
+                      },
+                      {
+                        "member": "read_data",
+                        "method": {
+                          "canonical_id": "sv-vif://register_if/diagnostics#read_data",
+                          "name": "read_data",
+                          "parameters": [],
+                          "pure_virtual": false,
+                          "return_type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                              "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                            },
+                            "sv": "logic [31:0]",
+                            "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                            "svtypes": {
+                              "args": [
+                                32,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Logic"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                          },
+                          "timing": "function",
+                          "virtual": false
+                        },
+                        "operation": "function"
+                      }
+                    ],
+                    "sv_type": "virtual register_if.diagnostics",
+                    "target_type_name": "sv-vif://register_if/diagnostics"
+                  },
+                  "name": "value",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "d79c841919d064cb8ca02f86ed583a82a3a67f1177b208d2c233662e3dbd110c",
+                      "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+                    },
+                    "sv": "svtypes_pkg::remote_ref",
+                    "sv_packer": "svtypes_pkg::remote_ref_packer",
+                    "svtypes": {
+                      "kind": "remote_ref",
+                      "target": "sv-vif://register_if/diagnostics"
+                    },
+                    "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+                  }
+                }
+              ],
+              "pure_virtual": false,
+              "return_handle": {
+                "kind": "virtual_interface",
+                "operations": [
+                  {
+                    "member": "address",
+                    "method": {
+                      "canonical_id": "sv-vif://register_if/diagnostics#read_address",
+                      "name": "read_address",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "833eed22451cc16dc3dec016d3aa568e144aaf89b84ebc7b6dc3d5da3b478d4f",
+                          "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                        },
+                        "sv": "bit [7:0]",
+                        "sv_packer": "svtypes_pkg::bit_packer#(bit [7:0])",
+                        "svtypes": {
+                          "args": [
+                            8,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Bit"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "signal_read"
+                  },
+                  {
+                    "member": "rdata",
+                    "method": {
+                      "canonical_id": "sv-vif://register_if/diagnostics#read_rdata",
+                      "name": "read_rdata",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                          "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                        },
+                        "sv": "logic [31:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                        "svtypes": {
+                          "args": [
+                            32,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "signal_read"
+                  },
+                  {
+                    "member": "read_data",
+                    "method": {
+                      "canonical_id": "sv-vif://register_if/diagnostics#read_data",
+                      "name": "read_data",
+                      "parameters": [],
+                      "pure_virtual": false,
+                      "return_type": {
+                        "encoding_descriptor": {
+                          "binary_format_version": 1,
+                          "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                          "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                        },
+                        "sv": "logic [31:0]",
+                        "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                        "svtypes": {
+                          "args": [
+                            32,
+                            {
+                              "kind": "signedness",
+                              "value": "unsigned"
+                            }
+                          ],
+                          "base": {
+                            "kind": "packed",
+                            "name": "Logic"
+                          },
+                          "kind": "specialization"
+                        },
+                        "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                      },
+                      "timing": "function",
+                      "virtual": false
+                    },
+                    "operation": "function"
+                  }
+                ],
+                "sv_type": "virtual register_if.diagnostics",
+                "target_type_name": "sv-vif://register_if/diagnostics"
+              },
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "d79c841919d064cb8ca02f86ed583a82a3a67f1177b208d2c233662e3dbd110c",
+                  "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+                },
+                "sv": "svtypes_pkg::remote_ref",
+                "sv_packer": "svtypes_pkg::remote_ref_packer",
+                "svtypes": {
+                  "kind": "remote_ref",
+                  "target": "sv-vif://register_if/diagnostics"
+                },
+                "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+              },
+              "timing": "function",
+              "virtual": false
+            },
+            {
+              "canonical_id": "sv://register_policy_pkg/RegisterPolicy#same_bus",
+              "name": "same_bus",
+              "parameters": [
+                {
+                  "direction": "input",
+                  "handle": {
+                    "kind": "virtual_interface",
+                    "operations": [
+                      {
+                        "member": "address",
+                        "method": {
+                          "canonical_id": "sv-vif://register_if/diagnostics#read_address",
+                          "name": "read_address",
+                          "parameters": [],
+                          "pure_virtual": false,
+                          "return_type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "833eed22451cc16dc3dec016d3aa568e144aaf89b84ebc7b6dc3d5da3b478d4f",
+                              "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                            },
+                            "sv": "bit [7:0]",
+                            "sv_packer": "svtypes_pkg::bit_packer#(bit [7:0])",
+                            "svtypes": {
+                              "args": [
+                                8,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Bit"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Bit[width=8,signed=false,state=2state]"
+                          },
+                          "timing": "function",
+                          "virtual": false
+                        },
+                        "operation": "signal_read"
+                      },
+                      {
+                        "member": "rdata",
+                        "method": {
+                          "canonical_id": "sv-vif://register_if/diagnostics#read_rdata",
+                          "name": "read_rdata",
+                          "parameters": [],
+                          "pure_virtual": false,
+                          "return_type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                              "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                            },
+                            "sv": "logic [31:0]",
+                            "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                            "svtypes": {
+                              "args": [
+                                32,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Logic"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                          },
+                          "timing": "function",
+                          "virtual": false
+                        },
+                        "operation": "signal_read"
+                      },
+                      {
+                        "member": "read_data",
+                        "method": {
+                          "canonical_id": "sv-vif://register_if/diagnostics#read_data",
+                          "name": "read_data",
+                          "parameters": [],
+                          "pure_virtual": false,
+                          "return_type": {
+                            "encoding_descriptor": {
+                              "binary_format_version": 1,
+                              "encoding_fingerprint": "f9f2887aabf625b4746c8519218787900d330f0791e504b79794f1b0a594e264",
+                              "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                            },
+                            "sv": "logic [31:0]",
+                            "sv_packer": "svtypes_pkg::logic_packer#(logic [31:0])",
+                            "svtypes": {
+                              "args": [
+                                32,
+                                {
+                                  "kind": "signedness",
+                                  "value": "unsigned"
+                                }
+                              ],
+                              "base": {
+                                "kind": "packed",
+                                "name": "Logic"
+                              },
+                              "kind": "specialization"
+                            },
+                            "unified_type_name": "svtypes.Logic[width=32,signed=false,state=4state]"
+                          },
+                          "timing": "function",
+                          "virtual": false
+                        },
+                        "operation": "function"
+                      }
+                    ],
+                    "sv_type": "virtual register_if.diagnostics",
+                    "target_type_name": "sv-vif://register_if/diagnostics"
+                  },
+                  "name": "value",
+                  "type": {
+                    "encoding_descriptor": {
+                      "binary_format_version": 1,
+                      "encoding_fingerprint": "d79c841919d064cb8ca02f86ed583a82a3a67f1177b208d2c233662e3dbd110c",
+                      "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+                    },
+                    "sv": "svtypes_pkg::remote_ref",
+                    "sv_packer": "svtypes_pkg::remote_ref_packer",
+                    "svtypes": {
+                      "kind": "remote_ref",
+                      "target": "sv-vif://register_if/diagnostics"
+                    },
+                    "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+                  }
+                }
+              ],
+              "pure_virtual": false,
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "f26ec9bb5e2f3280d2cf466ecc697ff81c6801134c698392c65c5db97f8ab9fd",
+                  "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+                },
+                "sv": "bit",
+                "sv_packer": "svtypes_pkg::bit_packer#(bit [0:0])",
+                "svtypes": {
+                  "args": [
+                    1,
+                    {
+                      "kind": "signedness",
+                      "value": "unsigned"
+                    }
+                  ],
+                  "base": {
+                    "kind": "packed",
+                    "name": "Bit"
+                  },
+                  "kind": "specialization"
+                },
+                "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+              },
+              "timing": "function",
+              "virtual": false
+            },
+            {
+              "canonical_id": "sv://register_policy_pkg/RegisterPolicy#word_bytes",
+              "name": "word_bytes",
+              "parameters": [],
+              "pure_virtual": false,
+              "return_type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "svtypes_pkg::int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              },
+              "static": true,
+              "timing": "function",
+              "virtual": false
+            }
+          ],
+          "symbol": "register_policy_pkg::RegisterPolicy"
+        }
+      ],
+      "canonical_id": "py://examples/register_lab/extensions/PythonPolicy",
+      "constructor": {
+        "initiator": "python",
+        "parameters": [
+          {
+            "direction": "input",
+            "name": "mask",
+            "type": {
+              "encoding_descriptor": {
+                "binary_format_version": 1,
+                "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+              },
+              "sv": "bit [31:0]",
+              "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+              "svtypes": {
+                "args": [
+                  32,
+                  {
+                    "kind": "signedness",
+                    "value": "unsigned"
+                  }
+                ],
+                "base": {
+                  "kind": "packed",
+                  "name": "Bit"
+                },
+                "kind": "specialization"
+              },
+              "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+            }
+          }
+        ]
+      },
+      "fields": [
+        {
+          "name": "local_checks",
+          "type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+              "unified_type_name": "svtypes.Int"
+            },
+            "python": {
+              "args": [],
+              "kwargs": {},
+              "module": "examples.register_lab.extensions",
+              "symbol": "__svx_declared_codec_PythonPolicy_local_checks"
+            },
+            "sv": "int",
+            "sv_packer": "svtypes_pkg::int_packer",
+            "unified_type_name": "svtypes.Int"
+          }
+        }
+      ],
+      "language": "python",
+      "methods": [
+        {
+          "canonical_id": "py://examples/register_lab/extensions/PythonPolicy#normalize",
+          "name": "normalize",
+          "parameters": [
+            {
+              "direction": "input",
+              "name": "value",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                  "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                },
+                "sv": "bit [31:0]",
+                "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                "svtypes": {
+                  "args": [
+                    32,
+                    {
+                      "kind": "signedness",
+                      "value": "unsigned"
+                    }
+                  ],
+                  "base": {
+                    "kind": "packed",
+                    "name": "Bit"
+                  },
+                  "kind": "specialization"
+                },
+                "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+              }
+            }
+          ],
+          "pure_virtual": false,
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+              "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+            },
+            "sv": "bit [31:0]",
+            "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+            "svtypes": {
+              "args": [
+                32,
+                {
+                  "kind": "signedness",
+                  "value": "unsigned"
+                }
+              ],
+              "base": {
+                "kind": "packed",
+                "name": "Bit"
+              },
+              "kind": "specialization"
+            },
+            "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+          },
+          "timing": "function",
+          "virtual": true
+        },
+        {
+          "canonical_id": "py://examples/register_lab/extensions/PythonPolicy#calibrate",
+          "name": "calibrate",
+          "parameters": [
+            {
+              "direction": "input",
+              "name": "delta",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "svtypes_pkg::int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            },
+            {
+              "direction": "output",
+              "name": "observed",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "svtypes_pkg::int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            },
+            {
+              "direction": "inout",
+              "name": "budget",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                  "unified_type_name": "svtypes.Int"
+                },
+                "sv": "int",
+                "sv_packer": "svtypes_pkg::int_packer",
+                "svtypes": {
+                  "kind": "scalar",
+                  "name": "Int"
+                },
+                "unified_type_name": "svtypes.Int"
+              }
+            }
+          ],
+          "pure_virtual": false,
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+              "unified_type_name": "svtypes.Int"
+            },
+            "sv": "int",
+            "sv_packer": "svtypes_pkg::int_packer",
+            "svtypes": {
+              "kind": "scalar",
+              "name": "Int"
+            },
+            "unified_type_name": "svtypes.Int"
+          },
+          "timing": "function",
+          "virtual": true
+        }
+      ],
+      "symbol": "examples.register_lab.extensions.PythonPolicy"
+    },
+    {
+      "canonical_id": "py://examples/register_lab/extensions/Checker",
+      "constructor": {
+        "initiator": "python",
+        "parameters": [
+          {
+            "direction": "input",
+            "name": "seed",
+            "type": {
+              "encoding_descriptor": {
+                "binary_format_version": 1,
+                "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+                "unified_type_name": "svtypes.Int"
+              },
+              "sv": "int",
+              "sv_packer": "svtypes_pkg::int_packer",
+              "svtypes": {
+                "kind": "scalar",
+                "name": "Int"
+              },
+              "unified_type_name": "svtypes.Int"
+            }
+          }
+        ]
+      },
+      "language": "python",
+      "methods": [
+        {
+          "canonical_id": "py://examples/register_lab/extensions/Checker#compare",
+          "name": "compare",
+          "parameters": [
+            {
+              "direction": "input",
+              "name": "expected",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                  "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                },
+                "sv": "bit [31:0]",
+                "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                "svtypes": {
+                  "args": [
+                    32,
+                    {
+                      "kind": "signedness",
+                      "value": "unsigned"
+                    }
+                  ],
+                  "base": {
+                    "kind": "packed",
+                    "name": "Bit"
+                  },
+                  "kind": "specialization"
+                },
+                "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+              }
+            },
+            {
+              "direction": "input",
+              "name": "actual",
+              "type": {
+                "encoding_descriptor": {
+                  "binary_format_version": 1,
+                  "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+                  "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+                },
+                "sv": "bit [31:0]",
+                "sv_packer": "svtypes_pkg::bit_packer#(bit [31:0])",
+                "svtypes": {
+                  "args": [
+                    32,
+                    {
+                      "kind": "signedness",
+                      "value": "unsigned"
+                    }
+                  ],
+                  "base": {
+                    "kind": "packed",
+                    "name": "Bit"
+                  },
+                  "kind": "specialization"
+                },
+                "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+              }
+            }
+          ],
+          "pure_virtual": false,
+          "return_type": {
+            "encoding_descriptor": {
+              "binary_format_version": 1,
+              "encoding_fingerprint": "f26ec9bb5e2f3280d2cf466ecc697ff81c6801134c698392c65c5db97f8ab9fd",
+              "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+            },
+            "sv": "bit [0:0]",
+            "sv_packer": "svtypes_pkg::bit_packer#(bit [0:0])",
+            "svtypes": {
+              "args": [
+                1,
+                {
+                  "kind": "signedness",
+                  "value": "unsigned"
+                }
+              ],
+              "base": {
+                "kind": "packed",
+                "name": "Bit"
+              },
+              "kind": "specialization"
+            },
+            "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+          },
+          "timing": "function",
+          "virtual": true
+        },
+        {
+          "canonical_id": "py://examples/register_lab/extensions/Checker#finish",
+          "name": "finish",
+          "parameters": [],
+          "pure_virtual": false,
+          "return_type": "void",
+          "timing": "task",
+          "virtual": true
+        }
+      ],
+      "symbol": "examples.register_lab.extensions.Checker"
+    }
+  ],
+  "discovery_provenance": {
+    "path": "inheritance.json.svx-discovery.json",
+    "schema_version": "1.0.0"
+  },
+  "generator_abi_version": 2,
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1",
+    "svtypes.external-field-storage.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+  "schema_version": "2.0.0"
+}

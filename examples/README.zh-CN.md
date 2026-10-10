@@ -3,7 +3,8 @@
 [English](README.md)
 
 这些示例按验证工程师通常的采用路径组织，而不是按能力最初出现的
-milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界选择专项示例。
+milestone 编号组织。建议先运行[寄存器小项目](register_lab/README.zh-CN.md)，
+在同一 DUT 中学习事务闭环与双向继承，再按所需边界选择专项示例。
 
 若希望从运行时基础开始，按依赖顺序完成一条完整路径，请阅读独立的
 [SVX Cookbook](../docs/SVX_COOKBOOK.zh-CN.md)。它逐步解释这些示例背后的设计，
@@ -12,6 +13,7 @@ milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界�
 
 | 目标 | 从这里开始 | 展示内容 |
 |---|---|---|
+| 完成综合项目的学习与维护路径 | [寄存器小项目](register_lab/README.zh-CN.md) | 真实 DUT、typed driver/monitor、进程、继承与字段、handle、信号诊断、回调和生成检查 |
 | 从 SV testbench 运行一个 Python 测试 | [基础启动](milestone_1_basic/README.zh-CN.md) | `svx_init`、`svx_run_test`、显示和由仿真器管理的延时 |
 | 跨边界传输 transaction | [Typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md) | SvTypes 模型、生成的 SV helper、请求/响应与 monitor channel |
 | 在既有 SV testbench 中采用 SVX | [既有 SV 环境](milestone_5_existing_env/README.zh-CN.md) | 驱动和监控保留在 SV；场景和检查策略移至 Python |
@@ -26,15 +28,15 @@ milestone 编号组织。建议先阅读 typed-bus 示例，再按所需边界�
 `milestone_*` 目录名因源码和回归兼容性而保留，不代表推荐学习顺序。
 
 所有正常完成的示例都会在 `$finish` 前调用 `svx_shutdown()`，使 Python 和
-native runtime 资源按文档规定的顺序释放。异常策略示例会有意走 fatal 路径，
-是唯一的例外。
+native runtime 资源按文档规定的顺序释放。故意错误的用例通过 fatal 路径终止。
+寄存器项目另有仅源码提供的可选 UVM 启动路径，由该启动路径负责收尾。
 
 ## 学习路径
 
 1. 阅读[基础启动](milestone_1_basic/README.zh-CN.md)，理解 runtime entry
    boundary 与由仿真器拥有的时间。
-2. 运行 [typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md)，
-   学习时钟化 SV 环境的默认 transaction 路径。
+2. 运行[寄存器小项目](register_lab/README.zh-CN.md)，按阅读顺序检查各个结果标记；
+   需要更小的纯事务参考时使用 [typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md)。
 3. 在维护中的项目及其 build 中集成此路径时，使用[既有 SV 环境]
    (milestone_5_existing_env/README.zh-CN.md)或 [CLI 工作流]
    (milestone_6_cli_workflow/README.zh-CN.md)。

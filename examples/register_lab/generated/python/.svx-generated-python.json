@@ -1,0 +1,9 @@
+[
+  "svx_mirror/__init__.py",
+  "svx_mirror/register_policy_pkg.py",
+  "svx_py/__init__.py",
+  "svx_py/examples/register_lab/extensions.py",
+  "svx_vif/__init__.py",
+  "svx_vif/register_if/__init__.py",
+  "svx_vif/register_if/diagnostics.py"
+]

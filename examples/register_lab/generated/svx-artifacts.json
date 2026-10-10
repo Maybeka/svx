@@ -1,0 +1,646 @@
+{
+  "artifacts": [
+    {
+      "language": "python",
+      "module": "svx_mirror",
+      "path": "python/svx_mirror/__init__.py",
+      "sha256": "814c008a5efae4f9e91f4ea29b30a861368ab2bfe10265d7b57a2c6006ad1724"
+    },
+    {
+      "language": "python",
+      "module": "svx_mirror.register_policy_pkg",
+      "path": "python/svx_mirror/register_policy_pkg.py",
+      "sha256": "b7155d522c2e02bb4f4824ce470e9512e88bec47ebced593a65a91e6d15b9685"
+    },
+    {
+      "language": "python",
+      "module": "svx_py",
+      "path": "python/svx_py/__init__.py",
+      "sha256": "c8d51ff6c00dfcd1cb1e74a2af743bd14170bb76c874f0b0a3c5f19f8d32509d"
+    },
+    {
+      "language": "python",
+      "module": "svx_py.examples.register_lab.extensions",
+      "path": "python/svx_py/examples/register_lab/extensions.py",
+      "sha256": "5db61fcebdb76302330837838dd5947b2b05328b017b9dc935019d579d4cea8e"
+    },
+    {
+      "language": "python",
+      "module": "svx_vif",
+      "path": "python/svx_vif/__init__.py",
+      "sha256": "aef6ca123df751e1e11d4e403bfd83ed491473b31826606956b66d003f5c2b3e"
+    },
+    {
+      "language": "python",
+      "module": "svx_vif.register_if",
+      "path": "python/svx_vif/register_if/__init__.py",
+      "sha256": "aef6ca123df751e1e11d4e403bfd83ed491473b31826606956b66d003f5c2b3e"
+    },
+    {
+      "language": "python",
+      "module": "svx_vif.register_if.diagnostics",
+      "path": "python/svx_vif/register_if/diagnostics.py",
+      "sha256": "77f35bade25bc5d5fc138a00213c7c05d737412544cb407e068c9903b187dbb4"
+    },
+    {
+      "language": "systemverilog",
+      "path": "inheritance.sv",
+      "sha256": "adf5c6852c1a6dd3057f9d0e6f06ff32b8d925513aae8b25d910a57fdc467ccb"
+    }
+  ],
+  "callables": [
+    {
+      "canonical_id": "py://examples/register_lab/extensions/Checker#compare",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "expected",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        },
+        {
+          "direction": "input",
+          "name": "actual",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "f939bf6412cdf0620875fdfb6373a4e43202d3108ba645df9a87ccb698ed9906",
+          "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.request"
+        },
+        "sv_class": "SVXCall_40b29c7403cdecf28786_Request",
+        "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "d921674260a28c5a0bac1b32877e2e000775d64bba87553e7fc22a7b2534987c",
+          "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.response"
+        },
+        "sv_class": "SVXCall_a0a5c0493b7741d29924_Response",
+        "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.response"
+      }
+    },
+    {
+      "canonical_id": "py://examples/register_lab/extensions/Checker#finish",
+      "request_fields": [],
+      "request_record": null,
+      "response_fields": [],
+      "response_record": null
+    },
+    {
+      "canonical_id": "py://examples/register_lab/extensions/PythonPolicy#calibrate",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "delta",
+          "unified_type_name": "svtypes.Int"
+        },
+        {
+          "direction": "inout",
+          "name": "budget",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "1b0264a1cc84bdf34907252a8b7c0750f9235056d4645c94bda5c438918ca61b",
+          "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.request"
+        },
+        "sv_class": "SVXCall_ed7668a5578e6501fbdd_Request",
+        "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.request"
+      },
+      "response_fields": [
+        {
+          "direction": "output",
+          "name": "observed",
+          "unified_type_name": "svtypes.Int"
+        },
+        {
+          "direction": "inout",
+          "name": "budget",
+          "unified_type_name": "svtypes.Int"
+        },
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "c484fe0c0e865a8f817875dc4ac48c2cf33e51dd27083febd5f430b32f48fab2",
+          "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.response"
+        },
+        "sv_class": "SVXCall_5acba6320c36d92ea86a_Response",
+        "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.response"
+      }
+    },
+    {
+      "canonical_id": "py://examples/register_lab/extensions/PythonPolicy#normalize",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "value",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
+          "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.request"
+        },
+        "sv_class": "SVXCall_1423942fa10cfee35050_Request",
+        "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
+          "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.response"
+        },
+        "sv_class": "SVXCall_0cac6dabb3d645e68bac_Response",
+        "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.response"
+      }
+    },
+    {
+      "canonical_id": "sv://register_policy_pkg/RegisterPolicy#calibrate",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "delta",
+          "unified_type_name": "svtypes.Int"
+        },
+        {
+          "direction": "inout",
+          "name": "budget",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "1b0264a1cc84bdf34907252a8b7c0750f9235056d4645c94bda5c438918ca61b",
+          "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.request"
+        },
+        "sv_class": "SVXCall_0139b1938ffe745f02a3_Request",
+        "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.request"
+      },
+      "response_fields": [
+        {
+          "direction": "output",
+          "name": "observed",
+          "unified_type_name": "svtypes.Int"
+        },
+        {
+          "direction": "inout",
+          "name": "budget",
+          "unified_type_name": "svtypes.Int"
+        },
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "c484fe0c0e865a8f817875dc4ac48c2cf33e51dd27083febd5f430b32f48fab2",
+          "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.response"
+        },
+        "sv_class": "SVXCall_e2aecc778177de71557f_Response",
+        "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.response"
+      }
+    },
+    {
+      "canonical_id": "sv://register_policy_pkg/RegisterPolicy#echo_bus",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "9eae5a662386f98d5a7c1330a51663e1b728e88180c2252da5d297630932a0b2",
+          "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.request"
+        },
+        "sv_class": "SVXCall_647a4c682ad192188e6a_Request",
+        "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "9eae5a662386f98d5a7c1330a51663e1b728e88180c2252da5d297630932a0b2",
+          "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.response"
+        },
+        "sv_class": "SVXCall_0dde2b043a3fb495ce86_Response",
+        "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.response"
+      }
+    },
+    {
+      "canonical_id": "sv://register_policy_pkg/RegisterPolicy#echo_packet",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "371784021220744b8737cd7689305c71b7ef0d87a50d1537fb3d957eb89dbf52",
+          "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.request"
+        },
+        "sv_class": "SVXCall_a96425e66f1f8a3f1be5_Request",
+        "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "371784021220744b8737cd7689305c71b7ef0d87a50d1537fb3d957eb89dbf52",
+          "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.response"
+        },
+        "sv_class": "SVXCall_a89ee2b3eef756596e8e_Response",
+        "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.response"
+      }
+    },
+    {
+      "canonical_id": "sv://register_policy_pkg/RegisterPolicy#normalize",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "value",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
+          "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.request"
+        },
+        "sv_class": "SVXCall_b6b98d0ad103e53cdae2_Request",
+        "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
+          "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.response"
+        },
+        "sv_class": "SVXCall_d12e138910eed72b5317_Response",
+        "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.response"
+      }
+    },
+    {
+      "canonical_id": "sv://register_policy_pkg/RegisterPolicy#same_bus",
+      "request_fields": [
+        {
+          "direction": "input",
+          "name": "value",
+          "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "9eae5a662386f98d5a7c1330a51663e1b728e88180c2252da5d297630932a0b2",
+          "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.request"
+        },
+        "sv_class": "SVXCall_e18341e8f12ce17d97a6_Request",
+        "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.request"
+      },
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "d921674260a28c5a0bac1b32877e2e000775d64bba87553e7fc22a7b2534987c",
+          "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.response"
+        },
+        "sv_class": "SVXCall_bbee8f20fec35397493f_Response",
+        "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.response"
+      }
+    },
+    {
+      "canonical_id": "sv://register_policy_pkg/RegisterPolicy#word_bytes",
+      "request_fields": [],
+      "request_record": null,
+      "response_fields": [
+        {
+          "direction": "return",
+          "name": "svx_return_value",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "response_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
+          "unified_type_name": "svx.call.b595ec7ad4eb1fd794d4aa9424464ae688d9f36e944d6a29c2f8585f1640a858.response"
+        },
+        "sv_class": "SVXCall_35f3f6df742df0de8306_Response",
+        "unified_type_name": "svx.call.b595ec7ad4eb1fd794d4aa9424464ae688d9f36e944d6a29c2f8585f1640a858.response"
+      }
+    }
+  ],
+  "classes": [
+    "py://examples/register_lab/extensions/Checker",
+    "py://examples/register_lab/extensions/PythonPolicy"
+  ],
+  "constructors": [
+    {
+      "canonical_class_id": "py://examples/register_lab/extensions/Checker",
+      "initiator": "python",
+      "request_fields": [
+        {
+          "name": "seed",
+          "unified_type_name": "svtypes.Int"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
+          "unified_type_name": "svx.call.10d9c471ae72941992f0a3b296ef88b38e12d8f1e1c902b76fbd5e02f136a72b.request"
+        },
+        "sv_class": "SVXCall_ea462e4c9451817342f8_Request",
+        "unified_type_name": "svx.call.10d9c471ae72941992f0a3b296ef88b38e12d8f1e1c902b76fbd5e02f136a72b.request"
+      }
+    },
+    {
+      "canonical_class_id": "py://examples/register_lab/extensions/PythonPolicy",
+      "initiator": "python",
+      "request_fields": [
+        {
+          "name": "mask",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
+          "unified_type_name": "svx.call.d30e141e38774ed74b25777d8be71972eeec69fc24096341c886636d8614746a.request"
+        },
+        "sv_class": "SVXCall_47ccdb05035b810a0c29_Request",
+        "unified_type_name": "svx.call.d30e141e38774ed74b25777d8be71972eeec69fc24096341c886636d8614746a.request"
+      }
+    },
+    {
+      "canonical_class_id": "sv://register_policy_pkg/RegisterPolicy",
+      "initiator": "sv",
+      "request_fields": [
+        {
+          "name": "mask",
+          "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+        }
+      ],
+      "request_record": {
+        "encoding_descriptor": {
+          "binary_format_version": 1,
+          "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
+          "unified_type_name": "svx.call.3f1085c2e5914aaf96e53d923bd04579b985833a7a6c75ca1446916d15e962d3.request"
+        },
+        "sv_class": "SVXCall_a4505e2a5cc71c2a7e42_Request",
+        "unified_type_name": "svx.call.3f1085c2e5914aaf96e53d923bd04579b985833a7a6c75ca1446916d15e962d3.request"
+      }
+    }
+  ],
+  "generated_types": [
+    {
+      "canonical_class_id": "py://examples/register_lab/extensions/Checker",
+      "python_adapter_fqn": "svx_py.examples.register_lab.extensions.Checker",
+      "systemverilog_fqn": "svx_proxy_extensions::Checker"
+    },
+    {
+      "canonical_class_id": "sv://register_policy_pkg/RegisterPolicy",
+      "python_fqn": "svx_mirror.register_policy_pkg.RegisterPolicy"
+    }
+  ],
+  "generation_inputs": {
+    "discovery_inputs": [
+      {
+        "path": "inheritance.json.svx-discovery.json",
+        "sha256": "3ae13a4e1f372697250a001eb9e38fd65fcf18764f5a6087780deb6d43bdac12"
+      },
+      {
+        "path": "../__init__.py",
+        "sha256": "86a80e5da03eb1e50a66b00783032c48b83866d36f84434f2915ee16496a00b4"
+      },
+      {
+        "path": "../extensions.py",
+        "sha256": "ee54c44beaffae776fdc8c848fe1b1ca9d9654768b9f5f333dc59510cec44a67"
+      },
+      {
+        "path": "../policy_types.sv",
+        "sha256": "b755b011ab8c917d35100be9e5711b9bd858e18e4ae4a9030e22188b5ad9895c"
+      },
+      {
+        "path": "../register_if.sv",
+        "sha256": "4919fa72ccbd5d6974295fed1defb24b44e6d8268f141a50c12510d9b9a81198"
+      }
+    ],
+    "manifest": {
+      "path": "inheritance.json",
+      "sha256": "2258aa5ed4e391f04f1a2616b33fa8d7d51fe40197a83a827df03945f281319f"
+    },
+    "python_imports": [
+      {
+        "path": "../__init__.py",
+        "sha256": "86a80e5da03eb1e50a66b00783032c48b83866d36f84434f2915ee16496a00b4"
+      },
+      {
+        "path": "../extensions.py",
+        "sha256": "ee54c44beaffae776fdc8c848fe1b1ca9d9654768b9f5f333dc59510cec44a67"
+      }
+    ],
+    "source_mode": "separate-parse-inputs",
+    "sv_dependencies": [
+      {
+        "path": "../policy_types.sv",
+        "sha256": "b755b011ab8c917d35100be9e5711b9bd858e18e4ae4a9030e22188b5ad9895c"
+      },
+      {
+        "path": "../register_if.sv",
+        "sha256": "4919fa72ccbd5d6974295fed1defb24b44e6d8268f141a50c12510d9b9a81198"
+      }
+    ],
+    "sv_include_dirs": [],
+    "sv_predefines": {},
+    "sv_sources": [
+      "../register_if.sv",
+      "../policy_types.sv"
+    ],
+    "sv_undefines": []
+  },
+  "generator_abi_version": 2,
+  "inheritance_manifest": {
+    "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
+    "schema_version": "2.0.0"
+  },
+  "required_runtime_capabilities": [
+    "svtypes.checked-encoding-descriptor.v1",
+    "svtypes.codec-context.v1",
+    "svtypes.record-schema.v1",
+    "svtypes.remote-reference.v1",
+    "svtypes.external-field-storage.v1"
+  ],
+  "schema_uri": "https://svx.dev/schema/generated-artifacts/v1",
+  "schema_version": "1.0.0",
+  "svtypes": {
+    "required_package_major": 1
+  },
+  "svx_runtime_abi_version": 3,
+  "types": [
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "f26ec9bb5e2f3280d2cf466ecc697ff81c6801134c698392c65c5db97f8ab9fd",
+        "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+      },
+      "svtypes": {
+        "args": [
+          1,
+          {
+            "kind": "signedness",
+            "value": "unsigned"
+          }
+        ],
+        "base": {
+          "kind": "packed",
+          "name": "Bit"
+        },
+        "kind": "specialization"
+      },
+      "unified_type_name": "svtypes.Bit[width=1,signed=false,state=2state]"
+    },
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "a88de1a89b6941cd3ff8f7391fc44003b96194d98dd26bcaca34441e1d136935",
+        "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+      },
+      "svtypes": {
+        "args": [
+          [
+            32
+          ],
+          {
+            "kind": "signedness",
+            "value": "unsigned"
+          }
+        ],
+        "base": {
+          "kind": "packed",
+          "name": "Bit"
+        },
+        "kind": "specialization"
+      },
+      "unified_type_name": "svtypes.Bit[width=32,signed=false,state=2state]"
+    },
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "0d5d4fa91323fe8aef984d8529e7316ba1fb0886daa0de110c0fd7a55ed1548d",
+        "unified_type_name": "svtypes.Int"
+      },
+      "svtypes": {
+        "kind": "scalar",
+        "name": "Int"
+      },
+      "unified_type_name": "svtypes.Int"
+    },
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "9e48d2be43492e85f07460d11e431afa295cb5d7fb374f0fdbd47d8e6c226466",
+        "unified_type_name": "svtypes.Queue[elem=svtypes.Int]"
+      },
+      "svtypes": {
+        "args": [
+          {
+            "kind": "scalar",
+            "name": "Int"
+          }
+        ],
+        "kind": "collection",
+        "name": "Queue"
+      },
+      "unified_type_name": "svtypes.Queue[elem=svtypes.Int]"
+    },
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "d79c841919d064cb8ca02f86ed583a82a3a67f1177b208d2c233662e3dbd110c",
+        "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+      },
+      "svtypes": {
+        "kind": "remote_ref",
+        "target": "sv-vif://register_if/diagnostics"
+      },
+      "unified_type_name": "svtypes.RemoteRef[target=sv-vif://register_if/diagnostics]"
+    },
+    {
+      "encoding_descriptor": {
+        "binary_format_version": 1,
+        "encoding_fingerprint": "d75fb75bfc519c9cccfaacecc5bfc87caf68f3c71b0bd92c2bdadb5fe857adc4",
+        "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+      },
+      "svtypes": {
+        "kind": "remote_ref",
+        "target": "sv://register_policy_pkg/PacketTag"
+      },
+      "unified_type_name": "svtypes.RemoteRef[target=sv://register_policy_pkg/PacketTag]"
+    }
+  ]
+}
