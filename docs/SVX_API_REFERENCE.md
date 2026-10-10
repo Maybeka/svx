@@ -244,6 +244,33 @@ implementation exceptions are not suppressed.
   SV declaration metadata to the sole inheritance manifest schema. `--check`
   rejects a stale output.
 
+## Callback Integration Generator
+
+`svx.callbacks.Callback(name, timing)` and
+`svx.callbacks.CallbackAdapter(class_id, callbacks)` are public extension
+interfaces for callback-only integrations with an existing SV framework.
+`timing` is explicitly `"function"` or `"task"`; callbacks are synchronous
+Python instance methods with only `self`, and no transported return value.
+The companion constructor takes no user arguments. Argument/return transport,
+field projection and cross-language inheritance use the inheritance generator
+instead of this narrower interface.
+
+Call `adapter.register_type(Source)` while loading the Python module, and
+`adapter.render_sv("SourceCallbacks")` at generation time. The latter emits a
+class inside the consumer's chosen package, which must import `svx_pkg`.
+Construct it with `new()` from an SV function, then call its declared methods.
+The emitted code alone owns object registration, empty call framing, DPI calls
+and construction rollback; consumers must not copy or edit that private glue.
+Generation is deterministic for the same adapter declaration and class name.
+
+The original Python class is not modified or replaced. Its instance is bound
+before `__init__` runs and is retained until SVX shutdown. Construction and
+function callbacks reject blocking operations; task callbacks use normal SVX
+timing and cancellation. Python exceptions follow the normal fatal SVX policy.
+Initialize/load SVX before constructing adapters, and shut it down after the
+host framework completes. This interface does not replace the host's factory,
+scheduler, phase system or objection policy.
+
 ## Stable SystemVerilog API
 
 User code imports `svx_pkg` and uses `svx_init`,

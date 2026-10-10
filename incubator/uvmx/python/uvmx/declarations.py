@@ -6,10 +6,9 @@ from dataclasses import dataclass
 import inspect
 import re
 from types import MappingProxyType
-from typing import Any, Callable
+from typing import Callable
 
-import svx.inheritance
-from svx.callback_context import blocking_operations_disallowed
+from svx.callbacks import Callback, CallbackAdapter
 
 
 _SV_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*\Z")
@@ -46,25 +45,24 @@ class UvmTestDeclaration:
 
     @property
     def function_phases(self) -> tuple[str, ...]:
-        return tuple(name for name in _FUNCTION_PHASES if name in self.python_type.__dict__)
+        return tuple(name for name in _FUNCTION_PHASES
+                     if getattr(self.python_type, name) is not getattr(Test, name))
 
     @property
     def task_phases(self) -> tuple[str, ...]:
-        return tuple(name for name in _TASK_PHASES if name in self.python_type.__dict__)
+        return tuple(name for name in _TASK_PHASES
+                     if getattr(self.python_type, name) is not getattr(Test, name))
+
+    @property
+    def callback_adapter(self) -> CallbackAdapter:
+        return CallbackAdapter(self.canonical_id, tuple(
+            Callback(name, "function" if name in _FUNCTION_PHASES else "task")
+            for name in (*self.function_phases, *self.task_phases)
+        ))
 
 
 _DECLARATIONS_BY_ID: dict[str, UvmTestDeclaration] = {}
 _DECLARATIONS_BY_FACTORY: dict[str, UvmTestDeclaration] = {}
-
-
-def _empty_contract(method_id: str) -> dict[str, dict[str, Any]]:
-    return {
-        method_id: {
-            "parameters": (),
-            "request": (),
-            "response": (),
-        }
-    }
 
 
 def _validate_phase_signature(cls: type["Test"], name: str) -> None:
@@ -117,12 +115,9 @@ def _validate_class(cls: type["Test"], canonical_id: str, sv_base: str, factory_
 class Test:
     """Base class for an opt-in Python UVM test proxy.
 
-    UVM creates the paired SV component.  Its generated proxy calls
-    :meth:`__svx_create_from_sv__`, which creates and binds this Python object
-    before any mapped phase callback may run.
+    UVM creates the paired SV component. Its generated callback adapter creates
+    the Python companion before any mapped phase callback may run.
     """
-
-    _uvmx_object_id: int
 
     def build_phase(self) -> None:
         pass
@@ -138,32 +133,6 @@ class Test:
 
     def run_phase(self) -> None:
         pass
-
-    def __svx_dispatch_foreign__(self, method_name: str, *arguments: object) -> object:
-        """Apply the SV function-context rule to mapped U0 function phases."""
-
-        method = getattr(self, method_name)
-        if method_name in _FUNCTION_PHASES:
-            with blocking_operations_disallowed(f"UVMX function phase {method_name}()"):
-                return method(*arguments)
-        return method(*arguments)
-
-    @classmethod
-    def __svx_create_from_sv__(cls, object_id: int) -> "Test":
-        instance = cls.__new__(cls)
-        instance._uvmx_object_id = object_id
-        svx.inheritance.bind_instance(object_id, instance)
-        try:
-            # UVM's factory invokes proxy construction from an SV function.
-            # The companion initializer therefore has the same no-blocking
-            # rule as mapped function phases.
-            with blocking_operations_disallowed("UVMX Python test construction"):
-                cls.__init__(instance)
-        except BaseException:
-            svx.inheritance.unbind_instance(object_id)
-            raise
-        return instance
-
 
 def uvm_test(
     *,
@@ -182,14 +151,11 @@ def uvm_test(
         prior_factory = _DECLARATIONS_BY_FACTORY.get(factory_name)
         if prior_factory is not None and prior_factory.python_type is not cls:
             raise ValueError(f"duplicate UVMX factory_name: {factory_name}")
+        declaration.callback_adapter.register_type(cls)
         _DECLARATIONS_BY_ID[canonical_id] = declaration
         _DECLARATIONS_BY_FACTORY[factory_name] = declaration
         setattr(cls, "__uvmx_declaration__", declaration)
 
-        svx.inheritance.register_constructor(canonical_id, ())
-        svx.inheritance.register_python_subclass(canonical_id, cls)
-        for phase in _SUPPORTED_PHASES:
-            svx.inheritance.register_contract(_empty_contract(f"{canonical_id}#{phase}"))
         return cls
 
     return decorate

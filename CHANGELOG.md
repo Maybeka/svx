@@ -4,6 +4,11 @@ All notable changes to SVX are documented in this file.
 
 ## Unreleased
 
+- Adds the public `svx.callbacks` generation interface for synchronous,
+  callback-only integrations with an existing SV framework. Consumers declare
+  function/task callbacks; generated adapters own companion construction,
+  private transport and function-context enforcement.
+
 - Requires SvTypes 1.4.2 for public codec, external-storage and field-policy fixes.
   Missing or noncallable normalization/identity APIs fail early instead of
   being misreported as invalid user annotations.
