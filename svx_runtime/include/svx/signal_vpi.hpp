@@ -13,5 +13,6 @@ int svx_vpi_signal_force(const char *path, int width,
                          const std::uint8_t *data, int size);
 int svx_vpi_signal_release(const char *path, int width);
 void svx_vpi_signal_clear_cache();
+int svx_vpi_waveform_validate_scope(const char *path);
 
 }

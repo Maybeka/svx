@@ -20,6 +20,7 @@ namespace {
 PyObject *g_context_error = nullptr;
 PyObject *g_signal_error = nullptr;
 PyObject *g_cancelled_error = nullptr;
+PyObject *g_waveform_error = nullptr;
 std::unordered_map<unsigned long long, PyObject *> g_inheritance_instances;
 thread_local std::vector<std::string> g_inheritance_call_frames;
 std::uint64_t g_inheritance_callback_count = 0;
@@ -110,6 +111,62 @@ PyObject *raise_cancellation(PyThreadState *thread_state) {
   PyErr_SetString(g_cancelled_error ? g_cancelled_error : PyExc_RuntimeError,
                   "SVX execution cancelled");
   return nullptr;
+}
+
+PyObject *py_waveform_available(PyObject *, PyObject *) {
+  return PyBool_FromLong(svx::runtime_ready() && svx::dpi::waveform_available());
+}
+
+PyObject *py_waveform_state(PyObject *, PyObject *) {
+  if (!require_context("svx.waveform.state()")) return nullptr;
+  return PyUnicode_FromString(svx::dpi::waveform_state());
+}
+
+PyObject *py_waveform_begin(PyObject *, PyObject *args) {
+  const char *path = nullptr;
+  PyObject *selected = nullptr;
+  if (!PyArg_ParseTuple(args, "sO:waveform_begin", &path, &selected)) return nullptr;
+  if (!require_context("svx.waveform.begin()")) return nullptr;
+  PyObject *sequence = PySequence_Fast(selected, "waveform scopes must be a sequence");
+  if (sequence == nullptr) return nullptr;
+  std::vector<svx::dpi::WaveformScope> scopes;
+  for (Py_ssize_t index = 0; index < PySequence_Fast_GET_SIZE(sequence); ++index) {
+    const char *scope = nullptr;
+    int depth = 0;
+    if (!PyArg_ParseTuple(PySequence_Fast_GET_ITEM(sequence, index), "si", &scope, &depth)) {
+      Py_DECREF(sequence);
+      return nullptr;
+    }
+    scopes.push_back({scope, depth});
+  }
+  Py_DECREF(sequence);
+  PyThreadState *thread_state = PyThreadState_Get();
+  try {
+    svx::dpi::waveform_begin(path, scopes);
+  } catch (const std::exception &error) {
+    svx::ExecutionContext::restore(thread_state);
+    PyErr_SetString(g_waveform_error ? g_waveform_error : PyExc_RuntimeError, error.what());
+    return nullptr;
+  }
+  svx::ExecutionContext::restore(thread_state);
+  Py_RETURN_NONE;
+}
+
+PyObject *py_waveform_command(PyObject *, PyObject *args) {
+  int operation = 0, depth = 0;
+  const char *path = nullptr;
+  if (!PyArg_ParseTuple(args, "isi:waveform_command", &operation, &path, &depth)) return nullptr;
+  if (!require_context("svx.waveform")) return nullptr;
+  PyThreadState *thread_state = PyThreadState_Get();
+  try {
+    svx::dpi::waveform_command(operation, path, depth);
+  } catch (const std::exception &error) {
+    svx::ExecutionContext::restore(thread_state);
+    PyErr_SetString(g_waveform_error ? g_waveform_error : PyExc_RuntimeError, error.what());
+    return nullptr;
+  }
+  svx::ExecutionContext::restore(thread_state);
+  Py_RETURN_NONE;
 }
 
 PyObject *py_display(PyObject *, PyObject *args) {
@@ -820,6 +877,10 @@ PyObject *py_channel_try_get_payload(PyObject *, PyObject *args) {
 }
 
 PyMethodDef methods[] = {
+    {"waveform_available", py_waveform_available, METH_NOARGS, "Query optional waveform support"},
+    {"waveform_state", py_waveform_state, METH_NOARGS, "Return waveform recording state"},
+    {"waveform_begin", py_waveform_begin, METH_VARARGS, "Begin a waveform recording"},
+    {"waveform_command", py_waveform_command, METH_VARARGS, "Control waveform recording"},
     {"display", py_display, METH_VARARGS, "Display through SVX"},
     {"delay", py_delay, METH_VARARGS, "Delay through SVX"},
     {"fork_join", py_fork_join, METH_VARARGS, "SV-backed fork/join"},
@@ -870,6 +931,7 @@ PyMethodDef methods[] = {
 };
 
 void module_free(void *) {
+  Py_CLEAR(g_waveform_error);
   Py_CLEAR(g_context_error);
   Py_CLEAR(g_signal_error);
   Py_CLEAR(g_cancelled_error);
@@ -900,6 +962,7 @@ PyMODINIT_FUNC PyInit__svx_native(void) {
     g_context_error = PyObject_GetAttrString(errors, "SVXContextError");
     g_signal_error = PyObject_GetAttrString(errors, "SVXSignalError");
     g_cancelled_error = PyObject_GetAttrString(errors, "SVXCancellationError");
+    g_waveform_error = PyObject_GetAttrString(errors, "SVXWaveformError");
     Py_DECREF(errors);
   } else {
     PyErr_Clear();

@@ -781,6 +781,12 @@ summaries or transactions through typed channels.
 
 ## 19. Debug Checklist
 
+Optional waveform recording is available through `svx.waveform` when a compiled
+backend bridge and direct hierarchical access are present. See the
+[waveform example](../examples/waveform_control/README.md) for setup, runtime
+scope/depth selection, pause/resume, file switching and finish/restart semantics.
+It is separate from `Signal` read/write/force operations.
+
 When integration fails, check:
 
 - `PYTHONPATH` includes the repository and project Python roots

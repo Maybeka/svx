@@ -13,6 +13,7 @@ package svx_pkg;
   `include "sv/svx_channel.sv"
   `include "sv/svx_inheritance.sv"
   `include "sv/svx_error.sv"
+  `include "sv/svx_waveform.sv"
 endpackage
 
 `endif

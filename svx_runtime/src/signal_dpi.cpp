@@ -29,6 +29,22 @@ vpiHandle resolve(const char *path, int width) {
 
 } // namespace
 
+extern "C" int svx_vpi_waveform_validate_scope(const char *path) {
+  // A null query asks only whether direct hierarchical validation was built.
+  if (path == nullptr) return 1;
+  vpiHandle handle = vpi_handle_by_name(const_cast<PLI_BYTE8 *>(path), nullptr);
+  if (handle == nullptr) return -1;
+  const int type = vpi_get(vpiType, handle);
+  bool supported = type == vpiModule;
+#ifdef vpiGenScope
+  supported = supported || type == vpiGenScope;
+#endif
+#ifdef vpiInterface
+  supported = supported || type == vpiInterface;
+#endif
+  return supported ? 1 : -2;
+}
+
 extern "C" int svx_vpi_signal_validate(const char *path, int width,
                                          int signed_value) {
   if (path == nullptr || width <= 0) return -4;

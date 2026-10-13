@@ -33,6 +33,9 @@ native runtime 资源按文档规定的顺序释放。故意错误的用例通�
 
 ## 学习路径
 
+需要按时间区间和层次选择记录波形时，参见[可选波形控制](waveform_control/README.zh-CN.md)：
+运行时 scope/深度、启停、切换文件，以及结束后重新建立选择。
+
 1. 阅读[基础启动](milestone_1_basic/README.zh-CN.md)，理解 runtime entry
    boundary 与由仿真器拥有的时间。
 2. 运行[寄存器小项目](register_lab/README.zh-CN.md)，按阅读顺序检查各个结果标记；

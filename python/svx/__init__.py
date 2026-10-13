@@ -9,6 +9,7 @@ from .errors import (
     SVXRemoteError,
     SVXChannelError,
     SVXSignalError,
+    SVXWaveformError,
     get_exception_policy,
     set_exception_policy,
 )
@@ -48,6 +49,7 @@ from .declarations import (
 )
 from .signal import Signal, declare_signal
 from .runtime import RuntimeState, state as runtime_state
+from . import waveform
 
 __all__ = [
     "ProcessGroup",
@@ -64,6 +66,7 @@ __all__ = [
     "SVXRemoteError",
     "SVXChannelError",
     "SVXSignalError",
+    "SVXWaveformError",
     "__version__",
     "Signal",
     "SVMirror",
@@ -104,4 +107,5 @@ __all__ = [
     "sv_mirror",
     "test",
     "virtual_interface_handle",
+    "waveform",
 ]

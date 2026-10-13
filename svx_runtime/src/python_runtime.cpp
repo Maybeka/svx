@@ -166,6 +166,7 @@ bool finish_runtime() {
     call_runtime_hook("_native_abort_initialize");
     g_runtime_state = svx::RuntimeState::Uninitialized;
   } else {
+    svx::dpi::waveform_initialize();
     g_runtime_state = svx::RuntimeState::Ready;
   }
   PyGILState_Release(gstate);

@@ -6,6 +6,15 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
+_WAVEFORM_BRIDGE = {'svx_waveform_bridge_abi', 'svx_waveform_execute'}
+
+
+def _package_tree(pyslang, enabled):
+    manager = pyslang.SourceManager()
+    manager.addUserDirectories(str(ROOT))
+    prefix = '`define SVX_ENABLE_FSDB_WAVEFORM\n' if enabled else ''
+    return pyslang.syntax.SyntaxTree.fromText(
+        prefix + (ROOT / 'sv/svx_pkg.sv').read_text(), manager)
 
 
 def _package_symbols(package, syntax):
@@ -42,13 +51,12 @@ def _classification():
     return result
 
 
-def test_all_sv_package_declarations_have_explicit_classification():
+@pytest.mark.parametrize('enabled', [False, True])
+def test_all_sv_package_declarations_have_explicit_classification(enabled):
     pyslang = pytest.importorskip("pyslang")
     from pyslang import syntax
 
-    manager = pyslang.SourceManager()
-    manager.addUserDirectories(str(ROOT))
-    tree = syntax.SyntaxTree.fromFile(str(ROOT / "sv/svx_pkg.sv"), manager)
+    tree = _package_tree(pyslang, enabled)
     assert not list(tree.diagnostics)
     package = tree.root
     if package.kind == syntax.SyntaxKind.CompilationUnit:
@@ -57,23 +65,29 @@ def test_all_sv_package_declarations_have_explicit_classification():
     assert package.kind == syntax.SyntaxKind.PackageDeclaration
     actual = _package_symbols(package, syntax)
     classified = _classification()
-    assert actual == set(classified), {
-        "unclassified": sorted(actual - set(classified)),
-        "not_declared": sorted(set(classified) - actual),
+    expected = set(classified) if enabled else set(classified) - _WAVEFORM_BRIDGE
+    assert actual == expected, {
+        "unclassified": sorted(actual - expected),
+        "not_declared": sorted(expected - actual),
     }
+    if not enabled:
+        assert '$fsdb' not in str(package)
 
 
-def test_every_core_dpi_export_has_a_compiler_signature_check():
+@pytest.mark.parametrize('enabled', [False, True])
+def test_every_core_dpi_export_has_a_compiler_signature_check(enabled):
     pyslang = pytest.importorskip("pyslang")
-    manager = pyslang.SourceManager()
-    manager.addUserDirectories(str(ROOT))
-    tree = pyslang.syntax.SyntaxTree.fromFile(str(ROOT / "sv/svx_pkg.sv"), manager)
+    tree = _package_tree(pyslang, enabled)
     assert not list(tree.diagnostics)
-    package = tree.root.members[0]
+    package = tree.root
+    if package.kind == pyslang.syntax.SyntaxKind.CompilationUnit:
+        package = package.members[0]
     exports = {str(member.name).strip() for member in package.members
                if member.kind == pyslang.syntax.SyntaxKind.DPIExport}
     native = (ROOT / "svx_runtime/src/sv_dpi.cpp").read_text()
     checks = set(re.findall(r"decltype\(&::([A-Za-z_][A-Za-z_0-9]*)\)", native))
+    if not enabled:
+        checks -= _WAVEFORM_BRIDGE
     assert exports == checks
     assert "using func_t = void (*)(" not in native
 

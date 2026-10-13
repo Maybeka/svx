@@ -177,6 +177,41 @@ an object with a reinterpreted pointer. Per-ancestor constructor records are
 private generated transport, not a user-facing constructor API. Qualified
 alternating chains, including Python-root chains, use the integrated source path.
 
+## Optional Waveform API
+
+The `waveform` module (`svx.waveform`) and `SVXWaveformError` provide optional
+simulator-owned recording.
+`waveform.capabilities()` returns a `frozenset` containing `string_scopes`,
+`dynamic_depth`, `pause_resume`, `switch_file`, `add_scope`, and `finish_restart`
+when a compatible bridge and direct hierarchical validation are available;
+otherwise it is empty. Import alone does not activate a backend. Runtime
+initialization discovers the compiled bridge, not a simulator brand name.
+
+| Call | Behavior |
+|---|---|
+| `begin(path, *, scopes=[(scope, depth), ...])` | Validate all scopes, then start a fresh selection; requires idle state |
+| `pause()` / `resume()` | Suspend/resume recording, not simulation; repeated same-state calls are harmless |
+| `add_scope(path, depth=0)` | Add a module scope, without removing previous signals or reconstructing history |
+| `switch_file(path)` | Continue the selection in a new file, preserving recording/paused state |
+| `flush()` | Flush buffers without ending recording |
+| `finish()` | Close all backend outputs and return to idle; idempotent |
+| `state()` | Return `waveform.State.IDLE`, `RECORDING`, or `PAUSED` |
+
+Control calls require a simulator-owned task context; function callbacks reject
+them. Scope names are runtime strings, depth is a nonnegative signed32 integer:
+1 means current scope,2 includes the next level,0 means all descendants. Paths
+accept text and `PathLike[str]`; parent directories must exist. Existing and
+previously used filenames are rejected. Errors use `SVXWaveformError` or
+`SVXContextError`. Capability availability is not proof of every individual
+signal's visibility or every internal dumper/disk operation succeeding.
+
+The supplied FSDB wrapper is enabled by the SV preprocessor macro
+`SVX_ENABLE_FSDB_WAVEFORM`; it requires an external dumping backend and native
+direct VPI support. It is excluded by default. Compile the optional wrapper as
+a capability probe before enabling it in a build. The interface owns a global
+session; do not mix it with independent SV/Tcl dump control. Finish before
+shutdown. See the bilingual [waveform example](../examples/waveform_control/README.md).
+
 ## Experimental Python API
 
 `publish_object` (`publish_object(name, instance)`) explicitly hands an already-bound live
@@ -385,6 +420,7 @@ private classes inherit their private classification.
 | Private | Object dispatch and lifecycle | `svx_create_object`, `svx_create_object_function`, `svx_invoke_object`, `svx_invoke_object_function`, `svx_invoke_static`, `svx_invoke_static_function`, `svx_release_object`, `svx_release_object_function`, `svx_publish_object`, `svx_require_published_object` |
 | Private | Inheritance DPI imports | `svx_inheritance_call_python`, `svx_inheritance_call_python_function`, `svx_inheritance_shutdown`, `svx_inheritance_release_python`, `svx_inheritance_release_python_function`, `svx_inheritance_create_python`, `svx_inheritance_create_python_function` |
 | Private | Fatal reporting implementation | `svx_fatal_svx` |
+| Private | Optional waveform bridge | `svx_waveform_bridge_abi`, `svx_waveform_execute` |
 
 Stable raw payload calls are untyped integration facilities, not a second typed
 wire protocol. Fixed limits describe runtime bounds; do not override them

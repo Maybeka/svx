@@ -55,6 +55,7 @@ packages = ["svx"]
   "sv/svx_process.sv",
   "sv/svx_signal.sv",
   "sv/svx_timing.sv",
+  "sv/svx_waveform.sv",
 ]
 "share/svx/svx_runtime/include/svx" = [
   "svx_runtime/include/svx/common.hpp",

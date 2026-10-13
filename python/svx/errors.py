@@ -22,6 +22,10 @@ class SVXChannelError(SVXError):
     """Raised when channel payload metadata or typed conversion is invalid."""
 
 
+class SVXWaveformError(SVXError):
+    """Raised when optional waveform recording is unavailable or invalid."""
+
+
 class SVXSignalError(SVXError):
     """Raised when hierarchical signal resolution or access fails."""
 

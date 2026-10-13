@@ -837,6 +837,12 @@ Python 标准库、SVX/SvTypes 及源码解析器的实现模块不列入自动�
 
 ## 12. 按需查找完整示例
 
+可选的[波形控制示例](../examples/waveform_control/README.zh-CN.md)演示
+`svx.waveform`。它不替代层次信号读写：波形后端负责大量信号的变化记录，
+Python 只控制录制区间、文件和 scope。接口默认禁用；先配置后端并编译可选
+wrapper，再查询 `capabilities()`。`switch_file` 保留选择，`finish` 后的下一次
+`begin` 重建选择；运行中 `add_scope` 不支持移除旧信号。
+
 | 需求 | 示例 |
 |---|---|
 | 同一 DUT 的综合学习与维护路径 | [寄存器验证小项目](../examples/register_lab/README.zh-CN.md) |

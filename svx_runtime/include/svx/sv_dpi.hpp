@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace svx::dpi {
 
@@ -36,6 +37,8 @@ using ReleaseObjectFunction = void (*)(ObjectId);
 using CreateObject = int (*)(const char *, void *, unsigned char *, ObjectId *,
                              const char **);
 using PublishObject = int (*)(const char *, ObjectId);
+using WaveformBridgeAbi = unsigned int (*)();
+using WaveformExecute = int (*)(int, const char *, int);
 } // namespace abi
 
 inline constexpr std::size_t SVX_MAX_PAYLOAD_BYTES = 16U * 1024U * 1024U;
@@ -83,5 +86,15 @@ void svx_release_object_function(std::uint64_t object_id);
 bool svx_create_object(const char *class_id, void *request,
                        std::uint64_t *object_id, std::string *error);
 void svx_publish_object(const char *name, std::uint64_t object_id);
+
+struct WaveformScope {
+  std::string path;
+  int depth;
+};
+void waveform_initialize();
+bool waveform_available();
+const char *waveform_state();
+void waveform_begin(const char *path, const std::vector<WaveformScope> &scopes);
+void waveform_command(int operation, const char *path = "", int depth = 0);
 
 } // namespace svx::dpi

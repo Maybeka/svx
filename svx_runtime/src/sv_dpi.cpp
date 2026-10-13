@@ -1,10 +1,13 @@
 #include "svx/sv_dpi.hpp"
+#include "svx/signal_vpi.hpp"
 
 #include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <vector>
 #include <type_traits>
+#include <filesystem>
+#include <unordered_set>
 
 #if defined(SVX_CHECK_DPI_EXPORT_CONTRACT)
 static_assert(std::is_same_v<svx::dpi::abi::ProcessStatus,
@@ -32,6 +35,13 @@ static_assert(std::is_same_v<svx::dpi::abi::ReleaseObject, decltype(&::svx_relea
 static_assert(std::is_same_v<svx::dpi::abi::ReleaseObjectFunction, decltype(&::svx_release_object_function)>);
 static_assert(std::is_same_v<svx::dpi::abi::CreateObject, decltype(&::svx_create_object)>);
 static_assert(std::is_same_v<svx::dpi::abi::PublishObject, decltype(&::svx_publish_object)>);
+#endif
+
+#if defined(SVX_CHECK_DPI_WAVEFORM_CONTRACT)
+static_assert(std::is_same_v<svx::dpi::abi::WaveformBridgeAbi,
+                            decltype(&::svx_waveform_bridge_abi)>);
+static_assert(std::is_same_v<svx::dpi::abi::WaveformExecute,
+                            decltype(&::svx_waveform_execute)>);
 #endif
 
 #if defined(_WIN32)
@@ -81,13 +91,18 @@ struct NativePayload {
   std::vector<std::uint8_t> data;
 };
 
-template <typename T> T resolve_symbol(const char *name) {
+template <typename T> T optional_symbol(const char *name) {
 #if defined(_WIN32)
   HMODULE self = GetModuleHandle(nullptr);
   auto symbol = reinterpret_cast<T>(GetProcAddress(self, name));
 #else
   auto symbol = reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
 #endif
+  return symbol;
+}
+
+template <typename T> T resolve_symbol(const char *name) {
+  auto symbol = optional_symbol<T>(name);
   if (symbol == nullptr) {
     throw std::runtime_error(std::string("SVX could not resolve DPI symbol: ") +
                              name);
@@ -95,9 +110,105 @@ template <typename T> T resolve_symbol(const char *name) {
   return symbol;
 }
 
+svx::dpi::abi::WaveformExecute waveform_execute = nullptr;
+enum class WaveformState { Idle, Recording, Paused };
+WaveformState wave_state = WaveformState::Idle;
+std::unordered_set<std::string> waveform_files;
+
+void execute_waveform(int operation, const char *path = "", int depth = 0) {
+  ScopedDpiScope scope;
+  if (waveform_execute(operation, path, depth) != 0 || svIsDisabledState() != 0)
+    throw std::runtime_error("waveform bridge call was disabled");
+}
+
+std::string validate_waveform_file(const char *path) {
+  if (path == nullptr || *path == '\0')
+    throw std::runtime_error("waveform filename must not be empty");
+  const auto file = std::filesystem::absolute(path).lexically_normal();
+  if (!std::filesystem::is_directory(file.parent_path()))
+    throw std::runtime_error("waveform output directory does not exist");
+  const auto identity = file.string();
+  if (waveform_files.contains(identity) || std::filesystem::exists(file))
+    throw std::runtime_error("waveform output filename already exists or was used; choose a new filename");
+  return identity;
+}
+
+void validate_waveform_scope(const char *path, int depth) {
+  if (path == nullptr || *path == '\0' || depth < 0)
+    throw std::runtime_error("waveform scope and nonnegative depth are required");
+  const int valid = svx_vpi_waveform_validate_scope(path);
+  if (valid != 1)
+    throw std::runtime_error(std::string("waveform scope is missing or not an accessible module scope: ") + path);
+}
+
 } // namespace
 
 namespace svx::dpi {
+
+void waveform_initialize() {
+  waveform_execute = nullptr;
+  wave_state = WaveformState::Idle;
+  waveform_files.clear();
+  auto abi = optional_symbol<abi::WaveformBridgeAbi>("svx_waveform_bridge_abi");
+  auto execute = optional_symbol<abi::WaveformExecute>("svx_waveform_execute");
+  if (abi == nullptr || execute == nullptr || svx_vpi_waveform_validate_scope(nullptr) != 1)
+    return;
+  ScopedDpiScope scope;
+  if (abi() == 1) waveform_execute = execute;
+}
+
+bool waveform_available() { return waveform_execute != nullptr; }
+
+const char *waveform_state() {
+  switch (wave_state) {
+  case WaveformState::Recording: return "recording";
+  case WaveformState::Paused: return "paused";
+  default: return "idle";
+  }
+}
+
+void waveform_begin(const char *path, const std::vector<WaveformScope> &scopes) {
+  if (!waveform_available()) throw std::runtime_error("no compatible waveform bridge is available");
+  if (wave_state != WaveformState::Idle)
+    throw std::runtime_error("waveform begin requires finish of the current recording");
+  if (scopes.empty()) throw std::runtime_error("waveform begin requires at least one scope");
+  const auto file = validate_waveform_file(path);
+  for (const auto &scope : scopes) validate_waveform_scope(scope.path.c_str(), scope.depth);
+  // Validate the entire selection before opening a file or changing dump state.
+  try {
+    execute_waveform(1, path);
+    waveform_files.insert(file);
+    execute_waveform(3);
+    for (const auto &scope : scopes) execute_waveform(2, scope.path.c_str(), scope.depth);
+    execute_waveform(4);
+    wave_state = WaveformState::Recording;
+  } catch (...) {
+    try { execute_waveform(7); } catch (...) {}
+    wave_state = WaveformState::Idle;
+    throw;
+  }
+}
+
+void waveform_command(int operation, const char *path, int depth) {
+  if (!waveform_available()) throw std::runtime_error("no compatible waveform bridge is available");
+  if (operation == 7 && wave_state == WaveformState::Idle) return;
+  if (wave_state == WaveformState::Idle)
+    throw std::runtime_error("waveform operation requires an active recording");
+  if (operation == 3 && wave_state == WaveformState::Paused) return;
+  if (operation == 4 && wave_state == WaveformState::Recording) return;
+  if (operation == 2) validate_waveform_scope(path, depth);
+  std::string file;
+  if (operation == 6) file = validate_waveform_file(path);
+  if (operation < 2 || operation > 7)
+    throw std::runtime_error("invalid waveform operation");
+  execute_waveform(operation, path, depth);
+  if ((operation == 2 || operation == 6) && wave_state == WaveformState::Paused)
+    execute_waveform(3);
+  if (operation == 3) wave_state = WaveformState::Paused;
+  if (operation == 4) wave_state = WaveformState::Recording;
+  if (operation == 7) wave_state = WaveformState::Idle;
+  if (operation == 6) waveform_files.insert(file);
+}
 
 void *payload_create(const char *kind, const char *type_name,
                      const char *content_type, const std::uint8_t *data,

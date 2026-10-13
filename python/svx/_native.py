@@ -8,6 +8,22 @@ def display(message: str) -> None:
     _native().display(str(message))
 
 
+def waveform_available() -> bool:
+    return bool(_native().waveform_available())
+
+
+def waveform_state() -> str:
+    return _native().waveform_state()
+
+
+def waveform_begin(path: str, scopes: tuple[tuple[str, int], ...]) -> None:
+    _native().waveform_begin(path, scopes)
+
+
+def waveform_command(operation: int, path: str, depth: int) -> None:
+    _native().waveform_command(operation, path, depth)
+
+
 def delay(duration: float, unit_code: int) -> None:
     _native().delay(float(duration), int(unit_code))
 

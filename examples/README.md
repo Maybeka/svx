@@ -26,6 +26,7 @@ the [example run guide](RUNNING_EXAMPLES.md).
 | Pass an arbitrary SV class or a virtual interface | [Foreign handles](foreign_handles) | Opaque class `RemoteRef`, generated VIF view, static modport access, and handle identity |
 | Inspect or temporarily alter a hierarchy path | [Hierarchical signal access](hierarchical_signal_access) | Predeclaration, startup validation, read/write, force/release, and four-state values |
 | Use raw bytes instead of a typed model | [Payload channels](milestone_2_payload_channel) | Binary payload, peek, and nonblocking channel operations |
+| Record selected simulation intervals and scopes | [Waveform control](waveform_control/README.md) | Optional backend, runtime scope/depth, pause/resume, file switching and fresh selections |
 | Understand runtime behavior | [Fork/join](milestone_1_fork), [shared state](milestone_1_shared_state), and [error policy](milestone_1_error) | Simulator-backed process control, Python heap sharing, and uncaught-exception handling |
 
 The `milestone_*` directory names are retained for source and regression
