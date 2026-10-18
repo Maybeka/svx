@@ -167,3 +167,8 @@ selects Python-defined and SV-defined Tests through the same UVM factory's
 `+UVM_TESTNAME`. Its bilingual READMEs describe setup and expected results. This
 temporary adapter is not exported in the SVX package, is not a core dependency,
 and does not promise deep UVM class mapping.
+The adapter also includes `register_lab_extended_test`, a Python subclass with
+its own state and an additional build callback. Python tests are registered at
+startup, not emitted as individual SV classes. After the initial build, adding
+a decorated test using an already compiled SV base requires only a simulator
+restart with its new `+UVM_TESTNAME`; do not regenerate or recompile SV.

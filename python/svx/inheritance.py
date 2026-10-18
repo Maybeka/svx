@@ -7140,6 +7140,9 @@ def create_python_instance(class_id: str, object_id: int, payload: bytes) -> Non
 
     from .callback_context import blocking_operations_disallowed
 
+    if class_id.startswith('svx-callback-create:'):
+        from .callbacks import _resolve_constructor_selector
+        class_id = _resolve_constructor_selector(class_id)
     with blocking_operations_disallowed(f"executing SV constructor {class_id}"):
         if class_id.startswith(_PYTHON_RECEIVER_EXPECT_PREFIX):
             if payload:

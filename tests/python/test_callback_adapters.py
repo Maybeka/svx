@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import svx
@@ -137,3 +139,45 @@ def test_registration_can_restore_cleared_contracts(monkeypatch):
     assert adapter.class_id in inheritance._constructor_contracts
     assert adapter.class_id + "#run" in inheritance._method_contracts
     assert adapter.class_id in inheritance._python_subclasses
+
+
+def test_runtime_selection_uses_existing_factory_and_original_receiver(monkeypatch):
+    instances = {}
+    calls = []
+    monkeypatch.setattr(inheritance, "bind_instance", lambda key, value: instances.__setitem__(key, value))
+    monkeypatch.setattr(svx._native, "inheritance_get", instances.get)
+
+    class RuntimeSource:
+        def __init__(self):
+            assert instances[95] is self
+            calls.append(self)
+
+        def run(self):
+            calls.append(self)
+
+    adapter = CallbackAdapter("py://callback/RuntimeSelected", (Callback("run", "task"),))
+    adapter.register_type(RuntimeSource)
+    selector = "svx-callback-create:" + json.dumps({
+        "class_id": adapter.class_id, "callbacks": [["run", "task"]],
+    })
+    inheritance.create_python_instance(selector, 95, b"")
+    inheritance.dispatch_python_call(95, adapter.class_id + "#run", b"")
+    assert type(instances[95]) is RuntimeSource
+    assert calls == [instances[95], instances[95]]
+
+
+@pytest.mark.parametrize("target,callbacks,match", [
+    ("py://callback/Unknown", [["run", "task"]], "unregistered"),
+    ("py://callback/SelectorShape", [["run", "function"]], "contract"),
+])
+def test_runtime_selection_rejects_incompatible_target_before_binding(monkeypatch, target, callbacks, match):
+    class Source:
+        def run(self):
+            pass
+
+    if target == "py://callback/SelectorShape":
+        CallbackAdapter(target, (Callback("run", "task"),)).register_type(Source)
+    monkeypatch.setattr(inheritance, "bind_instance", lambda *_: pytest.fail("must not bind"))
+    selector = "svx-callback-create:" + json.dumps({"class_id": target, "callbacks": callbacks})
+    with pytest.raises(svx.SVXInheritanceError, match=match):
+        inheritance.create_python_instance(selector, 96, b"")

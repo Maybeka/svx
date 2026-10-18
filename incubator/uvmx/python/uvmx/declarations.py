@@ -7,8 +7,8 @@ import inspect
 import re
 from types import MappingProxyType
 from typing import Callable
-
 from svx.callbacks import Callback, CallbackAdapter
+
 
 
 _SV_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*\Z")
@@ -24,11 +24,13 @@ _FUNCTION_PHASES = (
 )
 _TASK_PHASES = ("run_phase",)
 _SUPPORTED_PHASES = frozenset((*_FUNCTION_PHASES, *_TASK_PHASES))
+PHASE_CALLBACKS = tuple(Callback(name, 'function') for name in _FUNCTION_PHASES) + tuple(
+    Callback(name, 'task') for name in _TASK_PHASES)
 
 
 @dataclass(frozen=True, slots=True)
 class UvmTestDeclaration:
-    """Complete declarative description of one generated UVM test proxy."""
+    """Runtime registration metadata for one Python-owned UVM test."""
 
     canonical_id: str
     sv_base: str
@@ -53,24 +55,16 @@ class UvmTestDeclaration:
         return tuple(name for name in _TASK_PHASES
                      if getattr(self.python_type, name) is not getattr(Test, name))
 
-    @property
-    def callback_adapter(self) -> CallbackAdapter:
-        return CallbackAdapter(self.canonical_id, tuple(
-            Callback(name, "function" if name in _FUNCTION_PHASES else "task")
-            for name in (*self.function_phases, *self.task_phases)
-        ))
-
-
 _DECLARATIONS_BY_ID: dict[str, UvmTestDeclaration] = {}
 _DECLARATIONS_BY_FACTORY: dict[str, UvmTestDeclaration] = {}
 
 
 def _validate_phase_signature(cls: type["Test"], name: str) -> None:
-    method = cls.__dict__.get(name)
-    if method is None:
-        return
+    method = inspect.getattr_static(cls, name)
     if isinstance(method, (staticmethod, classmethod)) or not callable(method):
         raise TypeError(f"{cls.__name__}.{name} must be an instance method")
+    if inspect.iscoroutinefunction(method) or inspect.isgeneratorfunction(method):
+        raise TypeError(f"{cls.__name__}.{name} must execute synchronously")
     parameters = tuple(inspect.signature(method).parameters.values())
     if len(parameters) != 1 or parameters[0].kind not in (
         inspect.Parameter.POSITIONAL_ONLY,
@@ -82,6 +76,13 @@ def _validate_phase_signature(cls: type["Test"], name: str) -> None:
 
 
 def _validate_constructor(cls: type["Test"]) -> None:
+    try:
+        inspect.signature(cls).bind()
+    except TypeError as error:
+        raise TypeError(f"U0 mapped test {cls.__name__} must have a no-user-argument constructor") from error
+    for initializer in (cls.__new__, cls.__init__):
+        if inspect.iscoroutinefunction(initializer) or inspect.isgeneratorfunction(initializer):
+            raise TypeError('U0 test construction must execute synchronously')
     initializer = cls.__dict__.get("__init__")
     if initializer is None:
         return
@@ -105,18 +106,19 @@ def _validate_class(cls: type["Test"], canonical_id: str, sv_base: str, factory_
     if not _SV_QUALIFIED_TYPE.fullmatch(sv_base):
         raise ValueError(f"sv_base is not a legal SystemVerilog type name: {sv_base!r}")
     _validate_constructor(cls)
-    for name, member in cls.__dict__.items():
-        if name.endswith("_phase") and name not in _SUPPORTED_PHASES:
-            raise TypeError(f"U0 does not support mapped phase {cls.__name__}.{name}")
+    for base in cls.__mro__:
+        for name in base.__dict__:
+            if name.endswith("_phase") and name not in _SUPPORTED_PHASES:
+                raise TypeError(f"U0 does not support mapped phase {cls.__name__}.{name}")
     for phase in _SUPPORTED_PHASES:
         _validate_phase_signature(cls, phase)
 
 
 class Test:
-    """Base class for an opt-in Python UVM test proxy.
+    """Base class for an opt-in Python-owned UVM test.
 
-    UVM creates the paired SV component. Its generated callback adapter creates
-    the Python companion before any mapped phase callback may run.
+    UVM creates a reusable SV bridge. The public SVX callback adapter constructs
+    the selected Python test before any phase callback may run.
     """
 
     def build_phase(self) -> None:
@@ -140,7 +142,7 @@ def uvm_test(
     sv_base: str = "uvm_pkg::uvm_test",
     factory_name: str,
 ) -> Callable[[type[Test]], type[Test]]:
-    """Declare one Python test that the UVMX generator may project to SV."""
+    """Register a Python test name without generating a per-test SV class."""
 
     def decorate(cls: type[Test]) -> type[Test]:
         _validate_class(cls, canonical_id, sv_base, factory_name)
@@ -151,7 +153,7 @@ def uvm_test(
         prior_factory = _DECLARATIONS_BY_FACTORY.get(factory_name)
         if prior_factory is not None and prior_factory.python_type is not cls:
             raise ValueError(f"duplicate UVMX factory_name: {factory_name}")
-        declaration.callback_adapter.register_type(cls)
+        CallbackAdapter(canonical_id, PHASE_CALLBACKS).register_type(cls)
         _DECLARATIONS_BY_ID[canonical_id] = declaration
         _DECLARATIONS_BY_FACTORY[factory_name] = declaration
         setattr(cls, "__uvmx_declaration__", declaration)

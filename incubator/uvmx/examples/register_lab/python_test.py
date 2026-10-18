@@ -12,3 +12,20 @@ class PythonTest(Test):
 
         smoke()
         svx.display("REGISTER_LAB_UVMX_PASS")
+
+
+@uvm_test(canonical_id="py://svx/incubator/uvmx/register_lab/PythonExtendedTest",
+          factory_name="register_lab_extended_test")
+class PythonExtendedTest(PythonTest):
+    def __init__(self):
+        self.completed_runs = 0
+
+    def build_phase(self):
+        assert self.completed_runs == 0
+        svx.display("REGISTER_LAB_UVMX_EXTENDED_BUILD_PASS")
+
+    def run_phase(self):
+        super().run_phase()
+        self.completed_runs += 1
+        assert self.completed_runs == 1
+        svx.display("REGISTER_LAB_UVMX_EXTENDED_PASS")

@@ -53,7 +53,7 @@ SystemVerilog 验证环境：先建立一个由仿真器调度的 Python 入口�
 
 可选的临时 UVM 入口位于源码 `incubator/uvmx/examples/register_lab`，复用同一
 工程并通过 `+UVM_TESTNAME` 选择 Python 或 SV Test。它不随 SVX 包导出；先完成
-不依赖 UVM 的主路线，再按该目录的中英文指南运行。
+不依赖 UVM 的主路线，再按第 7.1 节及该目录的中英文指南运行。
 
 ## 0. 先记住三个设计规则
 
@@ -380,6 +380,57 @@ end
 UVM 环境同样保留其 component hierarchy、phase、objection、sequencer 和 factory。
 SVX 只用于窄的事务边界；不要把 `raise_objection`、时钟等待或 monitor sampling
 搬到 Python。
+
+### 7.1 用同一 UVM factory 启动 Python 或 SV 用例
+
+临时原型位于源码 `incubator/uvmx`。寄存器项目的可选入口位于
+`incubator/uvmx/examples/register_lab`；它复用核心项目的数据、driver、monitor
+和检查逻辑，不要求将既有 SV 用例改写成 Python。
+
+Python 用例使用同步实例方法；事务、用例逻辑和新增状态仍在 Python：
+
+```python
+from uvmx import Test, uvm_test
+
+@uvm_test(canonical_id="py://verification/Smoke", factory_name="python_smoke")
+class Smoke(Test):
+    def run_phase(self):
+        from examples.register_lab.scenarios import smoke
+        smoke()
+```
+
+首次构建按该示例的指南生成核心数据/继承契约，编译固定 UVMX 接入和已选择的
+SV 基类。SV 顶层使用 `uvmx_run_test(python_module)`，由它加载 Python 声明，
+通过 SvTypes 注册记录将名称加入正常 UVM factory，再进入 UVM `run_test()`。
+用户 Test 的创建、绑定和回调直接复用 SVX 现有机制，不另设委托对象。
+UVM 管理 phase 和 objection，Python `run_phase()` 返回后才结束该用例的 objection。
+
+寄存器示例提供以下启动选择：
+
+```text
++UVM_TESTNAME=register_lab_python_test
++UVM_TESTNAME=register_lab_extended_test
++UVM_TESTNAME=register_lab_sv_test
+```
+
+扩展用例 `PythonExtendedTest(PythonTest)` 增加 Python 状态和 `build_phase()`，
+在 `run_phase()` 中调用 Python `super()` 复用原场景。除核心检查标记外，扩展
+用例应输出 `REGISTER_LAB_UVMX_EXTENDED_BUILD_PASS` 和
+`REGISTER_LAB_UVMX_EXTENDED_PASS`。
+
+**新增用例不必重编 SV：** 在已加载模块内增加带 `@uvm_test` 的类，或在该模块
+导入一个新 Python 用例模块；指定唯一 `factory_name`，并使用已编译的 `sv_base`
+（默认 `uvm_pkg::uvm_test` 已内置）。重启同一个仿真程序并传入新名称，不再运行
+生成器或 SV 编译器。新增 Python 字段、场景及受支持 phase 的重载同样不需重编。
+这不是仿真运行中的热加载；新类必须在本次 UVM `run_test()` 前被导入。
+
+新增未编译的 SV 基类，或更改 SV 实际消费的类型契约，仍需生成并编译相应 SV。
+重复名称（包括与既有 SV 用例重名）会报错，不会覆盖。当前原型支持
+`build_phase`、`connect_phase`、`end_of_elaboration_phase`、
+`start_of_simulation_phase` 和 `run_phase`；构造无用户参数，前四个 function
+phase 和构造禁止等待，run task 可使用同步 SVX 时序。它不提供完整 UVM 类体系映射。
+
+### 7.2 仅需少量 Python 回调时
 
 已有 SV 框架只需要调用几个无参数 Python 实例方法时，可用公开
 `svx.callbacks.CallbackAdapter`，不必手写 DPI glue。寄存器项目的 `reporting.py`

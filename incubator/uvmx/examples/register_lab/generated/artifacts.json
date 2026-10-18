@@ -1,19 +1,10 @@
 {
   "package": "register_lab_uvmx_pkg",
   "schema_uri": "https://svx.dev/schema/uvmx-bootstrap-artifacts/v1",
+  "sv_bases": [
+    "uvm_pkg::uvm_test"
+  ],
   "svtypes_contract": "1.x",
   "svx_contract": "svx.callbacks.v1",
-  "tests": [
-    {
-      "canonical_id": "py://svx/incubator/uvmx/register_lab/PythonTest",
-      "factory_name": "register_lab_python_test",
-      "function_phases": [],
-      "python": "incubator.uvmx.examples.register_lab.python_test.PythonTest",
-      "sv_base": "uvm_pkg::uvm_test",
-      "task_phases": [
-        "run_phase"
-      ]
-    }
-  ],
   "uvmx_stage": "U0"
 }

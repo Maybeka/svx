@@ -296,6 +296,11 @@ Call `adapter.register_type(Source)` while loading the Python module, and
 `adapter.render_sv("SourceCallbacks")` at generation time. The latter emits a
 class inside the consumer's chosen package, which must import `svx_pkg`.
 Construct it with `new()` from an SV function, then call its declared methods.
+For runtime-selected implementations, `new(python_class_id)` selects another
+registered adapter with exactly the same ordered callback names and timings.
+An unknown class or incompatible callback contract fails before construction.
+Both forms use the same SVX object factory, binding and callback dispatch;
+the runtime selector does not introduce a second instance lifecycle.
 The emitted code alone owns object registration, empty call framing, DPI calls
 and construction rollback; consumers must not copy or edit that private glue.
 Generation is deterministic for the same adapter declaration and class name.

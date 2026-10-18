@@ -312,7 +312,11 @@ def test_register_lab_guides_match_sources_and_fault_cases():
     sources = "\n".join(path.read_text() for path in project.glob("*.py"))
     sources += (project / "tb.sv").read_text()
     cookbook = Path("docs/SVX_COOKBOOK.zh-CN.md").read_text()
-    markers = set(re.findall(r"REGISTER_LAB_[A-Z_]+", cookbook))
+    # The optional UVMX source is intentionally absent from installed SVX.
+    before_uvmx, separator, uvmx_and_after = cookbook.partition("### 7.1 ")
+    _, end_separator, after_uvmx = uvmx_and_after.partition("### 7.2 ")
+    assert separator and end_separator
+    markers = set(re.findall(r"REGISTER_LAB_[A-Z_]+", before_uvmx + after_uvmx))
     assert len(markers) >= 14
     assert all(marker in sources for marker in markers)
     for name in ("README.md", "README.zh-CN.md"):

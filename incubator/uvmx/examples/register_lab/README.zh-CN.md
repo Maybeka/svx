@@ -2,6 +2,10 @@
 
 [English](README.md)
 
+Python 用例名在启动时动态注册，不再生成逐用例 SV 类。首次构建后，新增使用
+已编译基类的 Python Test，直接通过新的 `+UVM_TESTNAME` 启动；保持原二进制
+和 native 库不变，不需要重新生成或编译 SV。
+
 这是临时 UVMX 源码中的一个启动适配，不改变[核心寄存器项目](../../../../examples/register_lab/README.zh-CN.md)
 的数据、driver、monitor 或继承实现。核心项目不导入 UVMX，也不需要 UVM。
 本目录只在源码开发中使用；临时 UVMX 尚未从 SVX 拆为独立项目。
@@ -9,7 +13,7 @@
 ## 生成与编译
 
 先按核心项目说明完成生成和运行库构建。将 `incubator/uvmx/python` 加入 Python
-导入路径，再从仓库根生成 UVM factory 代理：
+导入路径，再从仓库根生成可复用的 SV 基类注册包：
 
 ```sh
 export PYTHONPATH="$PWD/incubator/uvmx/python:$PWD/examples/register_lab/generated/python:$PWD:${PYTHONPATH:-}"
@@ -28,12 +32,16 @@ python incubator/uvmx/tools/uvmx_gen.py \
 ## 对等选择
 
 - `+UVM_TESTNAME=register_lab_python_test`：UVM factory 选择 Python 声明的 Test。
+- `+UVM_TESTNAME=register_lab_extended_test`：选择 `PythonExtendedTest(PythonTest)`，
+  验证 Python 独有状态、新增 build 回调和 Python `super()` 复用场景。
 - `+UVM_TESTNAME=register_lab_sv_test`：同一 factory 选择 `legacy_test.sv` 定义的 SV Test。
 
 两者的 run phase 都运行同一个寄存器 smoke，并保留核心场景的通过检查。
 Python 定义的用例应出现 `REGISTER_LAB_UVMX_PASS`；SV 定义的用例应出现
 `REGISTER_LAB_UVM_PASS`。两者都应出现 `REGISTER_LAB_CHECKER_PASS`、
 `REGISTER_LAB_POLICY_CLOSE_PASS` 和 `REGISTER_LAB_PYTHON_PASS`，没有 UVM/SVX 错误。
+扩展用例还应输出 `REGISTER_LAB_UVMX_EXTENDED_BUILD_PASS` 和
+`REGISTER_LAB_UVMX_EXTENDED_PASS`。
 
 这里的 SV Test 使用 SVX 启动同一 Python 场景，不是把 UVM scheduler 放到 Python。
 UVMX 仅映射 Test 和同步 phase callbacks；UVM 仍拥有 factory、phase、objection 与退出。

@@ -148,3 +148,7 @@ PacketTag 不在生成列表中，Python 只取得不透明 `RemoteRef`，可保
 源码中的 `incubator/uvmx/examples/register_lab` 复用本项目，用同一 UVM factory 的
 `+UVM_TESTNAME` 分别启动 Python 定义和 SV 定义的 Test；操作及预期结果见该目录的
 中英文 README。该临时适配不随 SVX 包导出，不是核心项目依赖，也不承诺深层 UVM 映射。
+其中 `register_lab_extended_test` 是新增状态和 build 回调的 Python 派生用例。
+Python 用例在启动时注册，不逐用例生成 SV 类。首次构建后，只要使用已编译的
+SV 基类，新增带标注的 Python 用例即可重启同一仿真程序，以新的 `+UVM_TESTNAME`
+运行，无须重新生成或编译 SV。完整流程见 Cookbook 第 7.1 节。
