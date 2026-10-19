@@ -122,6 +122,18 @@ def signal_read(path: str) -> bytes:
     return _native().signal_read(path)
 
 
+def signal_subscribe(path: str) -> int:
+    return _native().signal_subscribe(path)
+
+
+def signal_subscription_read(subscription_id: int) -> bytes:
+    return _native().signal_subscription_read(subscription_id)
+
+
+def signal_unsubscribe(subscription_id: int) -> None:
+    _native().signal_unsubscribe(subscription_id)
+
+
 def signal_write(path: str, payload: bytes) -> None:
     _native().signal_write(path, payload)
 

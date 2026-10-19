@@ -27,4 +27,11 @@ def test_signal_access():
     status.write(LogicValue.from_string("zx10xz01"))
     svx.delay(1, "ns")
     assert status.read() == LogicValue.from_string("zx10xz01")
+    with status.subscribe() as latest:
+        assert latest.read() == LogicValue.from_string("zx10xz01")
+        status.write(LogicValue.from_string("0011xz10"))
+        # Advance to this testbench's stable observation point, not an implicit
+        # promise that a subscription always sees same-region assignments.
+        svx.delay(1, "ns")
+        assert latest.read() == status.read() == LogicValue.from_string("0011xz10")
     svx.display("hierarchical signal access example passed")

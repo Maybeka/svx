@@ -88,26 +88,33 @@ class Signal:
         return payload
 
     def read(self) -> Any:
-        payload = _native.signal_read(self._path)
-        import svtypes
-        from .runtime import codec_session
+        return self._unpack(_native.signal_read(self._path), "read")
 
-        context = svtypes.UnpackContext(codec_session())
+    def _unpack(
+        self, payload: bytes, operation: str, with_context: bool | None = None
+    ) -> Any:
         unpack = self._codec.unpack
-        try:
-            inspect.signature(unpack).bind(payload, context)
-        except TypeError:
-            value, consumed = unpack(payload)
+        if with_context is None:
+            with_context = _unpack_accepts_context(unpack)
+        if with_context:
+            import svtypes
+            from .runtime import codec_session
+
+            value, consumed = unpack(payload, svtypes.UnpackContext(codec_session()))
         else:
-            value, consumed = unpack(payload, context)
+            value, consumed = unpack(payload)
         if consumed != len(payload):
             raise SVXSignalError(
                 self._path,
-                "read",
+                operation,
                 f"SvTypes codec consumed {consumed} of {len(payload)} bytes",
                 "type_mismatch",
             )
         return value
+
+    def subscribe(self) -> SignalSubscription:
+        """Seed a cache and subscribe to value changes; no Python callback runs."""
+        return SignalSubscription(self)
 
     def write(self, value: Any) -> None:
         _native.signal_write(self._path, self._pack(value, "write"))
@@ -117,6 +124,62 @@ class Signal:
 
     def release(self) -> None:
         _native.signal_release(self._path)
+
+
+class SignalSubscription:
+    """Explicit latest-notified-value cache, not an immediate HDL read or event log.
+
+    Notifications may lag writes within the current scheduling region. Use
+    Signal.read() when an immediate read is needed. Close explicitly or use a
+    with block; runtime shutdown also removes remaining subscriptions.
+    """
+
+    __slots__ = ("_signal", "_id", "_closed", "_with_context")
+
+    def __init__(self, signal: Signal) -> None:
+        self._signal = signal
+        self._closed = False
+        self._with_context = _unpack_accepts_context(signal._codec.unpack)
+        self._id = _native.signal_subscribe(signal.path)
+
+    @property
+    def path(self) -> str:
+        return self._signal.path
+
+    def read(self) -> Any:
+        if self._closed:
+            raise SVXSignalError(
+                self.path, "subscription_read", "signal subscription is closed",
+                "subscription_closed",
+            )
+        return self._signal._unpack(
+            _native.signal_subscription_read(self._id),
+            "subscription_read", self._with_context,
+        )
+
+    def close(self) -> None:
+        if not self._closed:
+            _native.signal_unsubscribe(self._id)
+            self._closed = True
+
+    def __enter__(self) -> SignalSubscription:
+        if self._closed:
+            raise SVXSignalError(
+                self.path, "subscribe", "signal subscription is closed",
+                "subscription_closed",
+            )
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.close()
+
+
+def _unpack_accepts_context(unpack: Any) -> bool:
+    try:
+        inspect.signature(unpack).bind(b"", None)
+    except TypeError:
+        return False
+    return True
 
 
 def declare_signal(path: str, codec: Any) -> Signal:

@@ -10,6 +10,10 @@ int force_result = 1;
 int release_result = 1;
 int release_calls = 0;
 bool backend_forced = false;
+int subscribe_result = 1;
+int unsubscribe_calls = 0;
+int unsubscribe_result = 1;
+int subscription_read_result = 1;
 
 void begin(const char *name) {
   std::fprintf(stderr, "SIGNAL_CASE_BEGIN %s\n", name);
@@ -51,6 +55,16 @@ int svx_vpi_signal_release(const char *, int) {
   return release_result;
 }
 void svx_vpi_signal_clear_cache() {}
+int svx_vpi_signal_subscribe(std::uint64_t, const char *, int) { return subscribe_result; }
+int svx_vpi_signal_subscription_read(std::uint64_t, std::uint8_t *data, int size) {
+  assert(size == 1);
+  data[0] = 0x42;
+  return subscription_read_result;
+}
+int svx_vpi_signal_unsubscribe(std::uint64_t) {
+  ++unsubscribe_calls;
+  return unsubscribe_result;
+}
 }
 
 int main() {
@@ -106,5 +120,57 @@ int main() {
   svx::signal::shutdown();
   assert(backend_forced && release_calls == 1);
   end("release_failed");
+
+  begin("subscriptions");
+  const auto first = svx::signal::subscribe("tb.data");
+  const auto second = svx::signal::subscribe("tb.data");
+  assert(first != second && svx::signal::subscription_read(first)[0] == 0x42);
+  svx::signal::unsubscribe(first);
+  svx::signal::unsubscribe(first);
+  assert(unsubscribe_calls == 1);
+  try {
+    svx::signal::subscription_read(first);
+    assert(false);
+  } catch (const svx::signal::SignalError &error) {
+    assert(error.code() == "subscription_closed");
+  }
+  subscription_read_result = -2;
+  try {
+    svx::signal::subscription_read(second);
+    assert(false);
+  } catch (const svx::signal::SignalError &error) {
+    assert(error.code() == "state_domain_mismatch");
+  }
+  subscription_read_result = 1;
+  unsubscribe_result = 0;
+  try {
+    svx::signal::unsubscribe(second);
+    assert(false);
+  } catch (const svx::signal::SignalError &error) {
+    assert(error.code() == "unsubscribe_failed");
+  }
+  unsubscribe_result = 1;
+  assert(svx::signal::subscription_read(second)[0] == 0x42);
+  subscribe_result = 0;
+  try {
+    svx::signal::subscribe("tb.data");
+    assert(false);
+  } catch (const svx::signal::SignalError &error) {
+    assert(error.code() == "subscription_failed");
+  }
+  subscribe_result = 1;
+  svx::signal::shutdown();
+  end("subscriptions");
+  begin("new_session");
+  const auto third = svx::signal::subscribe("tb.data");
+  assert(third != first && third != second);
+  try {
+    svx::signal::subscription_read(second);
+    assert(false);
+  } catch (const svx::signal::SignalError &error) {
+    assert(error.code() == "subscription_closed");
+  }
+  svx::signal::shutdown();
+  end("new_session");
   std::puts("NATIVE_SIGNAL_LEDGER_PASS");
 }

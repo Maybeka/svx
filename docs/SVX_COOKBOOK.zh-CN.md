@@ -725,7 +725,25 @@ status.write(LogicValue.from_string("10xz01z0"))
 
 **检查点：**
 [层次信号访问示例](../examples/hierarchical_signal_access) 包含两态、四态、
-read/write、force/release 和启动期失败的完整路径。
+read/write、force/release、订阅和启动期失败的完整路径。
+
+经常读取但很少变化的控制/状态信号，可以显式订阅：
+
+```python
+with status.subscribe() as latest:
+    initial = latest.read()
+    svx.delay(10, "ns")
+    observed = latest.read()
+```
+
+订阅时立即读取初值，之后原生值变化回调只复制数值，不执行 Python。
+`latest.read()` 使用原有 SvTypes codec 解码缓存，不重新读取 HDL；四态值保留
+X/Z，二态 codec 遇到 X/Z 仍报错。它表示“最近通知的值”，不是事件历史或
+稳定采样点，同一调度区间内刚赋值时缓存可能仍旧；需要即时值时用
+`status.read()`。单纯 `delay(0)` 不能保证 NBA 和下游逻辑均已稳定。
+使用 `with` 或显式 `close()` 退订；关闭一个订阅不影响其他订阅。shutdown
+也会移除剩余订阅，关闭或退出后读取会报错。垃圾回收不负责退订。
+高频变化会产生回调和复制开销，不应据此将高速逐拍采样移到 Python。
 
 ## 11. 把每个新能力变成可维护的构建输入
 

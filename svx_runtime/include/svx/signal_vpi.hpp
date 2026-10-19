@@ -12,6 +12,9 @@ int svx_vpi_signal_deposit(const char *path, int width,
 int svx_vpi_signal_force(const char *path, int width,
                          const std::uint8_t *data, int size);
 int svx_vpi_signal_release(const char *path, int width);
+int svx_vpi_signal_subscribe(std::uint64_t id, const char *path, int width);
+int svx_vpi_signal_subscription_read(std::uint64_t id, std::uint8_t *data, int size);
+int svx_vpi_signal_unsubscribe(std::uint64_t id);
 void svx_vpi_signal_clear_cache();
 int svx_vpi_waveform_validate_scope(const char *path);
 

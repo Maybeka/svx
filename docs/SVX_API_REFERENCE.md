@@ -21,7 +21,7 @@ The following names exported from `svx` are stable:
   `inheritance_class`, `sv_class_handle`, `virtual_interface_handle`,
   `SVMirror`, `sv_mirror`, and
   `manifest_from_declarations`;
-- hierarchical access: `Signal` and `declare_signal`;
+- hierarchical access: `Signal`, `SignalSubscription`, and `declare_signal`;
 - runtime and errors: `RuntimeState`, `runtime_state`, the `SVXError` hierarchy,
   `SVXContextError`, `SVXExportError`, `SVXChannelError`, `SVXInheritanceError`,
   `SVXRemoteError`, `SVXSignalError`, `FATAL`, `REPORT`, `set_exception_policy`,
@@ -176,6 +176,38 @@ representation; unknown or incompatible handles fail rather than constructing
 an object with a reinterpreted pointer. Per-ancestor constructor records are
 private generated transport, not a user-facing constructor API. Qualified
 alternating chains, including Python-root chains, use the integrated source path.
+
+## Signal Subscriptions
+
+`Signal.read()` reads the current HDL value. `Signal.subscribe()` creates an
+independent `SignalSubscription`, seeded with the current value, then maintained
+by native value-change notifications. No Python callback runs on signal changes.
+Both paths decode using the declared SvTypes codec, including X/Z preservation
+for `Logic` and X/Z rejection for two-state codecs.
+
+```python
+with status.subscribe() as latest:
+    initial = latest.read()
+    svx.delay(10, "ns")
+    observed = latest.read()
+```
+
+`latest.path` is the declared path; `latest.read()` returns a newly decoded value
+from owned cached data. It does not perform a fresh HDL read or advance time.
+The cache is the **latest notified value**, not a clocked snapshot or an event
+history. Notifications can lag assignments within the current scheduling region;
+intermediate changes may coalesce. Use `Signal.read()` for an immediate read.
+A delay of zero is not a general guarantee that NBA and downstream logic settled.
+
+`latest.close()` removes this subscription only and is idempotent. Closed or
+shutdown-invalidated subscriptions reject reads with `SVXSignalError`. Use a
+`with` block or close explicitly in an active SVX execution context; garbage
+collection does not close a subscription. Shutdown removes remaining
+subscriptions. These operations retain the normal simulator-context requirement.
+
+Subscriptions suit a small number of frequently inspected, infrequently changing
+control/status signals. Each change has callback and copy overhead; subscribing
+is not guaranteed to improve performance. Keep intensive sampling in SV.
 
 ## Optional Waveform API
 

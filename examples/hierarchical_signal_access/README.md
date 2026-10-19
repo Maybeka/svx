@@ -18,6 +18,7 @@ The test demonstrates:
 - two-state `Bit` read and write;
 - `force` followed by `release` on a packed signal;
 - four-state `Logic` read/write using `LogicValue`;
+- explicit `with status.subscribe() as latest` cached observation;
 - explicit delays only where the testbench needs simulation to advance.
 
 The force interval uses `try/finally` so a Python exception still attempts
@@ -26,6 +27,16 @@ collection nor shutdown releases a force automatically. Shutdown warns about
 forces still recorded as active; it does not restore previous signal values.
 SVX tracks force state per declared path, not per Python handle, and provides
 no nested force stack. Coordinate callers sharing a path.
+
+A subscription seeds its initial value and caches native value-change
+notifications without executing Python callbacks. `latest.read()` decodes that
+cache; `status.read()` still reads the current HDL value. Notifications may lag
+same-region writes and may coalesce, so this is not a settled sampling barrier
+or an event log. The example advances to a stable testbench observation point
+before comparing the two. The `with` block closes the subscription; explicit
+`close()` is also supported, and shutdown retires remaining subscriptions.
+Garbage collection does not unsubscribe. Use subscriptions for frequently read,
+infrequently changing signals, not as a replacement for high-volume SV monitors.
 
 The example declares two-state paths as `reg` and packed `reg` in `tb.sv`;
 they use the `Bit` codec on the Python side. This is the portable packed

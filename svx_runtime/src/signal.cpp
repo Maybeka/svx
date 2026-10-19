@@ -20,6 +20,9 @@ struct Entry {
 };
 
 std::unordered_map<std::string, Entry> g_entries;
+std::unordered_map<std::uint64_t, std::string> g_subscriptions;
+// IDs never repeat across sessions, so an old Python subscription stays stale.
+std::uint64_t g_next_subscription = 1;
 bool g_declarations_open = false;
 bool g_sealed = false;
 
@@ -168,6 +171,53 @@ void release(const std::string &path) {
   entry.forced = false;
 }
 
+std::uint64_t subscribe(const std::string &path) {
+  Entry &entry = entry_for(path, "subscribe");
+  if (!g_sealed || g_next_subscription == 0) {
+    throw SignalError("subscription_failed", path, "subscribe",
+                      "signal subscriptions require a validated runtime session");
+  }
+  const auto id = g_next_subscription++;
+  g_subscriptions.emplace(id, path);
+  if (svx_vpi_signal_subscribe(id, path.c_str(), entry.width) != 1) {
+    g_subscriptions.erase(id);
+    throw SignalError("subscription_failed", path, "subscribe",
+                      "direct VPI service could not register a value-change callback");
+  }
+  return id;
+}
+
+std::vector<std::uint8_t> subscription_read(std::uint64_t id) {
+  const auto it = g_subscriptions.find(id);
+  if (it == g_subscriptions.end()) {
+    throw SignalError("subscription_closed", "", "subscription_read",
+                      "signal subscription is closed or belongs to an ended session");
+  }
+  const auto &path = it->second;
+  Entry &entry = entry_for(path, "subscription_read");
+  const auto size = static_cast<std::size_t>((entry.width + 7) / 8) *
+                    (entry.state_domain == "4state" ? 3 : 1);
+  std::vector<std::uint8_t> data(size);
+  const int result = svx_vpi_signal_subscription_read(id, data.data(), static_cast<int>(size));
+  if (result != 1) {
+    throw SignalError(result == -2 ? "state_domain_mismatch" : "read_failed",
+                      path, "subscription_read",
+                      result == -2 ? "cached signal contains X/Z not representable by the declared two-state codec"
+                                   : "signal subscription has no valid cached value");
+  }
+  return data;
+}
+
+void unsubscribe(std::uint64_t id) {
+  const auto it = g_subscriptions.find(id);
+  if (it == g_subscriptions.end()) return;
+  if (svx_vpi_signal_unsubscribe(id) != 1) {
+    throw SignalError("unsubscribe_failed", it->second, "close",
+                      "direct VPI service could not remove the value-change callback");
+  }
+  g_subscriptions.erase(it);
+}
+
 void shutdown() {
   for (const auto &[path, entry] : g_entries) {
     if (entry.forced) {
@@ -175,6 +225,7 @@ void shutdown() {
     }
   }
   g_entries.clear();
+  g_subscriptions.clear();
   svx_vpi_signal_clear_cache();
   g_declarations_open = false;
   g_sealed = false;

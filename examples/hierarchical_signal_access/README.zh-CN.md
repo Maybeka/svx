@@ -16,6 +16,7 @@ codec。`tb.sv` 用该 module 名调用 `svx_init_with_signal_declarations`，�
 - 二态 `Bit` 读写；
 - packed signal 的 `force` 和 `release`；
 - 使用 `LogicValue` 对四态 `Logic` 读写；
+- 使用 `with status.subscribe() as latest` 显式订阅缓存值；
 - 仅在 testbench 需要推进仿真时显式延时。
 
 force 区间使用 `try/finally`，即使 Python 抛出异常，也会在离开有效运行时
@@ -23,6 +24,13 @@ force 区间使用 `try/finally`，即使 Python 抛出异常，也会在离开�
 只对仍记录为 active 的 force 发出警告，不会恢复之前的信号值。SVX 按声明
 路径记录 force 状态，而不是按 Python handle 记录，也不提供嵌套 force 栈。
 多个调用者共享同一路径时，需要自行协调。
+
+订阅会读取初值，之后由原生值变化回调维护缓存，不执行 Python 回调。
+`latest.read()` 解码缓存，`status.read()` 仍读取 HDL 即时值。同一调度区间
+内通知可能滞后或合并，因此缓存不是稳定采样屏障，也不是事件历史。示例先
+推进到其 testbench 的稳定观察点再比较两者。`with` 退出时退订，也可显式
+`close()`；shutdown 会清理剩余订阅，垃圾回收不负责退订。它适合读取频繁、
+变化较少的信号，不能替代高吞吐 SV monitor。
 
 示例在 `tb.sv` 中将二态路径声明为 `reg` 和 packed `reg`，Python 侧使用
 `Bit` codec。这是当前 SVX VPI signal service 所接受的可移植 packed variable

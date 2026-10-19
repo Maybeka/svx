@@ -1,6 +1,7 @@
 #include <vpi_user.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -17,6 +18,53 @@
 namespace {
 
 std::unordered_map<std::string, vpiHandle> handles;
+
+struct Subscription {
+  int width;
+  vpiHandle callback = nullptr;
+  s_vpi_time time{};
+  s_vpi_value value{};
+  std::vector<s_vpi_vecval> words;
+  bool valid = false;
+
+  explicit Subscription(int bits) : width(bits), words((bits + 31) / 32) {
+    time.type = vpiSuppressTime;
+    value.format = vpiVectorVal;
+  }
+
+  void copy(const s_vpi_value *source) {
+    valid = source && source->format == vpiVectorVal && source->value.vector;
+    if (!valid) return;
+    for (std::size_t i = 0; i < words.size(); ++i) words[i] = source->value.vector[i];
+  }
+};
+
+std::unordered_map<std::uint64_t, std::unique_ptr<Subscription>> subscriptions;
+
+PLI_INT32 value_changed(p_cb_data cb) {
+  // Simulator-owned callback data is transient; never retain its vector pointer.
+  reinterpret_cast<Subscription *>(cb->user_data)->copy(cb->value);
+  return 0;
+}
+
+int encode_vector(const s_vpi_vecval *words, int width, std::uint8_t *data, int size) {
+  const int bytes = (width + 7) / 8;
+  const bool four_state = size == bytes * 3;
+  if (!data || !words || (size != bytes && !four_state)) return 0;
+  for (int i = 0; i < bytes; ++i) {
+    const auto a = static_cast<std::uint8_t>(words[i / 4].aval >> (8 * (i % 4)));
+    const auto b = static_cast<std::uint8_t>(words[i / 4].bval >> (8 * (i % 4)));
+    const auto mask = static_cast<std::uint8_t>(
+        i == bytes - 1 && width % 8 ? (1U << (width % 8)) - 1U : 0xffU);
+    if (!four_state && (b & mask)) return -2;
+    data[i] = (four_state ? a & ~b : a) & mask;
+    if (four_state) {
+      data[bytes + i] = a & b & mask;
+      data[bytes * 2 + i] = ~a & b & mask;
+    }
+  }
+  return 1;
+}
 
 vpiHandle resolve(const char *path, int width) {
   auto cached = handles.find(path);
@@ -182,7 +230,60 @@ extern "C" int svx_vpi_signal_release(const char *path, int width) {
   return svx_vpi_signal_write(path, width, nullptr, 0, vpiReleaseFlag);
 }
 
-extern "C" void svx_vpi_signal_clear_cache() { handles.clear(); }
+extern "C" int svx_vpi_signal_subscribe(std::uint64_t id, const char *path, int width) {
+  if (!path || width <= 0 || subscriptions.count(id)) return 0;
+  auto handle = resolve(path, width);
+  if (!handle) return 0;
+  auto subscription = std::make_unique<Subscription>(width);
+  auto *state = subscription.get();
+  // Allocate registry storage before registration; no allocation can orphan a callback.
+  subscriptions.emplace(id, std::move(subscription));
+  s_cb_data cb{};
+  cb.reason = cbValueChange;
+  cb.cb_rtn = value_changed;
+  cb.obj = handle;
+  cb.time = &state->time;
+  cb.value = &state->value;
+  cb.user_data = reinterpret_cast<PLI_BYTE8 *>(state);
+  state->callback = vpi_register_cb(&cb);
+  if (!state->callback) {
+    subscriptions.erase(id);
+    return 0;
+  }
+  // A constant signal may never notify. Seed without advancing simulation time.
+  s_vpi_value initial{};
+  initial.format = vpiVectorVal;
+  vpi_get_value(handle, &initial);
+  state->copy(&initial);
+  return 1;
+}
+
+extern "C" int svx_vpi_signal_subscription_read(std::uint64_t id,
+                                                std::uint8_t *data, int size) {
+  const auto it = subscriptions.find(id);
+  if (it == subscriptions.end() || !it->second->valid) return 0;
+  return encode_vector(it->second->words.data(), it->second->width, data, size);
+}
+
+extern "C" int svx_vpi_signal_unsubscribe(std::uint64_t id) {
+  const auto it = subscriptions.find(id);
+  if (it == subscriptions.end()) return 1;
+  if (!vpi_remove_cb(it->second->callback)) return 0;
+  subscriptions.erase(it);
+  return 1;
+}
+
+extern "C" void svx_vpi_signal_clear_cache() {
+  for (auto it = subscriptions.begin(); it != subscriptions.end();) {
+    if (vpi_remove_cb(it->second->callback)) it = subscriptions.erase(it);
+    else {
+      // Keep callback storage alive if the simulator refuses removal.
+      it->second->valid = false;
+      ++it;
+    }
+  }
+  handles.clear();
+}
 
 // A simulator-side regression hook.  It deliberately calls the public direct
 // VPI routines above, but supplies native C storage as a DPI implementation

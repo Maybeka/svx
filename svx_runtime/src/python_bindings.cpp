@@ -624,6 +624,39 @@ PyObject *py_signal_read(PyObject *, PyObject *args) {
   }
 }
 
+PyObject *py_signal_subscribe(PyObject *, PyObject *args) {
+  const char *path = nullptr;
+  if (!PyArg_ParseTuple(args, "s", &path) || !require_context("Signal.subscribe()")) return nullptr;
+  try {
+    return PyLong_FromUnsignedLongLong(svx::signal::subscribe(path));
+  } catch (const svx::signal::SignalError &error) {
+    return raise_signal_error(error);
+  }
+}
+
+PyObject *py_signal_subscription_read(PyObject *, PyObject *args) {
+  unsigned long long id = 0;
+  if (!PyArg_ParseTuple(args, "K", &id) || !require_context("SignalSubscription.read()")) return nullptr;
+  try {
+    const auto data = svx::signal::subscription_read(id);
+    return PyBytes_FromStringAndSize(reinterpret_cast<const char *>(data.data()),
+                                   static_cast<Py_ssize_t>(data.size()));
+  } catch (const svx::signal::SignalError &error) {
+    return raise_signal_error(error);
+  }
+}
+
+PyObject *py_signal_unsubscribe(PyObject *, PyObject *args) {
+  unsigned long long id = 0;
+  if (!PyArg_ParseTuple(args, "K", &id) || !require_context("SignalSubscription.close()")) return nullptr;
+  try {
+    svx::signal::unsubscribe(id);
+  } catch (const svx::signal::SignalError &error) {
+    return raise_signal_error(error);
+  }
+  Py_RETURN_NONE;
+}
+
 PyObject *py_signal_write(PyObject *, PyObject *args) {
   const char *path = nullptr;
   Py_buffer data;
@@ -914,6 +947,9 @@ PyMethodDef methods[] = {
     {"signal_declare", py_signal_declare, METH_VARARGS,
      "Register a startup signal declaration"},
     {"signal_read", py_signal_read, METH_VARARGS, "Read a declared HDL signal"},
+    {"signal_subscribe", py_signal_subscribe, METH_VARARGS, "Subscribe to HDL value changes"},
+    {"signal_subscription_read", py_signal_subscription_read, METH_VARARGS, "Read the latest notified HDL value"},
+    {"signal_unsubscribe", py_signal_unsubscribe, METH_VARARGS, "Close an HDL subscription"},
     {"signal_write", py_signal_write, METH_VARARGS, "Write a declared HDL signal"},
     {"signal_force", py_signal_force, METH_VARARGS, "Force a declared HDL signal"},
     {"signal_release", py_signal_release, METH_VARARGS, "Release a declared HDL signal"},

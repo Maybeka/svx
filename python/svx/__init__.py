@@ -47,7 +47,7 @@ from .declarations import (
     sv_mirror,
     virtual_interface_handle,
 )
-from .signal import Signal, declare_signal
+from .signal import Signal, SignalSubscription, declare_signal
 from .runtime import RuntimeState, state as runtime_state
 from . import waveform
 
@@ -69,6 +69,7 @@ __all__ = [
     "SVXWaveformError",
     "__version__",
     "Signal",
+    "SignalSubscription",
     "SVMirror",
     "Output",
     "Task",

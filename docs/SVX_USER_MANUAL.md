@@ -775,6 +775,25 @@ Shutdown warns about forces still recorded as active and clears the path cache,
 but does not release those forces. Garbage collection also does not release them.
 Release while the runtime and execution context remain active, before shutdown.
 
+For frequently inspected, slowly changing control/status signals, opt into a
+latest-notified-value cache:
+
+```python
+with status.subscribe() as latest:
+    assert latest.read() == status.read()  # Subscription seeds the initial value.
+    svx.delay(10, "ns")
+    observed = latest.read()
+```
+
+`SignalSubscription.read()` decodes the native cache with the same SvTypes codec;
+it does not read HDL again or invoke Python on changes. Notifications can lag an
+assignment in the current scheduling region, so use `status.read()` for an
+immediate read. The cache is neither a settled sampling barrier nor a history of
+transitions. Close explicitly or use `with`; shutdown also removes outstanding
+subscriptions. Closing one subscriber leaves others active, and closed or
+shutdown-invalidated subscriptions cannot be read. Garbage collection does not
+unsubscribe. Callback overhead makes this unsuitable as a general fast-data path.
+
 Use this interface only for small, temporary setup, inspection, and fault
 injection. Keep repeated, signal-intensive behavior in SystemVerilog and move
 summaries or transactions through typed channels.

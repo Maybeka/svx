@@ -109,3 +109,73 @@ def test_four_state_signal_preserves_value_x_and_z_planes(signal_module):
     assert signal.read() == LogicValue(8, value_mask=1, x_mask=2, z_mask=4)
     signal.write(LogicValue(8, value_mask=0x80, x_mask=2, z_mask=4))
     assert calls[-1] == ("write", ("tb.logic", b"\x80\x02\x04"))
+
+
+def test_subscription_is_explicit_cached_and_independent(signal_module, monkeypatch):
+    module, calls = signal_module
+    cached = {1: b"\x12", 2: b"\x34"}
+    ids = iter(cached)
+    monkeypatch.setattr(module._native, "signal_subscribe", lambda path: next(ids))
+    monkeypatch.setattr(module._native, "signal_subscription_read", cached.__getitem__)
+    monkeypatch.setattr(module._native, "signal_unsubscribe", lambda id: calls.append(("close", id)))
+    signal = module.declare_signal("tb.data", Bit[8]())
+    first = signal.subscribe()
+    with signal.subscribe() as second:
+        assert first.path == second.path == signal.path
+        assert first.read() == 0x12
+        assert second.read() == 0x34
+        assert signal.read() == 0x5a
+        cached[1] = b"\x67"
+        assert first.read() == 0x67
+    second.close()
+    assert calls.count(("close", 2)) == 1
+    with pytest.raises(SVXSignalError, match="closed"):
+        second.read()
+    with pytest.raises(SVXSignalError, match="closed"):
+        second.__enter__()
+    first.close()
+
+
+def test_subscription_exception_cleanup_and_four_state(signal_module, monkeypatch):
+    module, calls = signal_module
+    monkeypatch.setattr(module._native, "signal_subscribe", lambda path: 1)
+    monkeypatch.setattr(module._native, "signal_subscription_read", lambda id: b"\x01\x02\x04")
+    monkeypatch.setattr(module._native, "signal_unsubscribe", lambda id: calls.append(("close", id)))
+    signal = module.declare_signal("tb.logic", Logic[8]())
+    with pytest.raises(ValueError, match="user failure"):
+        with signal.subscribe() as sub:
+            assert sub.read() == LogicValue(8, value_mask=1, x_mask=2, z_mask=4)
+            raise ValueError("user failure")
+    assert calls[-1] == ("close", 1)
+
+
+def test_subscription_close_failure_can_be_retried(signal_module, monkeypatch):
+    module, _ = signal_module
+    monkeypatch.setattr(module._native, "signal_subscribe", lambda path: 1)
+    monkeypatch.setattr(module._native, "signal_subscription_read", lambda id: b"\x12")
+    def fail(id):
+        raise SVXSignalError("tb.data", "close", "remove failed", "unsubscribe_failed")
+    monkeypatch.setattr(module._native, "signal_unsubscribe", fail)
+    sub = module.declare_signal("tb.data", Bit[8]()).subscribe()
+    with pytest.raises(SVXSignalError, match="remove failed"):
+        sub.close()
+    assert sub.read() == 0x12
+    monkeypatch.setattr(module._native, "signal_unsubscribe", lambda id: None)
+    sub.close()
+
+
+def test_subscription_resolves_context_codec_signature_once(signal_module, monkeypatch):
+    module, _ = signal_module
+    class ContextBit(Bit):
+        def unpack(self, payload, context):
+            assert isinstance(context, __import__("svtypes").UnpackContext)
+            return payload[0], len(payload)
+    monkeypatch.setattr(module._native, "signal_subscribe", lambda path: 1)
+    monkeypatch.setattr(module._native, "signal_subscription_read", lambda id: b"\x12")
+    monkeypatch.setattr(module._native, "signal_unsubscribe", lambda id: None)
+    sub = module.declare_signal("tb.data", ContextBit[8]()).subscribe()
+    def unexpected_signature(*args):
+        raise AssertionError("signature checked on every cached read")
+    monkeypatch.setattr(module.inspect, "signature", unexpected_signature)
+    assert sub.read() == sub.read() == 0x12
+    sub.close()

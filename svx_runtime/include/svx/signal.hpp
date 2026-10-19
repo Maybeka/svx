@@ -35,6 +35,9 @@ std::vector<std::uint8_t> read(const std::string &path);
 void write(const std::string &path, const std::uint8_t *data, std::size_t size);
 void force(const std::string &path, const std::uint8_t *data, std::size_t size);
 void release(const std::string &path);
+std::uint64_t subscribe(const std::string &path);
+std::vector<std::uint8_t> subscription_read(std::uint64_t id);
+void unsubscribe(std::uint64_t id);
 void shutdown();
 
 } // namespace svx::signal
