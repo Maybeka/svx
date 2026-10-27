@@ -11,6 +11,39 @@ interface class svx_dispatchable;
   );
 endclass
 
+// Simulator processes can interleave on one host thread while DPI tasks wait.
+// Cycle detection must identify the SV process, not the host thread.
+class svx_callback_contexts;
+  static process procs[longint unsigned];
+  static longint unsigned next_id = 1;
+
+  static function longint unsigned current();
+    process caller = process::self();
+    foreach (procs[index]) begin
+      if (procs[index] == caller) return index;
+    end
+    foreach (procs[index]) begin
+      if (procs[index].status() inside {process::FINISHED, process::KILLED})
+        procs.delete(index);
+    end
+    procs[next_id] = caller;
+    return next_id++;
+  endfunction
+endclass
+
+function automatic longint unsigned svx_inheritance_context_id(output int process_index);
+  process caller = process::self();
+  process_index = -1;
+  foreach (svx_proc_man::procs[index]) begin
+    if (svx_proc_man::procs[index] == caller) begin
+      process_index = index;
+      break;
+    end
+  end
+  return svx_callback_contexts::current();
+endfunction
+export "DPI-C" function svx_inheritance_context_id;
+
 interface class svx_function_dispatchable;
   pure virtual function void svx_invoke_function(
     string method_id, input chandle request, output bit ok,
@@ -629,6 +662,7 @@ task automatic svx_shutdown();
   svx_proc_man::shutdown();
   svx_inheritance_registry::clear();
   svx_external_handle_registry::clear();
+  svx_callback_contexts::procs.delete();
   svx_inheritance_shutdown();
   svx_channel_registry::clear();
   svx_runtime_shutdown();

@@ -1791,12 +1791,20 @@ does not convert arbitrary pre-existing SV objects into mirrors: it has no
 general SV object reflection or destructor hook, and every cross-language
 instance must enter through a generated construction path.
 
-Native Python callbacks maintain a receiver/method stack. Re-entering an active
-pair is rejected with a callback-cycle diagnostic; Python-to-SV dispatch reports
+Native Python callbacks maintain a receiver/method stack **per actual SV process**.
+Independent SV processes may concurrently call the same receiver/method; their
+completion order need not be LIFO. Each callback has an isolated Python evaluator
+state, and nested calls inherit their causal callback's Python context rather
+than the last process that ran on the host thread. Synchronous construction
+callbacks preserve their caller's constructor-capture context. Call completion
+returns to a stable runtime state; Python-to-SV wrappers restore their own caller.
+
+Re-entering an active pair on the same SV process is rejected with a callback-cycle diagnostic; Python-to-SV dispatch reports
 it through `SVXRemoteError(code="dispatch_failed")`. No public call-ID protocol
 or separate recursion exception class is exposed. Normal return and exception
 unwinding remove callback frames; shutdown clears remaining bindings. Stopping
 a process does not by itself close every independently owned mirror object.
+This guard is not a general cross-process wait-for-graph deadlock detector.
 
 ### Alternating Lineage Generation
 

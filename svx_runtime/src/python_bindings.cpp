@@ -22,7 +22,8 @@ PyObject *g_signal_error = nullptr;
 PyObject *g_cancelled_error = nullptr;
 PyObject *g_waveform_error = nullptr;
 std::unordered_map<unsigned long long, PyObject *> g_inheritance_instances;
-thread_local std::vector<std::string> g_inheritance_call_frames;
+thread_local std::unordered_map<std::uint64_t, std::vector<std::string>> g_inheritance_call_frames;
+thread_local std::unordered_map<std::uint64_t, std::vector<PyThreadState *>> g_inheritance_callback_states;
 std::uint64_t g_inheritance_callback_count = 0;
 std::uint64_t g_inheritance_callback_nanoseconds = 0;
 
@@ -1029,12 +1030,23 @@ static int inheritance_call_python(unsigned long long object_id,
     *error = "";
   }
 
-  PyGILState_STATE gstate = PyGILState_Ensure();
+  // PyGILState_Ensure assumes the TLS auto-state is current. A suspended
+  // simulator callback can have an explicitly attached evaluator state instead.
+#if PY_VERSION_HEX >= 0x030D0000
+  const bool acquire_gil = PyThreadState_GetUnchecked() == nullptr;
+#else
+  const bool acquire_gil = _PyThreadState_UncheckedGet() == nullptr;
+#endif
+  PyGILState_STATE gstate = PyGILState_LOCKED;
+  if (acquire_gil) gstate = PyGILState_Ensure();
   const std::string frame = std::to_string(object_id) + ":" + (method_id ? method_id : "");
-  auto repeated = std::find(g_inheritance_call_frames.begin(), g_inheritance_call_frames.end(), frame);
-  if (repeated != g_inheritance_call_frames.end()) {
+  int process_index = svx::ExecutionContext::current_process_index();
+  const auto context_id = svx::dpi::inheritance_context_id(&process_index);
+  auto &frames = g_inheritance_call_frames[context_id];
+  auto repeated = std::find(frames.begin(), frames.end(), frame);
+  if (repeated != frames.end()) {
     message = "SVX inheritance blocking cycle rejected: ";
-    for (auto it = repeated; it != g_inheritance_call_frames.end(); ++it) {
+    for (auto it = repeated; it != frames.end(); ++it) {
       if (it != repeated) message += " -> ";
       message += *it;
     }
@@ -1042,15 +1054,79 @@ static int inheritance_call_python(unsigned long long object_id,
     if (error != nullptr) {
       *error = message.c_str();
     }
-    PyGILState_Release(gstate);
+    if (acquire_gil) PyGILState_Release(gstate);
     return 0;
   }
-  g_inheritance_call_frames.push_back(frame);
+  frames.push_back(frame);
+  // Independent SV processes share a host thread, but may suspend Python
+  // callbacks in non-LIFO order. Give each callback its own evaluator state.
+  PyThreadState *previous_state = PyThreadState_Get();
+  PyThreadState *idle_state = svx::runtime_idle_thread_state();
+  if (idle_state == nullptr) idle_state = previous_state;
+  auto &callback_states = g_inheritance_callback_states[context_id];
+  PyObject *inherited_context = nullptr;
+  // Nested calls inherit their causal caller, not whichever SV process ran
+  // last. Synchronous constructor callbacks also need the caller's capture context.
+  if (!callback_states.empty() || function_context) {
+    PyThreadState_Swap(callback_states.empty() ? previous_state : callback_states.back());
+    inherited_context = PyContext_CopyCurrent();
+    if (inherited_context == nullptr) PyErr_Clear();
+    PyThreadState_Swap(previous_state);
+    if (inherited_context == nullptr) {
+      message = "SVX could not copy a Python callback context";
+      if (error != nullptr) *error = message.c_str();
+      frames.pop_back();
+      if (frames.empty()) g_inheritance_call_frames.erase(context_id);
+      if (callback_states.empty()) g_inheritance_callback_states.erase(context_id);
+      if (acquire_gil) PyGILState_Release(gstate);
+      return 0;
+    }
+  }
+  PyThreadState *callback_state = PyThreadState_New(previous_state->interp);
+  if (callback_state == nullptr) {
+    PyErr_Clear();
+    message = "SVX could not allocate a Python callback thread state";
+    if (error != nullptr) *error = message.c_str();
+    frames.pop_back();
+    if (frames.empty()) g_inheritance_call_frames.erase(context_id);
+    if (callback_states.empty()) g_inheritance_callback_states.erase(context_id);
+    Py_XDECREF(inherited_context);
+    if (acquire_gil) PyGILState_Release(gstate);
+    return 0;
+  }
+  PyThreadState_Swap(callback_state);
+  callback_states.push_back(callback_state);
+  bool context_entered = false;
+  const auto finish_callback = [&]() {
+    if (context_entered) PyContext_Exit(inherited_context);
+    Py_XDECREF(inherited_context);
+    PyThreadState_Clear(callback_state);
+    // The last running callback may belong to an unrelated suspended SV
+    // process and can finish before this one. Never restore that borrowed state.
+    // Python->SV wrappers restore their own saved caller state on return.
+    PyThreadState_Swap(idle_state);
+    PyThreadState_Delete(callback_state);
+    frames.pop_back();
+    if (frames.empty()) g_inheritance_call_frames.erase(context_id);
+    callback_states.pop_back();
+    if (callback_states.empty()) g_inheritance_callback_states.erase(context_id);
+    if (acquire_gil) PyGILState_Release(gstate);
+  };
+  if (inherited_context != nullptr) {
+    if (PyContext_Enter(inherited_context) < 0) {
+      PyErr_Clear();
+      message = "SVX could not enter a Python callback context";
+      if (error != nullptr) *error = message.c_str();
+      finish_callback();
+      return 0;
+    }
+    context_entered = true;
+  }
   const auto callback_started = std::chrono::steady_clock::now();
   bool callback_ok = false;
   bool callback_disabled = false;
   {
-    svx::ExecutionContext context(std::string("svx_inheritance('") + method_id + "')");
+    svx::ExecutionContext context(std::string("svx_inheritance('") + method_id + "')", process_index);
     const std::uint8_t *data = request == nullptr ? nullptr : svx::dpi::payload_data(request);
     const std::size_t size = request == nullptr ? 0 : svx::dpi::payload_size(request);
     PyObject *module = PyImport_ImportModule("svx.inheritance");
@@ -1096,8 +1172,7 @@ static int inheritance_call_python(unsigned long long object_id,
     if (error != nullptr) {
       *error = message.c_str();
     }
-    PyGILState_Release(gstate);
-    g_inheritance_call_frames.pop_back();
+    finish_callback();
     if (callback_disabled) {
       svx::dpi::acknowledge_disabled_state();
       return 1;
@@ -1113,8 +1188,7 @@ static int inheritance_call_python(unsigned long long object_id,
   if (ok != nullptr) {
     *ok = 1;
   }
-  PyGILState_Release(gstate);
-  g_inheritance_call_frames.pop_back();
+  finish_callback();
   return 0;
 }
 
@@ -1131,6 +1205,7 @@ extern "C" int svx_inheritance_shutdown() {
       return 1;
     }
     g_inheritance_call_frames.clear();
+    g_inheritance_callback_states.clear();
     svx::signal::shutdown();
     return 0;
   }
@@ -1145,6 +1220,7 @@ extern "C" int svx_inheritance_shutdown() {
     }
   }
   g_inheritance_call_frames.clear();
+  g_inheritance_callback_states.clear();
   PyGILState_Release(gstate);
   svx::signal::shutdown();
   return 0;

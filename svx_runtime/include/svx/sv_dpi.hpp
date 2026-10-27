@@ -12,6 +12,7 @@ namespace svx::dpi {
 namespace abi {
 // DPI longint unsigned and enum ports use their C ABI types, not C++ aliases.
 using ObjectId = unsigned long long;
+using InheritanceContext = unsigned long long (*)(int *);
 using ProcessStatus = int (*)(int);
 using InvokeObjectFunction = void *(*)(ObjectId, const char *, void *,
                                       unsigned char *, const char **);
@@ -45,6 +46,7 @@ inline constexpr std::size_t SVX_MAX_PAYLOAD_BYTES = 16U * 1024U * 1024U;
 
 bool delay_svx(double duration, int unit_code, int process_index);
 bool disabled_state();
+std::uint64_t inheritance_context_id(int *process_index);
 void acknowledge_disabled_state();
 void fork_svx(void *group, void *procs[SVX_MAX_FORK_NUM],
               e_svx_fork_join_type fork_type);

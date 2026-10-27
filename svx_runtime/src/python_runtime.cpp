@@ -20,6 +20,7 @@ enum class ExceptionPolicy { Fatal, Report };
 
 ExceptionPolicy g_policy = ExceptionPolicy::Fatal;
 svx::RuntimeState g_runtime_state = svx::RuntimeState::Uninitialized;
+thread_local PyThreadState *g_idle_thread_state = nullptr;
 std::string g_deferred_fatal;
 
 void report_deferred_fatal() {
@@ -147,6 +148,7 @@ bool prepare_runtime(std::uint32_t sv_runtime_abi_version,
     Py_Initialize();
   }
   PyGILState_STATE gstate = PyGILState_Ensure();
+  g_idle_thread_state = PyThreadState_Get();
   add_python_path(".");
   add_python_path("python");
   const bool ok = call_runtime_initialize_hook();
@@ -280,6 +282,8 @@ const char *runtime_state_name() {
 }
 
 bool runtime_ready() { return g_runtime_state == RuntimeState::Ready; }
+
+PyThreadState *runtime_idle_thread_state() { return g_idle_thread_state; }
 
 void runtime_shutdown() {
   report_deferred_fatal();

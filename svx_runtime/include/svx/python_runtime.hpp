@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <Python.h>
 
 namespace svx {
 
@@ -33,6 +34,7 @@ void runtime_shutdown();
 RuntimeState runtime_state();
 const char *runtime_state_name();
 bool runtime_ready();
+PyThreadState *runtime_idle_thread_state();
 std::string handle_python_exception(const char *source, bool apply_policy = true);
 void set_exception_policy(const char *policy);
 bool fatal_policy_enabled();

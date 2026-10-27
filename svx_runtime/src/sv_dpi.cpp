@@ -10,6 +10,8 @@
 #include <unordered_set>
 
 #if defined(SVX_CHECK_DPI_EXPORT_CONTRACT)
+static_assert(std::is_same_v<svx::dpi::abi::InheritanceContext,
+                            decltype(&::svx_inheritance_context_id)>);
 static_assert(std::is_same_v<svx::dpi::abi::ProcessStatus,
                             decltype(&::proc_status_svx)>);
 static_assert(std::is_same_v<svx::dpi::abi::InvokeObjectFunction,
@@ -144,6 +146,13 @@ void validate_waveform_scope(const char *path, int depth) {
 } // namespace
 
 namespace svx::dpi {
+
+std::uint64_t inheritance_context_id(int *process_index) {
+  static auto current = optional_symbol<abi::InheritanceContext>("svx_inheritance_context_id");
+  if (current == nullptr) return 0; // Older SV runtimes retain their serial-call behavior.
+  ScopedDpiScope scope;
+  return current(process_index);
+}
 
 void waveform_initialize() {
   waveform_execute = nullptr;
