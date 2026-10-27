@@ -1,5 +1,11 @@
 # SVX Examples
 
+For an existing SV/UVM project, use the [OpenTitan UART migration tutorial](opentitan_uart/README.md):
+an unchanged upstream baseline, real class/transaction handles, mixed SV/Python
+scenarios and a Python-owned reference model with negative checker controls.
+The smaller [four-register migration draft](project_migration/README.md) is an
+introductory exercise, not the real-project acceptance record.
+
 [中文](README.zh-CN.md)
 
 These examples are arranged by the workflow a verification engineer normally
@@ -17,6 +23,7 @@ the [example run guide](RUNNING_EXAMPLES.md).
 | Goal | Start here | What it demonstrates |
 |---|---|---|
 | Learn the complete project workflow | [Register Lab](register_lab/README.md) | Real DUT, typed driver/monitor, processes, inheritance/fields, handles, signal diagnostics, callbacks and generation checks |
+| Migrate an established UVM project | [OpenTitan UART](opentitan_uart/README.md) | Original SV baseline, retained agents, native transaction handles and two upper-layer ownership modes |
 | Run one Python test from an SV testbench | [Basic bootstrap](milestone_1_basic) | `svx_init`, `svx_run_test`, display, and simulator-owned delay |
 | Move transactions across the boundary | [Typed bus testbench](milestone_7_sv_typed_helpers) | SvTypes models, generated SV helpers, request/response and monitor channels |
 | Introduce SVX into a maintained testbench | [Existing SV environment](milestone_5_existing_env) | Leave driving and monitoring in SV; move scenario and checking policy to Python |

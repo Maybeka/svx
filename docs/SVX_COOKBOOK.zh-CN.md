@@ -10,6 +10,31 @@ SystemVerilog 验证环境：先建立一个由仿真器调度的 Python 入口�
 不是把前一节的片段直接追加到同一文件；运行时使用对应 README 的完整工程。
 可以依次学习各章，也可以按验证需求选择专项边界。
 
+## 迁移路线：从纯 SV 到 Python 场景和检查
+
+如果你已有 SV 验证项目，先走[OpenTitan UART 完整改造教程](../examples/opentitan_uart/README.zh-CN.md)：
+从未经修改的原 SV 基线出发，逐步导出真实事务对象，验证混合模式与 Python 主导模式，
+再通过独立检查器和故障注入确认迁移结果。不要直接把综合示例的最终架构照搬进项目。
+
+希望先理解更小的事务边界时，可读[四寄存器迁移草稿](../examples/project_migration/README.zh-CN.md)。
+它提供四个可独立编译的检查点，但不是上述真实项目的验收记录：
+
+| 阶段 | 本次改动 | 必须保留的证据 |
+|---|---|---|
+| 纯 SV 基线 | 暂不使用 SVX | 64 笔响应及独立观察正确，48 个协议等待周期 |
+| Python 入口 | 仅添加 init、同步入口与 shutdown | 完整总线数据、顺序和接受时刻不变 |
+| Python 事务生成 | SvTypes 声明、typed request/response adapter | 原 SV monitor scoreboard 仍通过 |
+| Python 独立检查 | observation channel 和同步 fork/join | 两条检查流都排空，所有 SV/Python 任务完成后 PASS |
+
+教程包含每一步的关键 diff、实际源文件、生成检查命令和只依赖标准库的日志
+验收工具；教程还定义了编译后新增 Python 用例而不修改二进制，以及 DUT/monitor
+故障捕获的验收方法。当前小型项目仍有未完成项，详见其验证状态；它只用于入门，
+不能替代具有现成 SV 环境的真实项目级验证。共同的 DUT、driver、monitor 和时钟/复位代码不变，避免
+将协议重写、采样变化和跨语言接入混成一次改造。
+
+这条路线刻意不使用继承或层次信号服务：事务边界已经足够时，不把硬件时序搬到
+Python。完成迁移后，再按真实需求选用后面的专项能力。
+
 ## 项目路线：四寄存器外设
 
 [寄存器小项目](../examples/register_lab/README.zh-CN.md)把主要能力放在同一
@@ -352,13 +377,21 @@ SvTypes 模型，应回到第 5 步。
 
 ## 7. 接入既有 SV 或 UVM 环境
 
+需要真实项目的源码、改造边界和逐阶段验收时，使用
+[OpenTitan UART 迁移教程](../examples/opentitan_uart/README.zh-CN.md)：原 driver/monitor
+保持不变，先双跑 SV/Python 检查器，再将场景与字节流模型交给 Python。它还保留
+原 SV 事务流并验证两者并发工作，不要求一次性迁走整个环境。
+下面是接入原则的概览，不是替代完整工程的片段拼接指南。
+
 SVX 的推荐首个落点不是重写 testbench，而是在既有 driver 和 monitor 的事务
-边界接通类型化通道：
+边界接通类型化通道或类方法：
 
 1. 在已有 SV 初始化路径调用 `svx_init()`。
 2. 与现有 driver/monitor 并发启动一个 `svx_run_test()` 或 `svx_start()`。
-3. driver 从 `<env>.<agent>.req` 取得 SvTypes item，按原来的时钟和协议驱动。
-4. monitor 仍在 SV 时钟边沿采样，并向 `<env>.<agent>.mon` 发布 observation。
+3. driver 从 `<env>.<agent>.req` 取得 SvTypes item，或由生成的类方法调用原事务
+   服务，按原来的时钟和协议驱动。
+4. monitor 仍在 SV 时钟边沿采样，通过独立的 observation 通道或 analysis 订阅者
+   导出观测；不抢占原 checker 的事务消费者。
 5. Python 创建 scenario、维护 expected 数据，并消费 response 与 observation。
 6. 在 SV teardown 中调用 `svx_shutdown()`，再结束仿真。
 
@@ -380,6 +413,16 @@ end
 UVM 环境同样保留其 component hierarchy、phase、objection、sequencer 和 factory。
 SVX 只用于窄的事务边界；不要把 `raise_objection`、时钟等待或 monitor sampling
 搬到 Python。
+
+迁移时有三个容易被简单 smoke 掩盖的点：
+
+- **观察不是响应的副本。** monitor 保留 SV 引脚采样，Python 并发消费独立观察；
+  在启动两个 Python 进程前准备好预期数据，避免 producer/observer 运行顺序竞争。
+- **最后一笔 response 不是收尾完成。** 等待 BFM 和场景结束，再检查独立观测与
+  期望数量。通道型边界可用 typed stop/ack；UART 类边界则使用原 sequence 的
+  `start()`/idle 完成语义，不必额外发明一套结束协议。
+- **失败也要验收。** 对 DUT 数据和 monitor 记录分别注入故障。允许并发检查器中
+  任一明确的预期诊断先出现，但超时、崩溃、导入失败不能算作 checker 通过。
 
 ### 7.1 用同一 UVM factory 启动 Python 或 SV 用例
 
@@ -747,6 +790,54 @@ X/Z，二态 codec 遇到 X/Z 仍报错。它表示“最近通知的值”，�
 
 ## 11. 把每个新能力变成可维护的构建输入
 
+### 复用原工程的编译配置
+
+复杂环境不要再为 SVX 手工维护一套依赖清单。直接导入原 filelist：
+
+```sh
+svx compile-config \
+  --sv-filelist build/design.f --sv-build-directory "$PROJECT_BUILD"
+```
+
+`--sv-filelist` 采用原 `-f` 的路径上下文；若原清单采用相对清单自身目录的
+`-F` 规则，使用 `--sv-relative-filelist`。顶层清单文件名相对本次命令的工作
+目录；清单内容按对应规则处理。嵌套清单、宏定义与 include 顺序一并读取。
+
+若原构建系统已经拼出了最终编译命令，让它在调用编译器的位置直接导出
+`{"directory": "原工作目录", "arguments": ["编译器", "-f", "原清单", "其余原参数"]}`，
+不要另写一份 flags。之后两个继承命令都可以使用同一份导出记录：
+
+```sh
+svx inheritance-manifest \
+  --sv-build-command build/compiler-input.json \
+  --sv-declarations verification/selected_classes.json \
+  --out generated/inheritance.json
+svx inheritance-gen \
+  --sv-build-command build/compiler-input.json \
+  --manifest generated/inheritance.json \
+  --python-out generated/python --sv-out generated/mirrors.sv \
+  --artifact-manifest generated/artifacts.json
+```
+
+这里导入的是**解析上下文**，不是额外的代码生成目标。用户仍只声明希望映射的类
+和成员。SVX 新增的接入源码可用 `--sv-source` 追加，不需要重新列出原工程依赖。
+不要为了提供依赖上下文对整个工程使用 `--sv-integrated-dir`：它的含义仍是生成
+所提供源码的集成副本，而不是仅选择少数类。
+
+`compile-config` 展示实际解析配置及不参与解析的已知编译选项；未知关键选项会
+报错。原工具隐式加载的 UVM 源码需要在相同工具环境下解析。受保护区域不会被
+解密，隐藏在其中的类不能凭清单生成。`-y` 与 `+libext+` 则保留为按需搜索上下文：
+先按库目录顺序，再按目录内的扩展名顺序查找缺失单元，只读取选中的文件，并
+递归处理它的依赖，不会把整个目录加入解析。显式提供的定义优先；未用到的错误
+文件不会影响导出。检查时会重新搜索，因此新增更高优先级的同名单元也会使旧
+生成物过期。其他未知选项仍不能静默忽略。完整支持范围见
+[编译配置导入](SVX_BUILD_INPUTS.md)。
+
+重复原命令并加 `--check`，会重新读取原始清单和导出记录，检查宏、路径选择、
+源文件、include 及清单内容的变化；不要把 `compile-config` 的展示结果当成一份
+永久冻结的替代清单。构建系统配置改变时，应先更新它导出的实际命令。
+[UART 教程](../examples/opentitan_uart/README.zh-CN.md)提供这一接入方式。
+
 ### 11.1 日常工作只走一条固定路径
 
 寄存器项目把固定输入收在 `generate.py`。第一次运行或修改声明后，执行
@@ -915,6 +1006,7 @@ wrapper，再查询 `capabilities()`。`switch_file` 保留选择，`finish` 后
 | 需求 | 示例 |
 |---|---|
 | 同一 DUT 的综合学习与维护路径 | [寄存器验证小项目](../examples/register_lab/README.zh-CN.md) |
+| 从真实 UVM 环境逐步迁移、混合工作与验证故障 | [OpenTitan UART 迁移教程](../examples/opentitan_uart/README.zh-CN.md) |
 | 最小初始化、加载、启动和延时 | [基础启动](../examples/milestone_1_basic) |
 | fork/join、等待与停止 | [fork/join](../examples/milestone_1_fork) |
 | Python 堆共享 | [共享状态](../examples/milestone_1_shared_state) |

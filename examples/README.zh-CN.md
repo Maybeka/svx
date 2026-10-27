@@ -11,9 +11,15 @@ milestone 编号组织。建议先运行[寄存器小项目](register_lab/README
 并给出每一步的操作和检查点。
 共享的环境、构建输入、runtime 加载和通过/失败判定见[示例运行指南](RUNNING_EXAMPLES.zh-CN.md)。
 
+已有 SV/UVM 项目需要逐步改造时，使用 [OpenTitan UART 迁移教程](opentitan_uart/README.zh-CN.md)：
+从未修改的真实项目基线开始，导出类与事务 handle，验证混合及 Python 主导模式，
+再用故障注入确认独立 Python 检查器的作用。
+[四寄存器迁移草案](project_migration/README.zh-CN.md) 保留作入门练习，不作为真实项目验收记录。
+
 | 目标 | 从这里开始 | 展示内容 |
 |---|---|---|
 | 完成综合项目的学习与维护路径 | [寄存器小项目](register_lab/README.zh-CN.md) | 真实 DUT、typed driver/monitor、进程、继承与字段、handle、信号诊断、回调和生成检查 |
+| 把既有 UVM 项目逐步改造成 SVX 项目 | [OpenTitan UART](opentitan_uart/README.zh-CN.md) | 原 SV 基线、真实事务 handle、两种上层归属模式、Python 检查及故障验收 |
 | 从 SV testbench 运行一个 Python 测试 | [基础启动](milestone_1_basic/README.zh-CN.md) | `svx_init`、`svx_run_test`、显示和由仿真器管理的延时 |
 | 跨边界传输 transaction | [Typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md) | SvTypes 模型、生成的 SV helper、请求/响应与 monitor channel |
 | 在既有 SV testbench 中采用 SVX | [既有 SV 环境](milestone_5_existing_env/README.zh-CN.md) | 驱动和监控保留在 SV；场景和检查策略移至 Python |
