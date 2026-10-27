@@ -240,16 +240,20 @@ def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, co
     if not paths:
         return
     source_manager = source_manager or SourceManager()
+    trees = []
     if compilation_unit:
         options = {} if parse_options is None else {"options": parse_options}
         tree = syntax.SyntaxTree.fromFiles([str(path) for path in paths],
                                           source_manager or SourceManager(), **options)
         _check_source_diagnostics(tree, paths[0])
-        yield paths[0], _with_python_proxy_members(tree, proxy_context) if proxy_context else tree
+        trees.append((paths[0], tree))
     else:
         for path in paths:
             tree = _parse_source(syntax, path, source_manager, parse_options=parse_options)
-            yield path, _with_python_proxy_members(tree, proxy_context) if proxy_context else tree
+            trees.append((path, tree))
+    from .sv_library_search import load_libraries
+    for path, tree in load_libraries(trees, paths, source_manager, parse_options, compilation_unit):
+        yield path, _with_python_proxy_members(tree, proxy_context) if proxy_context else tree
 
 
 def _is_virtual(item: object) -> bool:
@@ -415,6 +419,7 @@ def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, p
                         if item.__class__.__name__ == "ClassPropertyDeclarationSyntax"
                         and item.declaration.__class__.__name__ == "DataDeclarationSyntax"
                         for declarator in item.declaration.declarators
+                        if str(getattr(declarator, "name", "")).strip()
                     ),
                     next((
                         method for item in getattr(member, "items", ())

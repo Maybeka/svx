@@ -355,25 +355,78 @@ def _cmd_svtypes_gen(args: argparse.Namespace, out: TextIO) -> int:
 
 
 def _sv_macro_config(args: argparse.Namespace) -> dict:
-    definitions = {}
+    from .compile_config import import_compile_configuration
+    if not hasattr(args, '_explicit_sv_sources'):
+        args._explicit_sv_sources = list(args.sv_source)
+    recipe = {
+        'directory': str(Path(getattr(args, 'sv_build_directory', None) or '.').resolve()),
+        'filelists': [str(Path(p).resolve()) for p in getattr(args, 'sv_filelist', [])],
+        'relative_filelists': [str(Path(p).resolve()) for p in getattr(args, 'sv_relative_filelist', [])],
+        'commands': [str(Path(p).resolve()) for p in getattr(args, 'sv_build_command', [])],
+    }
+    imported = import_compile_configuration(recipe)
+    args._sv_build_configuration = imported
+    args._sv_build_recipe = recipe
+    args.sv_source = [str(p) for p in imported.sources] + args._explicit_sv_sources
+    definitions = dict(imported.defines)
+    explicit = {}
     for item in args.sv_define:
         name, separator, value = item.partition("=")
         replacement = value if separator else None
-        if name in definitions and definitions[name] != replacement:
+        if name in explicit and explicit[name] != replacement:
             raise SystemExit(f"conflicting --sv-define values for {name}")
+        explicit[name] = replacement
         definitions[name] = replacement
-    if (definitions or args.sv_undefine or args.sv_compilation_unit or args.sv_include_dir) and not args.sv_source:
+    undefines = [name for name in imported.undefines if name not in explicit] + list(args.sv_undefine)
+    for name in undefines:
+        definitions.pop(name, None)
+    shared = args.sv_compilation_unit or imported.shared
+    includes = [str(p) for p in imported.include_dirs] + list(args.sv_include_dir)
+    if (definitions or undefines or shared or includes) and not args.sv_source:
         raise SystemExit("SV source configuration requires --sv-source")
-    if definitions or args.sv_undefine or args.sv_include_dir:
+    if definitions or undefines or includes:
         from .sv_source_options import _source_parse_options
-        _source_parse_options(definitions, args.sv_undefine, args.sv_include_dir)
-    return {"sv_predefines": definitions, "sv_undefines": args.sv_undefine,
-            "sv_compilation_unit": args.sv_compilation_unit, "sv_include_dirs": args.sv_include_dir}
+        _source_parse_options(definitions, undefines, includes)
+    return {"sv_predefines": definitions, "sv_undefines": undefines,
+            "sv_compilation_unit": shared, "sv_include_dirs": includes}
+
+
+def _sv_build_record(args, root):
+    imported = args._sv_build_configuration
+    if not imported.inputs:
+        return None
+    recipe = args._sv_build_recipe
+    relative = lambda p: Path(os.path.relpath(p, root)).as_posix()
+    return {'recipe': {'directory': relative(recipe['directory']),
+                       **{key: [relative(p) for p in recipe[key]]
+                          for key in ('filelists', 'relative_filelists', 'commands')}},
+            'configuration': imported.as_dict(root)}
+
+
+def _cmd_compile_config(args, out):
+    effective = _sv_macro_config(args)
+    root = Path.cwd()
+    relative = lambda p: Path(os.path.relpath(Path(p).resolve(), root)).as_posix()
+    data = args._sv_build_configuration.as_dict(root)
+    data.update(sources=[relative(p) for p in args.sv_source],
+                include_dirs=[relative(p) for p in effective['sv_include_dirs']],
+                defines=effective['sv_predefines'], undefines=effective['sv_undefines'],
+                compilation_unit=effective['sv_compilation_unit'])
+    text = json.dumps(data, indent=2) + '\n'
+    if args.out:
+        _protect_generation_inputs([Path(args.out)], [*args._sv_build_configuration.inputs,
+                                                    *(Path(p) for p in args.sv_source)])
+        write_text_atomic(Path(args.out), text)
+    else:
+        print(text, end='', file=out)
+    return 0
 
 
 def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
+    _sv_macro_config(args)
+    from .sv_library_search import library_search
     certified_sources = {}
-    with _fresh_declaration_entries((), all_sources=True,
+    with library_search(args._sv_build_configuration), _fresh_declaration_entries((), all_sources=True,
                                     cached_sources=certified_sources,
                                     command='inheritance-gen') as consumed:
         return _generate_inheritance(args, out, consumed, certified_sources)
@@ -381,20 +434,20 @@ def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
 
 def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
                           certified_sources: dict) -> int:
+    macro_config = _sv_macro_config(args)
     integrated_dir = getattr(args, 'sv_integrated_dir', None)
     output_options = (args.sv_out, args.sv_stage_dir, integrated_dir)
     if sum(bool(option) for option in output_options) > 1:
         raise SystemExit("inheritance-gen accepts only one of --sv-out, --sv-stage-dir, --sv-integrated-dir")
     if integrated_dir and not args.sv_source:
         raise SystemExit('--sv-integrated-dir requires --sv-source')
-    if integrated_dir and len(args.sv_source) > 1 and not args.sv_compilation_unit:
+    if integrated_dir and len(args.sv_source) > 1 and not macro_config['sv_compilation_unit']:
         raise SystemExit('multiple integrated sources require --sv-compilation-unit')
     if args.check and (not args.python_out or not any(output_options) or not args.artifact_manifest):
         raise SystemExit(
             "inheritance-gen --check requires --python-out, one SV output option, and --artifact-manifest")
     if integrated_dir and len({Path(path).resolve() for path in args.sv_source}) != len(args.sv_source):
         raise SVXInheritanceError('duplicate integrated source input')
-    macro_config = _sv_macro_config(args)
     python_dependencies = _python_source_dependencies(args)
     input_root = Path(args.artifact_manifest).parent.resolve() if args.artifact_manifest else Path.cwd()
     args._generation_imports = _cached_generation_imports(args, input_root)
@@ -520,6 +573,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
     protected_inputs = {*consumed, *getattr(args, '_generation_imports', {}),
                         *getattr(args, '_discovery_sources', ()),
                         Path(args.manifest).resolve(), *_sv_source_dependencies(args),
+                        *args._sv_build_configuration.inputs,
                         *python_dependencies}
     removable = []
     if args.python_out:
@@ -754,7 +808,7 @@ def _sv_source_dependencies(args: argparse.Namespace) -> set[Path]:
     return _source_dependencies(args.sv_source, predefines=macro_config['sv_predefines'],
                                 undefines=macro_config['sv_undefines'],
                                 include_dirs=macro_config['sv_include_dirs'],
-                                compilation_unit=args.sv_compilation_unit)
+                                compilation_unit=macro_config['sv_compilation_unit'])
 
 
 def _python_source_dependencies(args: argparse.Namespace) -> set[Path]:
@@ -813,8 +867,11 @@ def _generation_inputs(args: argparse.Namespace, root: Path, certified_sources=N
         "sv_predefines": dict(sorted(macro_config["sv_predefines"].items())),
         "sv_undefines": sorted(set(macro_config["sv_undefines"])),
         "sv_include_dirs": [relative(Path(path).resolve()) for path in macro_config["sv_include_dirs"]],
-        "source_mode": "shared-compilation-unit" if args.sv_compilation_unit else "separate-parse-inputs",
+        "source_mode": "shared-compilation-unit" if macro_config['sv_compilation_unit'] else "separate-parse-inputs",
     }
+    if build_record := _sv_build_record(args, root):
+        inputs['sv_build'] = build_record
+        inputs['sv_build_inputs'] = [file_record(path) for path in args._sv_build_configuration.inputs]
     python_dependencies = _python_source_dependencies(args)
     if python_dependencies:
         inputs["python_sources"] = [file_record(path) for path in sorted(python_dependencies)]
@@ -865,7 +922,10 @@ def _manifest_input_fingerprints(args: argparse.Namespace) -> dict:
         'sv_declarations': [record(path) for path in args.sv_declarations],
         'sv_dependencies': [record(path) for path in sorted(_sv_source_dependencies(args))],
         'python_sources': [record(path) for path in sorted(_python_source_dependencies(args))],
+        'sv_build_inputs': [record(path) for path in args._sv_build_configuration.inputs],
     }
+    if build_record := _sv_build_record(args, Path.cwd()):
+        inputs['sv_build'] = build_record
     modules = []
     for name in args.python_module:
         loaded = sys.modules.get(name)
@@ -992,6 +1052,13 @@ def _fresh_declaration_entries(names, source_paths=(), *, all_sources=False,
 
 
 def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
+    _sv_macro_config(args)
+    from .sv_library_search import library_search
+    with library_search(args._sv_build_configuration):
+        return _discover_inheritance_manifest(args, out)
+
+
+def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
     macro_config = _sv_macro_config(args)
     python_dependencies = _python_source_dependencies(args)
     target = Path(args.out)
@@ -1033,6 +1100,7 @@ def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
         *consumed,
         *(Path(path).resolve() for path in args.sv_declarations),
         *_sv_source_dependencies(args),
+        *args._sv_build_configuration.inputs,
         *(Path(item['path']) for item in fingerprints['python_sources']),
         *(Path(module.__file__).resolve() for module in modules if getattr(module, "__file__", None)),
         *retained,
@@ -1070,7 +1138,7 @@ def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
             'Retry after the declaration inputs are stable.'
         )
     sources = dict(retained)
-    for category in ('sv_declarations', 'sv_dependencies', 'python_sources', 'python_modules'):
+    for category in ('sv_declarations', 'sv_dependencies', 'python_sources', 'python_modules', 'sv_build_inputs'):
         for item in fingerprints[category]:
             if 'path' in item:
                 sources[Path(item['path']).resolve()] = item['sha256']
@@ -1097,8 +1165,10 @@ def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
         'sv_predefines': dict(sorted(macro_config['sv_predefines'].items())),
         'sv_undefines': sorted(set(macro_config['sv_undefines'])),
         'sv_include_dirs': [relative(path) for path in macro_config['sv_include_dirs']],
-        'source_mode': 'shared-compilation-unit' if args.sv_compilation_unit else 'separate-parse-inputs',
+        'source_mode': 'shared-compilation-unit' if macro_config['sv_compilation_unit'] else 'separate-parse-inputs',
     }
+    if build_record := _sv_build_record(args, root):
+        configuration['sv_build'] = build_record
     ancestors = {'.'.join(item['module'].split('.')[:index])
                  for item in configuration['python_selections']
                  for index in range(1, len(item['module'].split('.')))}
@@ -1129,6 +1199,14 @@ def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
 
 
 def _add_sv_macro_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('--sv-filelist', action='append', default=[], metavar='FILE',
+                        help='import an original -f filelist (paths relative to build directory)')
+    parser.add_argument('--sv-relative-filelist', action='append', default=[], metavar='FILE',
+                        help='import an original -F filelist (contents relative to filelist directory)')
+    parser.add_argument('--sv-build-command', action='append', default=[], metavar='JSON',
+                        help='import original compiler argv: JSON with directory and arguments')
+    parser.add_argument('--sv-build-directory', metavar='DIRECTORY',
+                        help='original working directory for -f filelists; default current directory')
     parser.add_argument("--sv-include-dir", action="append", default=[], metavar="DIRECTORY",
                         help="SV include search directory; repeat in compiler search order")
     parser.add_argument("--sv-compilation-unit", action="store_true",
@@ -1143,6 +1221,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m svx")
     parser.add_argument("--debug", action="store_true", help="show tracebacks for expected command errors")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser('compile-config', help='inspect imported original SV build inputs without executing them')
+    _add_sv_macro_arguments(p)
+    p.add_argument('--sv-source', action='append', default=[])
+    p.add_argument('--out')
+    p.set_defaults(func=_cmd_compile_config)
 
     p = sub.add_parser("share", help="print the SVX SystemVerilog support directory")
     p.set_defaults(func=_cmd_share)

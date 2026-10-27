@@ -264,6 +264,12 @@ implementation exceptions are not suppressed.
 
 - `svx share`, `svx native-source`, `svx sv-files`, `svx libs`, and
   `svx compile-flags` locate installed build inputs.
+- `svx compile-config` inspects original filelists or an exported compiler argv
+  without executing the build. Both inheritance commands accept `--sv-filelist`,
+  `--sv-relative-filelist`, `--sv-build-directory` and `--sv-build-command`.
+  Imported configuration and original input files participate in freshness
+  checks. See [build input import](SVX_BUILD_INPUTS.md) for path conventions,
+  precedence, supported options, implicit libraries and explicit rejections.
 - `svx svtypes-gen` generates SystemVerilog declarations and optional typed
   channel helpers from SvTypes modules. With `--out`, byte-identical output
   preserves its existing timestamp instead of triggering downstream rebuilds.
@@ -452,6 +458,7 @@ private classes inherit their private classification.
 | Private | Generated payload validation | `svx_require_svtypes_payload`, `svx_require_svtypes_wire_payload`, `svx_payload_to_checked_byte_queue`, `svx_require_unpacked_all` |
 | Private | Object and session interfaces | `svx_dispatchable`, `svx_function_dispatchable`, `svx_static_function_dispatchable`, `svx_static_dispatchable`, `svx_factory`, `svx_external_handle`, `svx_session_resource` |
 | Private | Object registries | `svx_object_id_allocator`, `svx_external_handle_registry`, `svx_inheritance_registry` |
+| Private | Callback execution isolation | `svx_callback_contexts`, `svx_inheritance_context_id` |
 | Private | Staged construction context | `svx_construction_frame`, `svx_construction_context`, `svx_constructor_cache`, `svx_constructor_cache_registry` |
 | Private | Field envelopes | `svx_field_operation`, `svx_field_take_u32`, `svx_field_take_bytes`, `svx_field_operation_unpack` |
 | Private | Object dispatch and lifecycle | `svx_create_object`, `svx_create_object_function`, `svx_invoke_object`, `svx_invoke_object_function`, `svx_invoke_static`, `svx_invoke_static_function`, `svx_release_object`, `svx_release_object_function`, `svx_publish_object`, `svx_require_published_object` |

@@ -10,7 +10,7 @@ from .errors import SVXInheritanceError
 def _source_parse_options(predefines, undefines, include_dirs=(), *, discover_proxies=False):
     try:
         from pyslang import Bag
-        from pyslang.parsing import PreprocessorOptions
+        from pyslang.parsing import LexerOptions, PreprocessorOptions
     except ImportError as error:
         raise SVXInheritanceError(
             "SV source scanning requires the optional 'pyslang' dependency; "
@@ -53,7 +53,11 @@ def _source_parse_options(predefines, undefines, include_dirs=(), *, discover_pr
             "SVX_PY_PROXY(N,I,B)=(* __svx_discovery_python_class_id = I *) class N extends B; endclass"]
     options.undefines = list(names)
     options.additionalIncludePaths = directories
-    return Bag([options])
+    lexer = LexerOptions()
+    # Recognize opaque legacy protected regions, never interpret their payload as SV.
+    # A selected declaration hidden in one still cannot be resolved or generated.
+    lexer.enableLegacyProtect = True
+    return Bag([options, lexer])
 
 
 def _source_dependencies(paths, *, predefines=None, undefines=(), include_dirs=(),

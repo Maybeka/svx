@@ -935,6 +935,17 @@ python -m svx inheritance-gen \
   --artifact-manifest generated/svx-artifacts.json --check
 ```
 
+Existing projects can instead reuse their original dependency context through
+`--sv-filelist` / `--sv-relative-filelist` or `--sv-build-command`, on both
+inheritance commands. The latter reads the actual compiler argv and working
+directory exported by the original build system. Use `svx compile-config` to
+inspect the resolved sources, macros, include order and compilation-unit mode.
+Both freshness gates reread these original inputs; they are not a second
+manually maintained source list. See [build input import](SVX_BUILD_INPUTS.md)
+for supported syntax, implicit-library handling and rejected options. Prefer
+`--sv-out` for an ordinary selected class boundary with full dependency context;
+integrated mode below still emits copies of all supplied source units.
+
 For same-package or mixed-root alternating inheritance, use an integrated copy
 of the original SV source units instead of manually placing generated includes:
 

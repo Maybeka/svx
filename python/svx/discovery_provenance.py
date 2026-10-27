@@ -58,7 +58,7 @@ def _configuration(value) -> bool:
         return False
     paths = {'sv_declarations', 'sv_sources', 'sv_dependencies', 'python_sources', 'sv_include_dirs'}
     names = {'python_modules', 'sv_undefines'}
-    if set(value) - paths - names - {'sv_predefines', 'source_mode', 'python_selections', 'python_namespaces'}:
+    if set(value) - paths - names - {'sv_predefines', 'source_mode', 'python_selections', 'python_namespaces', 'sv_build'}:
         return False
     selections = value.get('python_selections', [])
     if (not isinstance(selections, list) or any(
@@ -202,6 +202,11 @@ def validate_discovery_provenance(data: dict, manifest_path: Path | None, *,
             raise SVXInheritanceError(
                 f'discovery source changed: {path}; rerun inheritance-manifest')
     configuration = record['configuration']
+    if 'sv_build' in configuration:
+        from .compile_config import replay_build_record
+        imported = replay_build_record(configuration['sv_build'], root)
+        if not set(imported.inputs) <= {path for path, _ in sources}:
+            raise SVXInheritanceError('imported build input inventory is missing')
     _validate_python_selections(configuration, root, {path for path, _ in sources})
     if configuration.get('sv_sources'):
         if 'sv_dependencies' not in configuration:
@@ -211,12 +216,16 @@ def validate_discovery_provenance(data: dict, manifest_path: Path | None, *,
         if len(expected) != len(set(expected)) or not set(expected) <= {path for path, _ in sources}:
             raise SVXInheritanceError(f'invalid discovery SV dependency inventory: {evidence}')
         from .sv_source_options import _source_dependencies
-        selected = _source_dependencies(
-            [root / name for name in configuration['sv_sources']],
-            predefines=configuration.get('sv_predefines', {}),
-            undefines=configuration.get('sv_undefines', []),
-            include_dirs=[root / name for name in configuration.get('sv_include_dirs', [])],
-            compilation_unit=configuration.get('source_mode') == 'shared-compilation-unit')
+        from .sv_library_search import library_search
+        from .compile_config import CompileConfiguration
+        context = imported if 'sv_build' in configuration else CompileConfiguration([], [], {}, [], [])
+        with library_search(context):
+            selected = _source_dependencies(
+                [root / name for name in configuration['sv_sources']],
+                predefines=configuration.get('sv_predefines', {}),
+                undefines=configuration.get('sv_undefines', []),
+                include_dirs=[root / name for name in configuration.get('sv_include_dirs', [])],
+                compilation_unit=configuration.get('source_mode') == 'shared-compilation-unit')
         if selected != set(expected):
             added = ', '.join(str(path) for path in sorted(selected - set(expected)))
             removed = ', '.join(str(path) for path in sorted(set(expected) - selected))
