@@ -5,6 +5,8 @@ include README.md
 recursive-include sv *.sv *.svh
 recursive-include svx_runtime *.cpp *.hpp
 recursive-include docs *.md *.svg *.excalidraw
+recursive-include docs/site *.py *.css *.js *.html
+prune docs/site/_build
 exclude docs/SVX_MILESTONE*.md
 exclude docs/review_*.md
 recursive-include examples *.py *.sv *.svh *.md *.json

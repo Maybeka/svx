@@ -1,6 +1,15 @@
 # SVX Documentation
 
+## Cookbook Website
+
+The [Cookbook website](site/README.md) builds the existing Markdown into a
+searchable learning guide with chapter navigation and complete linked examples.
+See the [Chinese build guide](site/README.zh-CN.md) for local preview instructions.
+
 ## Core Documents
+
+- [SVX_BUILD_INPUTS.md](SVX_BUILD_INPUTS.md): reuse original filelists and exported
+  compiler argv for discovery, generation and read-only freshness checks.
 
 - [RELEASE_1.0.0.md](RELEASE_1.0.0.md): supported compatibility contract,
   installation model, and release gates for SVX 1.0.0.
@@ -19,11 +28,16 @@
   SV helpers, lifecycle rules, debug flow, cross-language inheritance, signal
   access, and anti-patterns.
 - [SVX_COOKBOOK.zh-CN.md](SVX_COOKBOOK.zh-CN.md): a standalone, step-by-step
-  Chinese cookbook with a five-step Register Lab project route, a capability
+  Chinese cookbook with a real OpenTitan UART migration tutorial, a five-step Register Lab project route, a capability
   index and focused chapters on runtime, channels, inheritance and signals.
 - [../examples/register_lab/README.md](../examples/register_lab/README.md):
   one runnable register-peripheral project, with bilingual instructions,
   generation/check commands and positive/negative result criteria.
+- [../examples/opentitan_uart/README.md](../examples/opentitan_uart/README.md):
+  real upstream UART baseline, native transaction handles, mixed and Python-led
+  scenarios, independent Python checking and explicit negative controls.
+- [../examples/project_migration/README.md](../examples/project_migration/README.md):
+  introductory four-register migration draft; not the real-project acceptance record.
 - [SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md](SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md):
   Chinese concept guide that connects the architecture diagrams to runnable
   examples for SvTypes data contracts, SVX primitives, typed channels, signals,

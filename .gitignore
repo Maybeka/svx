@@ -8,6 +8,7 @@ docs/SVX_MILESTONE*.md
 docs/review_SVX_MILESTONE*.md
 docs/review_IMPLEMENTATION_VS_DOCS*.md
 /.local-sim/
+/docs/site/_build/
 
 # OS and editor noise
 .DS_Store

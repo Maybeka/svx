@@ -34,6 +34,10 @@ dev = [
 manifest = [
   "pyslang>=11,<12",
 ]
+docs = [
+  "markdown-it-py>=3,<5",
+  "Pygments>=2.18,<3",
+]
 
 [tool.setuptools]
 package-dir = {"" = "python"}
