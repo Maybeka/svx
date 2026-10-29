@@ -46,7 +46,9 @@ Python 定义的用例应出现 `REGISTER_LAB_UVMX_PASS`；SV 定义的用例应
 这里的 SV Test 使用 SVX 启动同一 Python 场景，不是把 UVM scheduler 放到 Python。
 UVMX 仅映射 Test 和同步 phase callbacks；UVM 仍拥有 factory、phase、objection 与退出。
 `run_test()` 在零时刻启动，独立 SV 复位进程运行；driver/monitor 等待复位。
-场景等待三个环境完成通知之后才结束，随后 launcher 在仿真退出前执行 shutdown。
+场景等待三个环境完成通知之后才结束。
+启动接入先调用 uvmx_init 完成注册，再直接调用原生 run_test；UVMX 不改变 UVM
+的退出策略。原生 UVM 默认结束仿真，不依赖 run_test 之后的 shutdown。
 因此不会依赖核心 top 在 UVM 结束后的 join 或报告代码。
 
 深层 UVM 类体系与完整 Python UVM 兼容不属于本例。

@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
 
     _, declared_tests = _require_uvmx()
     importlib.import_module(options.module)
-    declarations = declared_tests(options.module)
+    declarations = declared_tests()
     if not declarations:
         raise SystemExit(f"{options.module!r} contains no @uvm_test declarations")
     _validate_user_bases(declarations, tuple(options.sv_base_source))

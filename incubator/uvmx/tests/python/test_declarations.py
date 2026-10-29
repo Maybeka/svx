@@ -213,6 +213,61 @@ def test_fixed_callback_support_matches_public_generator():
     assert support.read_text() == PHASE_ADAPTER.render_sv('uvmx_phase_callbacks')
 
 
+def test_initialization_only_registers_before_native_run_test():
+    root = Path(__file__).parents[2]
+    bridge = (root / 'sv/uvmx_bridge.sv').read_text()
+    assert 'task automatic uvmx_init(string python_module)' in bridge
+    assert 'join' in bridge
+    for forbidden in ('run_test(', 'finish_on_completion', '$value$plusargs',
+                      '$finish', 'svx_shutdown'):
+        assert forbidden not in bridge.split('task automatic uvmx_init', 1)[1]
+    top = (root / 'examples/peer_test_selection/tb.sv').read_text()
+    assert top.index('uvmx_init("python_tests")') < top.index('uvm_pkg::run_test(')
+    assert 'UVMX_REGISTRATION_COMPLETE' in top
+
+
+def test_component_constructor_uses_standard_uvm_signature():
+    source = (Path(__file__).parents[2] / 'sv/uvmx_factory.sv').read_text()
+    bridge = source.split('class uvmx_test_wrapper', 1)[0]
+    constructor = bridge.split('function new(', 1)[1].split('endfunction', 1)[0]
+    assert constructor.startswith('string name = "uvmx_test_bridge", uvm_component parent = null)')
+    assert 'super.new(name, parent);' in constructor
+    assert 'canonical_id' not in constructor and 'callbacks = new' not in constructor
+    binding = bridge.split('function void bind_python_test(', 1)[1].split('endfunction', 1)[0]
+    assert 'callbacks = new(canonical_id);' in binding
+    factory = source.split('virtual function uvm_component create_component(', 1)[1].split('endfunction', 1)[0]
+    assert factory.index('instance = new(name, parent);') < factory.index('instance.bind_python_test(')
+    assert factory.index('instance.bind_python_test(') < factory.index('return instance;')
+
+
+def test_aggregate_entry_includes_imported_tests_and_custom_bases(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+    from uvmx.bootstrap import load_declarations
+
+    (tmp_path / 'uvmx_child_case.py').write_text(
+        "from uvmx import Test, uvm_test\n"
+        "@uvm_test(canonical_id='py://uvmx/unit/AggregateChild', "
+        "factory_name='aggregate_child', sv_base='example_pkg::AggregateBase')\n"
+        "class Child(Test): pass\n")
+    (tmp_path / 'uvmx_aggregate_entry.py').write_text('from uvmx_child_case import Child\n')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    declarations = load_declarations('uvmx_aggregate_entry')
+    assert any(item.factory_name == 'aggregate_child' for item in declarations)
+    base = tmp_path / 'base.sv'
+    base.write_text('package example_pkg; class AggregateBase extends uvm_test; endclass endpackage\n')
+    import os
+    environment = os.environ.copy()
+    environment['PYTHONPATH'] = os.pathsep.join([str(tmp_path), *sys.path])
+    tool = Path(__file__).parents[2] / 'tools/uvmx_gen.py'
+    result = subprocess.run([sys.executable, str(tool), '--module', 'uvmx_aggregate_entry',
+                             '--sv-base-source', str(base), '--sv-out', str(tmp_path / 'bases.sv'),
+                             '--artifact-manifest', str(tmp_path / 'artifacts.json')],
+                            env=environment, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'uvmx_typed_base_factory#(example_pkg::AggregateBase)' in (tmp_path / 'bases.sv').read_text()
+
+
 def test_inherited_async_phase_is_rejected_before_registration():
     class Parent(Test):
         async def run_phase(self):

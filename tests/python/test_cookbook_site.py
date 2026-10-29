@@ -106,7 +106,7 @@ def test_uvmx_explainer_includes_real_sources_and_explicit_scope(built):
     content = (output / "uvmx.html").read_text()
     for term in ["+UVM_TESTNAME", "CallbackAdapter", "finish_on_completion",
                  "不是完整", "不包含在 SVX 发布包", "没有独立的 Python 时序循环",
-                 "不代表本网页再次执行了仿真", "只接收 self"]:
+                 "既有集成验证记录", "只接收 self"]:
         assert term in content
     for source in site.UVMX_SOURCES:
         assert (output / site.destination(source)).is_file()

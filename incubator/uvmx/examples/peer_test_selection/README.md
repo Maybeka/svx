@@ -6,6 +6,23 @@ This temporary U0 example proves that one ordinary UVM selection path can
 choose either a pre-existing SystemVerilog test or an opt-in Python test.
 It is intentionally outside the published SVX package.
 
+Complete registration before calling the original UVM task:
+
+```systemverilog
+initial begin
+  uvmx_pkg::uvmx_init("python_tests");
+  uvm_pkg::run_test();
+end
+```
+
+Initialization loads the entry module and its imports, publishes all declared
+Python tests, and returns only when every registration has been consumed. It
+does not scan unimported files. Do not race registration with run_test in separate
+initial blocks. UVMX neither selects the test nor changes finish_on_completion.
+Native UVM normally finishes simulation; if the application configures run_test
+to return, it can call svx_shutdown before exiting. That existing shutdown API
+is a task and cannot be called from final.
+
 The Python declaration in `python_tests.py` registers `py_smoke_test` at runtime.
 It does not generate a corresponding SV test class. The same top-level provides
 `legacy_sv_test`.  Select either with the standard UVM spelling:
@@ -19,6 +36,9 @@ For the Python case, a reusable SV bridge creates the Python object during UVM
 factory construction, forwards the fixed phase surface, holds a UVM
 objection while the Python `run_phase` runs, and receives one typed SvTypes
 transaction in the SV monitor supplied by `uvmx_python_base`.
+The component constructor keeps the ordinary `new(name, parent)` signature.
+The factory wrapper binds Python metadata and creates the Python Test before
+returning the component; binding is not delayed until build_phase.
 
 The fixed callback bridge delegates transport to the public
 `svx.callbacks.CallbackAdapter` interface. UVMX controls only UVM test

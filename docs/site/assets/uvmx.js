@@ -8,8 +8,8 @@ const sources = {
 const shared = [
   {
     title: "先让 Python 用例进入运行时",
-    description: "launcher 初始化 SVX，加载用户模块和 uvmx.bootstrap。装饰器记录 canonical_id、factory_name 和 sv_base，并把实际 Python 类注册给公开 CallbackAdapter。",
-    label: "SV · launcher", source: sources.launcher,
+    description: "uvmx_init 初始化 SVX，加载入口模块及其导入的用例模块和 uvmx.bootstrap。装饰器记录 canonical_id、factory_name 和 sv_base，并把实际 Python 类注册给公开 CallbackAdapter。",
+    label: "SV · uvmx_init", source: sources.launcher,
     code: 'svx_init();\nsvx_load(python_module);\nsvx_load("uvmx.bootstrap");'
   },
   {
@@ -20,18 +20,18 @@ const shared = [
   },
   {
     title: "由 UVM 决定运行哪一个用例",
-    description: "优先读取标准 +UVM_TESTNAME，进入原生 uvm_pkg::run_test()。Python 与 SV 的名称都在同一个 factory 中查找；不存在另一套 Python 用例选择器。",
+    description: "uvmx_init 在全部注册完成后返回。工程随后直接调用原生 uvm_pkg::run_test()，由 UVM 按 +UVM_TESTNAME 或原生参数选择名称；UVMX 不解析用例选择，也不修改结束策略。",
     label: "SV · 原有 UVM 入口", source: sources.launcher,
-    code: 'if ($value$plusargs("UVM_TESTNAME=%s",\n                   canonical_name)) begin\n  uvm_pkg::run_test();\nend'
+    code: 'uvmx_pkg::uvmx_init("my_tests");\nuvm_pkg::run_test();\n\n// 两个调用顺序执行\n// 不另起并行 initial 注册'
   }
 ];
 const pythonSteps = [
   ...shared,
   {
     title: "SV bridge 与实际 Python Test 绑定",
-    description: "UVM wrapper 创建参数化 Test bridge。bridge 构造 CallbackAdapter 生成的接入对象，复用 SVX 的对象工厂，在 Python 初始化前绑定真正的用户 Test 实例。没有额外的 Python 委托实例。",
+    description: "UVM wrapper 用标准 new(name, parent) 创建 Test bridge，再绑定用例元数据、构造 CallbackAdapter 接入对象。它复用 SVX 工厂，在 Python 初始化前绑定实际用户 Test；绑定完成后才返回组件，随后开始 phase。",
     label: "SV · wrapper.create_component", source: sources.factory,
-    code: "uvmx_test_bridge#(BASE) instance;\ninstance = new(name, parent, canonical_id,\n               factory_name, this);\nreturn instance;\n\n// bridge 构造内\ncallbacks = new(canonical_id);"
+    code: "uvmx_test_bridge#(BASE) instance;\ninstance = new(name, parent);\ninstance.bind_python_test(\n  canonical_id, factory_name, this\n);\nreturn instance;\n\n// bind_python_test 内创建接入对象\ncallbacks = new(canonical_id);"
   },
   {
     title: "UVM 驱动 phase，Python 执行验证意图",
@@ -52,7 +52,7 @@ const svSteps = [
     title: "原有 SV phase 行为保持原样",
     description: "UVM 继续运行 SV Test 的 build、connect、run 等 phase，由原有 SV 代码管理 objection。若 SV 用例主动调用 SVX，可继续复用 Python 场景，但这不是选择 SV 用例的前提。",
     label: "原有 UVM 执行 · 路径示意", source: sources.launcher,
-    code: "// 原有 SV Test 的 phase 实现\n// 原有 driver / monitor / scoreboard\n// 正常 UVM phase 与 objection\n// run_test 返回后统一清理 SVX"
+    code: "// 原有 SV Test 的 phase 实现\n// 原有 driver / monitor / scoreboard\n// 正常 UVM phase 与 objection\n// 保留原有 UVM 退出策略"
   }
 ];
 

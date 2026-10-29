@@ -29,10 +29,10 @@ def _publish_tests():
 
 
 def load_declarations(module_name: str) -> tuple[UvmTestDeclaration, ...]:
-    """Import an opt-in test module and return only its declarations."""
+    """Import an entry module and include declarations from its imports."""
 
     importlib.import_module(module_name)
-    declarations = declared_tests(module_name)
+    declarations = declared_tests()
     if not declarations:
         raise RuntimeError(f"UVMX module {module_name!r} did not declare any @uvm_test classes")
     return declarations

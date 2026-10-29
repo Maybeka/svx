@@ -443,9 +443,25 @@ class Smoke(Test):
 ```
 
 首次构建按该示例的指南生成核心数据/继承契约，编译固定 UVMX 接入和已选择的
-SV 基类。SV 顶层使用 `uvmx_run_test(python_module)`，由它加载 Python 声明，
-通过 SvTypes 注册记录将名称加入正常 UVM factory，再进入 UVM `run_test()`。
+SV 基类。SV 顶层先调用 `uvmx_init(python_module)` 加载用户模块及其导入模块中的
+全部用例声明，通过 SvTypes 注册记录将名称加入正常 UVM factory，注册全部完成
+后才返回。随后工程直接调用原生 UVM `run_test()`，不使用 UVMX 启动包装器：
+
+```systemverilog
+initial begin
+  uvmx_pkg::uvmx_init("my_tests");
+  uvm_pkg::run_test();
+end
+```
+
+两个调用必须顺序执行，不能放在相互竞争的独立 initial 中。初始化不扫描未导入
+的 Python 文件，也不修改 `finish_on_completion`、解析替代用例名或结束仿真。
+原生 UVM 默认会结束仿真，不能依赖 `run_test()` 后的代码清理；若工程自行配置
+它返回，则由工程在退出前调用现有的 `svx_shutdown()`。该接口是 task，不能在
+final 中调用。退出策略不由 UVMX 初始化接口接管。
 用户 Test 的创建、绑定和回调直接复用 SVX 现有机制，不另设委托对象。
+SV bridge 保持标准 `new(name, parent)` 构造签名，factory wrapper 在返回组件前
+完成 Python 用例绑定和实例创建，不在 build_phase 中延后创建。
 UVM 管理 phase 和 objection，Python `run_phase()` 返回后才结束该用例的 objection。
 
 寄存器示例提供以下启动选择：

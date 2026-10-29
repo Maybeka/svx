@@ -9,11 +9,13 @@ itself.  They must remain opt-in and must not become part of SVX packaging.
 
 The extraction gate builds an SVX wheel, installs SVX/SvTypes in an external
 environment, copies only this incubator's source, and builds the native runtime
-from installed support files. It verifies both test origins, test-name alias
-and precedence, explicit selection, unknown-test failure, function-context
+from installed support files. It verifies both test origins, native test-name
+precedence over an explicit run_test argument, explicit selection, unknown-test failure, function-context
 blocking rejection and Python exception termination. A source audit rejects
 handwritten private SVX registrations and dispatcher/DPI dependencies; private
 transport emitted by the SVX callback generator is owned by SVX.
+The fixture calls uvmx_init and checks factory registrations before entering
+unmodified uvm_pkg::run_test. Initialization must preserve finish_on_completion.
 
 ## Python-Only Addition Gate
 

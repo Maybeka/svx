@@ -46,7 +46,8 @@ UVM scheduler into Python. Only Test and synchronous phase callbacks are mapped.
 UVM still owns factory, phases, objections and exit. `run_test()` starts at time
 zero while an independent SV reset process runs; driver/monitor wait for reset.
 The scenario waits for all three environment completion notifications before
-ending, then the launcher shuts down before simulator exit. It therefore does
+ending. The top first calls uvmx_init to finish registration and then calls the
+original UVM run_test directly, leaving its finish policy unchanged. It does
 not depend on the core top's post-UVM join or report code.
 
 Deep UVM class mapping and full Python UVM compatibility are outside this example.

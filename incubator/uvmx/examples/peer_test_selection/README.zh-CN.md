@@ -3,11 +3,27 @@
 [English](README.md)
 
 本示例通过同一个 UVM factory 和 `run_test()` 选择 Python 或原有 SV 用例。
+工程先顺序完成初始化，再直接调用原生 UVM task：
+
+```systemverilog
+initial begin
+  uvmx_pkg::uvmx_init("python_tests");
+  uvm_pkg::run_test();
+end
+```
+
+初始化会加载入口模块及其导入模块中的所有已声明 Python 用例，全部注册完成
+才返回；不扫描未导入的文件。不要使用另一个并行 initial 完成注册。UVMX 不
+修改 UVM 的结束策略，不提供另一个 run_test 或替代用例名选项。
+原生 UVM 默认结束仿真；若工程自行让 run_test 返回，可在之后调用现有的
+svx_shutdown task 再退出。不要在 final 中调用这个 task。
 用例定义、Python 状态和事务处理留在 Python；SV 只提供可复用 Test 接入、
 phase 转发、驱动/监测基础设施及 objection 管理。
 固定回调接入通过公开的 SVX CallbackAdapter 在运行时选择 Python 类，复用
 SVX 现有对象工厂，在初始化前直接绑定用户 Test 实例；没有另设 UVMX 委托
 对象，也没有另一套构造或分发机制。
+SV Test bridge 保持普通 `new(name, parent)` 签名。factory wrapper 在返回组件前
+绑定 Python 元数据并创建实际 Python Test，不把绑定推迟到 build_phase。
 
 ```text
 +UVM_TESTNAME=py_smoke_test

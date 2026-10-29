@@ -115,7 +115,10 @@ module tb;
     $display("REGISTER_LAB_SV_CALLBACK_PASS");
     fork
 `ifdef REGISTER_LAB_UVMX
-      uvmx_pkg::uvmx_run_test("incubator.uvmx.examples.register_lab.python_test");
+      begin
+        uvmx_pkg::uvmx_init("incubator.uvmx.examples.register_lab.python_test");
+        uvm_pkg::run_test();
+      end
 `else
       svx_run_test("examples.register_lab.scenarios", selected);
 `endif

@@ -6,19 +6,28 @@ class uvmx_test_bridge#(type BASE = uvm_test) extends BASE;
   local string python_test_name;
   local uvm_object_wrapper python_wrapper;
 
-  function new(string name, uvm_component parent, string canonical_id,
-               string factory_name, uvm_object_wrapper wrapper);
+  function new(string name = "uvmx_test_bridge", uvm_component parent = null);
     super.new(name, parent);
+  endfunction
+
+  function void bind_python_test(string canonical_id, string factory_name,
+                                 uvm_object_wrapper wrapper);
+    if (callbacks != null) begin
+      `uvm_fatal("UVMX/BIND", "Python Test is already bound to this bridge")
+      return;
+    end
     python_test_name = factory_name;
     python_wrapper = wrapper;
     callbacks = new(canonical_id);
   endfunction
 
   virtual function string get_type_name();
+    if (python_wrapper == null) return super.get_type_name();
     return python_test_name;
   endfunction
 
   virtual function uvm_object_wrapper get_object_type();
+    if (python_wrapper == null) return super.get_object_type();
     return python_wrapper;
   endfunction
 
@@ -59,7 +68,8 @@ class uvmx_test_wrapper#(type BASE = uvm_test) extends uvm_object_wrapper;
   endfunction
   virtual function uvm_component create_component(string name, uvm_component parent);
     uvmx_test_bridge#(BASE) instance;
-    instance = new(name, parent, canonical_id, factory_name, this);
+    instance = new(name, parent);
+    instance.bind_python_test(canonical_id, factory_name, this);
     return instance;
   endfunction
 endclass

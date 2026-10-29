@@ -30,7 +30,7 @@
   </aside>
   <main id="main">
     <section id="overview" class="overview">
-      <div class="eyebrow">IMPLEMENTATION EXPLAINED <span>源码核对 · 2026-10-28</span></div>
+      <div class="eyebrow">IMPLEMENTATION EXPLAINED <span>源码核对 · 2026-10-30</span></div>
       <h1>UVMX</h1>
       <p class="subtitle">用 Python 写用例，仍由 UVM 运行。</p>
       <p class="lead">不另造一套 scheduler 或 factory。把 Python 用例接入现有 UVM 环境，保留 SV driver、monitor 与时序，让验证意图和事务逻辑留在 Python。</p>
@@ -59,16 +59,16 @@
       <div class="section-heading"><span class="section-no">03</span><div><h2>同一个 run_test，两种用例来源</h2><p>切换用例来源，沿着实际启动顺序查看代码与对象关系。</p></div></div>
       <div class="flow-toolbar"><div class="segmented" role="group" aria-label="用例来源"><button type="button" data-origin="python" aria-pressed="true">Python 用例</button><button type="button" data-origin="sv" aria-pressed="false">原有 SV 用例</button></div><code id="selected-plusarg">+UVM_TESTNAME=py_smoke_test</code></div>
       <div class="startup-flow" aria-label="启动流程">
-        <button type="button" class="flow-node" data-step="0" aria-pressed="true"><span>01 / HOST</span><strong>加载声明</strong><small>uvmx_run_test()</small></button>
+        <button type="button" class="flow-node" data-step="0" aria-pressed="true"><span>01 / HOST</span><strong>加载声明</strong><small>uvmx_init()</small></button>
         <button type="button" class="flow-node" data-step="1" aria-pressed="false"><span>02 / REGISTER</span><strong>运行时注册</strong><small>SvTypes → factory</small></button>
         <button type="button" class="flow-node" data-step="2" aria-pressed="false"><span>03 / SELECT</span><strong>UVM 选择</strong><small>原生 run_test()</small></button>
         <button type="button" class="flow-node" data-step="3" aria-pressed="false"><span>04 / CREATE</span><strong>创建实例</strong><small id="create-caption">bridge + Python Test</small></button>
         <button type="button" class="flow-node" data-step="4" aria-pressed="false"><span>05 / EXECUTE</span><strong>执行 phase</strong><small id="execute-caption">同步 Python 回调</small></button>
       </div>
-      <div class="step-detail" aria-live="polite"><div><span id="step-kicker" class="eyebrow">01 / 加载声明</span><h3 id="step-title">先让 Python 用例进入运行时</h3><p id="step-description">launcher 初始化 SVX，加载用户模块和 uvmx.bootstrap。装饰器记录 canonical_id、factory_name 和 sv_base，并把实际 Python 类注册给公开 CallbackAdapter。</p><a id="step-source" href="incubator/uvmx/sv/uvmx_bridge.source.html">查看实现 ↗</a></div><div class="code-surface"><div class="code-label" id="step-code-label">SV · launcher</div><pre><code id="step-code">svx_init();
+      <div class="step-detail" aria-live="polite"><div><span id="step-kicker" class="eyebrow">01 / 加载声明</span><h3 id="step-title">先让 Python 用例进入运行时</h3><p id="step-description">uvmx_init 初始化 SVX，加载用户模块和 uvmx.bootstrap。装饰器记录 canonical_id、factory_name 和 sv_base，并把实际 Python 类注册给公开 CallbackAdapter。</p><a id="step-source" href="incubator/uvmx/sv/uvmx_bridge.source.html">查看实现 ↗</a></div><div class="code-surface"><div class="code-label" id="step-code-label">SV · uvmx_init</div><pre><code id="step-code">svx_init();
 svx_load(python_module);
 svx_load("uvmx.bootstrap");</code></pre></div></div>
-      <div class="lifecycle"><strong>正常收尾</strong><span>设置 <code>finish_on_completion = 0</code></span><span aria-hidden="true">→</span><span><code>run_test()</code> 返回</span><span aria-hidden="true">→</span><span><code>svx_shutdown()</code></span><span aria-hidden="true">→</span><span><code>$finish</code></span></div>
+      <div class="lifecycle"><strong>原生启动</strong><span><code>uvmx_init()</code> 全部注册完成</span><span aria-hidden="true">→</span><span>直接调用 <code>run_test()</code></span><span aria-hidden="true">→</span><span>保留原有 <code>finish_on_completion</code> 策略</span></div>
       <p class="caption">流程图是实现路径讲解，不是在浏览器中运行仿真。SV 用例选择前仍完成 Python 模块加载与注册，最终选择由同一个 UVM factory 决定。</p>
     </section>
 
@@ -99,14 +99,14 @@ class NewTest(Test):
       <div class="table-wrap"><table><thead><tr><th>修改内容</th><th>是否重新编译 SV</th><th>原因</th></tr></thead><tbody>
         <tr><td>新增用例 / 修改算法 / Python 实例状态</td><td><span class="yes">不需要</span></td><td>用例名称与类在启动时注册</td></tr>
         <tr><td>新增受支持 phase 的重载</td><td><span class="yes">不需要</span></td><td>复用已编译的固定回调形状</td></tr>
-        <tr><td>导入一个新 Python 用例模块</td><td><span class="yes">不需要</span></td><td>在 launcher 发布注册记录前导入</td></tr>
+        <tr><td>导入一个新 Python 用例模块</td><td><span class="yes">不需要</span></td><td>在 uvmx_init 发布注册记录前导入</td></tr>
         <tr><td>选用尚未编译的自定义 SV 基类</td><td><span class="rebuild">需要</span></td><td>新增基类桥接注册</td></tr>
         <tr><td>修改 SV 可见方法或事务数据契约</td><td><span class="rebuild">按契约重新生成 / 编译</span></td><td>不是纯 Python 用例逻辑变更</td></tr>
       </tbody></table></div>
     </section>
 
     <section id="evidence">
-      <div class="section-heading"><span class="section-no">06</span><div><h2>已经验证什么，还有什么没做</h2><p>以下为已有远端集成验证记录，不代表本网页再次执行了仿真。</p></div></div>
+      <div class="section-heading"><span class="section-no">06</span><div><h2>已经验证什么，还有什么没做</h2><p>以下为既有集成验证记录。新的 uvmx_init 入口及标准 new 构造调整已通过本地检查，尚待集成仿真重验。</p></div></div>
       <div class="evidence-list">
         <div><span class="check">✓</span><div><h3>同一 factory 选择 Python 与原有 SV 用例</h3><p>对等启动、显式选择、未知名称、名称冲突与错误路径均有回归。</p></div><span class="evidence-tag">Peer selection</span></div>
         <div><span class="check">✓</span><div><h3>冻结二进制后新增 Python 用例</h3><p>新增类、新模块导入、新增 phase 与实例状态；编译及生成产物的哈希和文件元数据保持不变。</p></div><span class="evidence-tag">无重编译</span></div>
