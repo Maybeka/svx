@@ -34,3 +34,36 @@ This gate is mandatory; selecting only tests present at initial compilation
 does not qualify the Python-owned test model. Repeat the installed extraction
 gate for the corrected implementation before repository extraction; the old
 per-test-proxy installed result is historical, not new-design evidence.
+
+## Native Initialization Qualification (2026-10-30)
+
+The current `uvmx_init()` followed by the original `uvm_pkg::run_test()` was
+compiled and executed with the standard two-argument Test bridge constructor.
+Factory metadata binding and Python construction completed before phase entry.
+
+The peer fixture was compiled once. After its original Python and SV tests
+passed, only Python files were changed: an imported child test added instance
+state and a connect-phase callback, and 1050 additional default-base tests were
+declared. No generator, native compiler or SV compiler ran during this phase.
+
+| Check | Runs | Result |
+|---|---:|---|
+| Original Python and SV baseline | 2 | Both names selected by native UVM |
+| New Python test imported after compilation | 1 | Initialization/state, phase callbacks and real typed transaction passed |
+| Original Python and SV tests after the addition | 2 | Both still launch; neither executes the new child's body |
+| Last of 1050 extra default-base registrations | 1 | Registered before run_test and selected successfully |
+| Native explicit argument and plusarg precedence | 2 | Original UVM selection behavior retained |
+| Application-selected run_test return mode | 1 | Initializer preserves finish policy; application shutdown completes |
+| Blocking function phase, Python exception, unknown name | 3 | Each produces its expected failure, not a timeout or crash |
+
+All nine positive runs reported zero UVM warnings, errors and fatals. Five
+compiled/generated files (executable, native library, linked model library and
+two generated SV files) retained identical SHA256, size, modification time and
+inode across the Python-only additions and subsequent runs.
+
+Register Lab was also rebuilt with the new entry. Its core smoke and two
+expected checker/context failures passed, followed by Python/SV UVM selection.
+The Python extended test and both original origins were then rerun using the
+same project binary; all three passed with six compiled/generated files
+unchanged. This validates the source-checkout integration; a fresh installed
+extraction qualification remains a separate gate before splitting the repo.

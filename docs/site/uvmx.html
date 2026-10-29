@@ -106,12 +106,12 @@ class NewTest(Test):
     </section>
 
     <section id="evidence">
-      <div class="section-heading"><span class="section-no">06</span><div><h2>已经验证什么，还有什么没做</h2><p>以下为既有集成验证记录。新的 uvmx_init 入口及标准 new 构造调整已通过本地检查，尚待集成仿真重验。</p></div></div>
+      <div class="section-heading"><span class="section-no">06</span><div><h2>已经验证什么，还有什么没做</h2><p>以下为既有集成验证记录，并已于 2026-10-30 使用新的 uvmx_init 入口和标准 new 构造完成仿真重验。</p></div></div>
       <div class="evidence-list">
-        <div><span class="check">✓</span><div><h3>同一 factory 选择 Python 与原有 SV 用例</h3><p>对等启动、显式选择、未知名称、名称冲突与错误路径均有回归。</p></div><span class="evidence-tag">Peer selection</span></div>
-        <div><span class="check">✓</span><div><h3>冻结二进制后新增 Python 用例</h3><p>新增类、新模块导入、新增 phase 与实例状态；编译及生成产物的哈希和文件元数据保持不变。</p></div><span class="evidence-tag">无重编译</span></div>
+        <div><span class="check">✓</span><div><h3>同一 factory 选择 Python 与原有 SV 用例</h3><p>对等启动、原生参数选择与优先级、返回模式、未知名称及异常路径通过重验。</p></div><span class="evidence-tag">Peer selection</span></div>
+        <div><span class="check">✓</span><div><h3>冻结二进制后新增 Python 用例</h3><p>只增加 Python 模块及导入，验证新 phase、实例状态和类型化事务；5 个编译／生成文件的哈希、大小、修改时间和 inode 完全不变。</p></div><span class="evidence-tag">无重编译</span></div>
         <div><span class="check">✓</span><div><h3>注册数量超过通道容量</h3><p>1050 个额外声明，发布与消费并行执行，不将用例总数限制在单次通道容量内。</p></div><span class="evidence-tag">运行时注册</span></div>
-        <div><span class="check">✓</span><div><h3>Register Lab 完整场景与 Python super()</h3><p>Python、SV、Python 扩展用例均运行同一寄存器闭环；新增 Python 子类沿用旧二进制通过验证。</p></div><span class="evidence-tag">项目集成</span></div>
+        <div><span class="check">✓</span><div><h3>Register Lab 完整场景与 Python super()</h3><p>重建新入口后，Python、SV、Python 扩展用例均通过同一寄存器闭环；复跑过程中 6 个编译／生成文件保持不变。</p></div><span class="evidence-tag">项目集成</span></div>
       </div>
       <div class="scope-grid"><div><h3>当前明确支持</h3><ul><li>默认 uvm_test 和选定自定义 SV Test 基类</li><li>五个同步 phase 回调与 Python 用例继承</li><li>SvTypes 类型化事务通道</li><li>复用公开 CallbackAdapter 的构造、绑定和分发</li></ul></div><div><h3>当前边界 / 后续工作</h3><ul><li>不是完整 UVM 类库或完整 Python UVM 兼容层</li><li>自定义 SV 基类当前要求直接继承 uvm_test</li><li>Test 构造无用户参数，phase 不传 uvm_phase 对象</li><li>更深的组件、factory、sequence 等映射仍需后续扩展</li><li>尚未拆分为独立发布的 UVMX 项目</li></ul></div></div>
       <p class="scope-note">错误边界：构造与 function phase 禁止阻塞；Python 回调异常终止仿真；重复名称不会静默替换已有 SV 用例。此处只说明 UVMX 的固定 Test 接入，不等同于 SVX 通用跨语言继承的全部能力。</p>
