@@ -20,6 +20,9 @@ python -m http.server 8765 --directory docs/site/_build --bind 127.0.0.1
 Open `http://127.0.0.1:8765`. A local HTTP server enables search and the browser
 clipboard API; the generated pages themselves do not need a server runtime.
 An alternative output location is accepted through `--output /path/to/site`.
+The builder reads repository text and writes HTML/JSON/CSS explicitly as UTF-8,
+independent of the Windows system code page. No encoding environment override
+is required. Its terminal status is ASCII-safe JSON, including Unicode paths.
 
 The site includes full-text search, local source reading, syntax highlighting,
 code copying, chapter navigation, per-page contents, and mobile navigation.

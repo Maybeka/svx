@@ -3,7 +3,10 @@
 import importlib.util
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 from urllib.parse import unquote, urlsplit
 
 import pytest
@@ -43,16 +46,16 @@ def test_complete_cookbook_and_projects_present(built):
     output, stats = built
     assert stats["pages"] >= 50
     assert len(list((output / "learn").glob("*.html"))) == 15
-    assert "512" in (output / "examples/opentitan_uart/RESULTS.zh-CN.html").read_text()
-    guide = (output / "examples/opentitan_uart/README.zh-CN.html").read_text()
+    assert "512" in (output / "examples/opentitan_uart/RESULTS.zh-CN.html").read_text(encoding="utf-8")
+    guide = (output / "examples/opentitan_uart/README.zh-CN.html").read_text(encoding="utf-8")
     assert "Python 主导模式" in guide
     assert "uart_bridge.source.html" in guide
-    assert "SvTypes" in (output / "learn/06.html").read_text()
+    assert "SvTypes" in (output / "learn/06.html").read_text(encoding="utf-8")
 
 
 def test_all_generated_links_and_fragments_resolve(built):
     output, _ = built
-    pages = {path: Page(path.read_text()) for path in output.rglob("*.html")}
+    pages = {path: Page(path.read_text(encoding="utf-8")) for path in output.rglob("*.html")}
     problems = []
     for path, page in pages.items():
         for url in page.links:
@@ -69,12 +72,12 @@ def test_all_generated_links_and_fragments_resolve(built):
 
 def test_search_is_local_and_includes_chapters_sources_and_examples(built):
     output, _ = built
-    entries = json.loads((output / "search.json").read_text())
+    entries = json.loads((output / "search.json").read_text(encoding="utf-8"))
     assert any("类型化通道" in item["title"] for item in entries)
     assert any(item["source"] == "examples/opentitan_uart/model.py" for item in entries)
     assert all(not item["url"].startswith(("/", "http")) for item in entries)
     assert all((output / item["url"]).is_file() for item in entries)
-    assert "http" not in (output / "assets/app.js").read_text()
+    assert "http" not in (output / "assets/app.js").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("name", ["AGENTS.md", ".local-sim/run.py", "docs/review_test.md",
@@ -96,31 +99,31 @@ def test_repeat_build_does_not_modify_markdown(built):
 def test_relative_links_support_subdirectory_hosting(built):
     output, _ = built
     for filename in ["index.html", "learn/11.html", "examples/opentitan_uart/README.zh-CN.html"]:
-        page = Page((output / filename).read_text())
+        page = Page((output / filename).read_text(encoding="utf-8"))
         assert all(not link.startswith("/") for link in page.links)
     assert site.relative("assets/style.css", "learn/03.html") == "../assets/style.css"
 
 
 def test_uvmx_explainer_includes_real_sources_and_explicit_scope(built):
     output, _ = built
-    content = (output / "uvmx.html").read_text()
+    content = (output / "uvmx.html").read_text(encoding="utf-8")
     for term in ["+UVM_TESTNAME", "CallbackAdapter", "finish_on_completion",
                  "不是完整", "不包含在 SVX 发布包", "没有独立的 Python 时序循环",
                  "既有集成验证记录", "只接收 self"]:
         assert term in content
     for source in site.UVMX_SOURCES:
         assert (output / site.destination(source)).is_file()
-    assert 'href="uvmx.html"' in (output / "index.html").read_text()
-    entries = json.loads((output / "search.json").read_text())
+    assert 'href="uvmx.html"' in (output / "index.html").read_text(encoding="utf-8")
+    entries = json.loads((output / "search.json").read_text(encoding="utf-8"))
     assert any(entry["url"] == "uvmx.html" for entry in entries)
 
 
 def test_uvmx_controls_match_supported_phases_and_code(built):
     output, _ = built
-    content = (output / "uvmx.html").read_text()
+    content = (output / "uvmx.html").read_text(encoding="utf-8")
     phases = ["build_phase", "connect_phase", "end_of_elaboration_phase",
               "start_of_simulation_phase", "run_phase"]
-    declarations = (ROOT / "incubator/uvmx/python/uvmx/declarations.py").read_text()
+    declarations = (ROOT / "incubator/uvmx/python/uvmx/declarations.py").read_text(encoding="utf-8")
     for phase in phases:
         assert f'data-phase="{phase}"' in content
         assert f'"{phase}"' in declarations
@@ -128,7 +131,7 @@ def test_uvmx_controls_match_supported_phases_and_code(built):
         assert f'data-step="{index}"' in content
     assert 'data-origin="python"' in content
     assert 'data-origin="sv"' in content
-    script = (output / "assets/uvmx.js").read_text()
+    script = (output / "assets/uvmx.js").read_text(encoding="utf-8")
     assert "fetch(" not in script
     assert "innerHTML" not in script
     assert "renderPhase" in script
@@ -136,7 +139,7 @@ def test_uvmx_controls_match_supported_phases_and_code(built):
 
 def test_uvmx_uses_relative_assets_and_navigation(built):
     output, _ = built
-    page = Page((output / "uvmx.html").read_text())
+    page = Page((output / "uvmx.html").read_text(encoding="utf-8"))
     assert all(not url.startswith(("/", "http")) for url in page.links)
     for anchor in ["overview", "preparation", "architecture", "startup", "phases", "iteration", "evidence", "sources"]:
         assert anchor in page.ids
@@ -144,7 +147,7 @@ def test_uvmx_uses_relative_assets_and_navigation(built):
 
 def test_uvmx_preparation_separates_default_and_optional_generation(built):
     output, _ = built
-    content = (output / 'uvmx.html').read_text()
+    content = (output / 'uvmx.html').read_text(encoding="utf-8")
     preparation = content.split('<section id="preparation">', 1)[1].split('<section id="architecture">', 1)[0]
     class Text(HTMLParser):
         def __init__(self, html):
@@ -170,12 +173,12 @@ def test_uvmx_preparation_separates_default_and_optional_generation(built):
 
 def test_uvmx_preparation_is_generated_from_the_authoritative_guide(built, tmp_path, monkeypatch):
     output, _ = built
-    template = (site.HERE / 'uvmx.html').read_text()
+    template = (site.HERE / 'uvmx.html').read_text(encoding="utf-8")
     assert '<!-- UVMX_PREPARATION -->' in template
     assert 'class SmokeTest' not in template
-    assert '<!-- UVMX_PREPARATION -->' not in (output / 'uvmx.html').read_text()
-    assert 'docs/README.html' in (output / 'index.html').read_text()
-    assert 'SVX_GENERATION_WORKFLOW.html' in (output / 'index.html').read_text()
+    assert '<!-- UVMX_PREPARATION -->' not in (output / 'uvmx.html').read_text(encoding="utf-8")
+    assert 'docs/README.html' in (output / 'index.html').read_text(encoding="utf-8")
+    assert 'SVX_GENERATION_WORKFLOW.html' in (output / 'index.html').read_text(encoding="utf-8")
     guide = Path('docs/UVMX_GETTING_STARTED.zh-CN.md')
     original = Path.read_text
 
@@ -187,16 +190,16 @@ def test_uvmx_preparation_is_generated_from_the_authoritative_guide(built, tmp_p
 
     monkeypatch.setattr(Path, 'read_text', updated)
     site.build(tmp_path)
-    assert 'PREPARATION_SINGLE_SOURCE_SENTINEL' in (tmp_path / 'uvmx.html').read_text()
+    assert 'PREPARATION_SINGLE_SOURCE_SENTINEL' in (tmp_path / 'uvmx.html').read_text(encoding="utf-8")
 
 
 def test_uvmx_bilingual_guide_snippets_match_runnable_minimal_example():
     expected = {
-        'python': (ROOT / 'incubator/uvmx/examples/minimal_test/my_tests.py').read_text().strip(),
-        'systemverilog': (ROOT / 'incubator/uvmx/examples/minimal_test/tb.sv').read_text().strip(),
+        'python': (ROOT / 'incubator/uvmx/examples/minimal_test/my_tests.py').read_text(encoding="utf-8").strip(),
+        'systemverilog': (ROOT / 'incubator/uvmx/examples/minimal_test/tb.sv').read_text(encoding="utf-8").strip(),
     }
     for name in ('UVMX_GETTING_STARTED.md', 'UVMX_GETTING_STARTED.zh-CN.md'):
-        tokens = site.md.parse((ROOT / 'docs' / name).read_text())
+        tokens = site.md.parse((ROOT / 'docs' / name).read_text(encoding="utf-8"))
         for language, source in expected.items():
             first = next(token.content.strip() for token in tokens
                          if token.type == 'fence' and token.info == language)
@@ -208,6 +211,44 @@ def test_site_without_incubator_omits_uvmx_page(tmp_path, monkeypatch):
     monkeypatch.setattr(site, "UVMX_SOURCES", [Path("incubator/uvmx/not-installed.py")])
     site.build(tmp_path)
     assert not (tmp_path / "uvmx.html").exists()
-    assert 'href="uvmx.html"' not in (tmp_path / "index.html").read_text()
-    entries = json.loads((tmp_path / "search.json").read_text())
+    assert 'href="uvmx.html"' not in (tmp_path / "index.html").read_text(encoding="utf-8")
+    entries = json.loads((tmp_path / "search.json").read_text(encoding="utf-8"))
     assert not any(entry["url"] == "uvmx.html" for entry in entries)
+
+
+def test_site_text_io_explicitly_uses_utf8(tmp_path, monkeypatch):
+    output = tmp_path / "中文网站"
+    read_text, write_text = Path.read_text, Path.write_text
+    operations = []
+
+    def read_utf8(path, *args, **kwargs):
+        assert kwargs.get("encoding") == "utf-8", path
+        operations.append("read")
+        return read_text(path, *args, **kwargs)
+
+    def write_utf8(path, *args, **kwargs):
+        assert kwargs.get("encoding") == "utf-8", path
+        operations.append("write")
+        return write_text(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_text", read_utf8)
+        patch.setattr(Path, "write_text", write_utf8)
+        site.build(output)
+
+    assert "read" in operations and "write" in operations
+    assert "学习总览" in (output / "index.html").read_bytes().decode("utf-8")
+    records = json.loads((output / "search.json").read_bytes().decode("utf-8"))
+    assert any("类型化通道" in record["title"] for record in records)
+
+
+def test_site_cli_handles_unicode_output_with_ascii_terminal(tmp_path):
+    output = tmp_path / "中文网站"
+    result = subprocess.run(
+        [sys.executable, str(site.HERE / "build.py"), "--output", str(output)],
+        env={**os.environ, "PYTHONIOENCODING": "ascii:strict"},
+        capture_output=True, check=True,
+    )
+    status = json.loads(result.stdout.decode("ascii"))
+    assert status["output"] == str(output.resolve())
+    assert (output / "index.html").is_file()

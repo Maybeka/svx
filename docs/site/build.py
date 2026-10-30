@@ -77,7 +77,7 @@ def code_html(code: str, language: str = "", filename: str = "") -> str:
 
 
 def chapters():
-    source = (ROOT / COOKBOOK).read_text()
+    source = (ROOT / COOKBOOK).read_text(encoding="utf-8")
     sections = re.split(r"(?m)^## ", source)[1:]
     return [(part.splitlines()[0], "## " + part) for part in sections]
 
@@ -89,7 +89,8 @@ def build(output: Path) -> dict:
     # Only managed outputs are replaced; never recursively delete a user directory.
     output.mkdir(parents=True, exist_ok=True)
     shutil.copytree(HERE / "assets", output / "assets", dirs_exist_ok=True)
-    (output / "assets" / "syntax.css").write_text(HtmlFormatter(style="friendly").get_style_defs(".highlight"))
+    (output / "assets" / "syntax.css").write_text(
+        HtmlFormatter(style="friendly").get_style_defs(".highlight"), encoding="utf-8")
     has_uvmx = all((ROOT / path).is_file() for path in UVMX_SOURCES)
     queue = deque([COOKBOOK, Path("docs/README.md"), Path("docs/SVX_GENERATION_WORKFLOW.md"),
                    Path("docs/SVX_API_REFERENCE.md"),
@@ -211,7 +212,7 @@ def build(output: Path) -> dict:
 <div id="toast" role="status"></div><script src="{relative('assets/app.js', current)}" defer></script></body></html>'''
         dest = output / current
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(html)
+        dest.write_text(html, encoding="utf-8")
         records.append({"title": title, "url": current, "text": re.sub('<[^>]+>', ' ', body),
                         "source": str(source or "学习路线")})
 
@@ -225,7 +226,7 @@ def build(output: Path) -> dict:
     preparation = ""
     if has_uvmx:
         guide = Path("docs/UVMX_GETTING_STARTED.zh-CN.md")
-        lines = (ROOT / guide).read_text().splitlines(keepends=True)
+        lines = (ROOT / guide).read_text(encoding="utf-8").splitlines(keepends=True)
         tokens = md.parse(''.join(lines))
         sections = [(token.map, tokens[i + 1].content)
                     for i, token in enumerate(tokens)
@@ -242,7 +243,7 @@ def build(output: Path) -> dict:
         if source in seen:
             continue
         seen.add(source)
-        text = (ROOT / source).read_text()
+        text = (ROOT / source).read_text(encoding="utf-8")
         current = destination(source)
         if source.suffix == '.md':
             rendered, headings = render(text, source, current)
@@ -254,19 +255,21 @@ def build(output: Path) -> dict:
             rendered += '<div class="code-block source-code"><div class="code-head"><span>源代码</span><button class="copy-code" aria-label="复制代码">复制</button></div><pre class="highlight"><code>' + code_html(text, filename=source.name) + '</code></pre></div>'
         shell(title, rendered, current, headings, source=source)
 
-    home = (HERE / "home.html").read_text()
+    home = (HERE / "home.html").read_text(encoding="utf-8")
     shell("学习总览", home, "index.html", [(2, "选择你的起点", "start"), (2, "理解职责边界", "boundaries"),
           (2, "沿着能力依赖前进", "route"), (2, "进入真实项目", "project")], home=True)
     if has_uvmx:
-        uvmx = (HERE / "uvmx.html").read_text()
+        uvmx = (HERE / "uvmx.html").read_text(encoding="utf-8")
         uvmx = uvmx.replace("<!-- UVMX_PREPARATION -->", preparation)
-        (output / "uvmx.html").write_text(uvmx)
+        (output / "uvmx.html").write_text(uvmx, encoding="utf-8")
         records.append({"title": "UVMX 实现图解", "url": "uvmx.html",
                         "text": re.sub('<[^>]+>', ' ', uvmx), "source": "incubator/uvmx"})
     else:
         (output / "uvmx.html").unlink(missing_ok=True)
-    (output / "search.json").write_text(json.dumps(records, ensure_ascii=False))
-    (output / "build-info.json").write_text(json.dumps({"pages": len(records), "sources": len(seen)}, indent=2))
+    (output / "search.json").write_text(
+        json.dumps(records, ensure_ascii=False), encoding="utf-8")
+    (output / "build-info.json").write_text(
+        json.dumps({"pages": len(records), "sources": len(seen)}, indent=2), encoding="utf-8")
     return {"pages": len(records), "sources": len(seen), "output": str(output)}
 
 
@@ -274,4 +277,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=HERE / "_build")
     args = parser.parse_args()
-    print(json.dumps(build(args.output), ensure_ascii=False))
+    # Keep status JSON printable even when the terminal cannot encode output paths.
+    print(json.dumps(build(args.output), ensure_ascii=True))
