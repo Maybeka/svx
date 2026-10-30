@@ -46,8 +46,6 @@ current = svx.get_exception_policy()
 |---|---|---|
 | `svx.FATAL` | Yes (default) | Prints the exception and traceback, then terminates simulation via `$fatal`. |
 | `svx.REPORT` | Yes | Reports entry/child exceptions without immediate `$fatal`; failed-child waits still fail. Generated inheritance and constructor failures remain fatal. |
-| `svx.DEFER` | No | Not a public policy. |
-| `svx.CALLBACK` | No | Not a public policy. |
 
 ### 2.3 Fatal Mechanism
 
@@ -119,30 +117,3 @@ SVX FATAL [svx_start('tests.basic_test.main')]:
     File "python/svx/primitives.py", line 23, in delay
       raise ValueError("invalid delay value: -5")
 ```
-
-## 4. Unimplemented Policy Sketch (Not Public API)
-
-The following was an early proposal and is not implemented. `svx.DEFER`,
-`svx.FAILED`, and `group.error()` do not exist in the public API:
-
-```python
-group = svx.fork_join_none([child])
-# ... some work ...
-if group.status() == svx.FAILED:
-    error_info = group.error()
-    print(f"Child failed: {error_info.message}")
-```
-
-The proposal would require storing:
-- Exception type
-- Exception message
-- Traceback string
-- Timestamp of failure
-
-## 5. Testing
-
-1. Trigger an uncaught exception in a `main()` task → verify fatal output format.
-2. Verify `SVXContextError` is raised when calling a primitive without context.
-3. Verify `SVXExportError` is raised when `svx_start` references an unregistered name.
-4. Verify `svx.REPORT` for an exported entry and fatal behavior for a failed
-   generated inheritance call; these policy scopes are intentionally different.

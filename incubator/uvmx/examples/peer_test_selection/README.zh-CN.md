@@ -2,6 +2,10 @@
 
 [English](README.md)
 
+首次接入请先读[准备和使用 UVMX](../../../../docs/UVMX_GETTING_STARTED.zh-CN.md)。
+默认 `uvm_test` 的最小路径无需运行基类注册生成器。本示例额外使用自定义 SV
+基类和类型化事务，下面的生成步骤是这些额外能力所需，不是所有用户的必选步骤。
+
 本示例通过同一个 UVM factory 和 `run_test()` 选择 Python 或原有 SV 用例。
 工程先顺序完成初始化，再直接调用原生 UVM task：
 

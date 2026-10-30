@@ -6,6 +6,7 @@
   <meta name="description" content="UVMX 临时原型的实现图解：统一 UVM factory、Python 运行时注册、同步 phase 回调和免重编译的用例迭代。">
   <title>UVMX · 实现图解</title>
   <link rel="stylesheet" href="assets/uvmx.css">
+  <link rel="stylesheet" href="assets/syntax.css">
   <script src="assets/uvmx.js" defer></script>
 </head>
 <body>
@@ -16,15 +17,16 @@
 </header>
 <div class="workspace">
   <aside class="sidebar">
-    <div class="edition">实现说明 <span>中文</span></div>
+    <div class="edition">实现与使用 <span>中文</span></div>
     <nav aria-label="章节导航">
       <a href="#overview" aria-current="location"><b>01</b> 当前定位</a>
-      <a href="#architecture"><b>02</b> 谁负责什么</a>
-      <a href="#startup"><b>03</b> 一次用例如何启动</a>
-      <a href="#phases"><b>04</b> phase 与同步时序</a>
-      <a href="#iteration"><b>05</b> 只改 Python 的边界</a>
-      <a href="#evidence"><b>06</b> 验证与实现范围</a>
-      <a href="#sources"><b>07</b> 从代码继续</a>
+      <a href="#preparation"><b>02</b> 准备并运行 UVMX</a>
+      <a href="#architecture"><b>03</b> 谁负责什么</a>
+      <a href="#startup"><b>04</b> 一次用例如何启动</a>
+      <a href="#phases"><b>05</b> phase 与同步时序</a>
+      <a href="#iteration"><b>06</b> 只改 Python 的边界</a>
+      <a href="#evidence"><b>07</b> 验证与实现范围</a>
+      <a href="#sources"><b>08</b> 从代码继续</a>
     </nav>
     <div class="side-note"><span class="dot"></span> 临时原型 · incubator/uvmx<p>先完成对等启动，再逐步深化 UVM 映射。</p></div>
   </aside>
@@ -42,8 +44,15 @@
       <p class="scope-note">当前是 SVX 仓库内的临时原型，不包含在 SVX 发布包中，也不是完整的 Python UVM 实现。后续将作为独立 UVMX 项目的起点。</p>
     </section>
 
+    <section id="preparation">
+      <div class="section-heading"><span class="section-no">02</span><div><h2>SVX 已就绪，从这里接入 UVMX</h2><p>默认继承 uvm_test：五步完成首次接入，不运行基类注册生成器。</p></div></div>
+      <div class="prep-route" aria-label="默认基类的准备流程"><span>取得源码</span><b aria-hidden="true">→</b><span>设置路径</span><b aria-hidden="true">→</b><span>编写 Test</span><b aria-hidden="true">→</b><span>编译固定包</span><b aria-hidden="true">→</b><span>原生 run_test</span></div>
+      <!-- UVMX_PREPARATION -->
+      <p class="prep-reading"><a href="docs/UVMX_GETTING_STARTED.zh-CN.html">完整准备指南 ↗</a><span>集中说明聚合导入、编译顺序、自定义基类及退出边界。</span></p>
+    </section>
+
     <section id="architecture">
-      <div class="section-heading"><span class="section-no">02</span><div><h2>一套基础设施，清晰的职责边界</h2><p>UVMX 只做 UVM 接入；跨语言对象与调用复用 SVX 的公开契约。</p></div></div>
+      <div class="section-heading"><span class="section-no">03</span><div><h2>一套基础设施，清晰的职责边界</h2><p>UVMX 只做 UVM 接入；跨语言对象与调用复用 SVX 的公开契约。</p></div></div>
       <div class="architecture" role="img" aria-label="Python Test 通过 UVMX 的注册与 phase 接入连接原有 UVM；底层复用 SVX CallbackAdapter，由 SvTypes 提供数据契约。UVM 保持 factory、phase 和时序所有权。">
         <div class="arch-lane python"><div class="lane-label">PYTHON <span>验证意图</span></div><div class="arch-node"><strong>用户 Test</strong><code>@uvm_test · class Smoke(Test)</code><p>场景、事务、检查、Python 实例状态</p></div></div>
         <div class="arch-link"><span>声明 / 同步 phase 回调</span><b aria-hidden="true">↕</b></div>
@@ -56,7 +65,7 @@
     </section>
 
     <section id="startup">
-      <div class="section-heading"><span class="section-no">03</span><div><h2>同一个 run_test，两种用例来源</h2><p>切换用例来源，沿着实际启动顺序查看代码与对象关系。</p></div></div>
+      <div class="section-heading"><span class="section-no">04</span><div><h2>同一个 run_test，两种用例来源</h2><p>切换用例来源，沿着实际启动顺序查看代码与对象关系。</p></div></div>
       <div class="flow-toolbar"><div class="segmented" role="group" aria-label="用例来源"><button type="button" data-origin="python" aria-pressed="true">Python 用例</button><button type="button" data-origin="sv" aria-pressed="false">原有 SV 用例</button></div><code id="selected-plusarg">+UVM_TESTNAME=py_smoke_test</code></div>
       <div class="startup-flow" aria-label="启动流程">
         <button type="button" class="flow-node" data-step="0" aria-pressed="true"><span>01 / HOST</span><strong>加载声明</strong><small>uvmx_init()</small></button>
@@ -73,7 +82,7 @@ svx_load("uvmx.bootstrap");</code></pre></div></div>
     </section>
 
     <section id="phases">
-      <div class="section-heading"><span class="section-no">04</span><div><h2>Python 方法同步执行，时间仍归 SV</h2><p>当前只接入下面五个 phase。Python 方法均为普通实例方法，只接收 self。</p></div></div>
+      <div class="section-heading"><span class="section-no">05</span><div><h2>Python 方法同步执行，时间仍归 SV</h2><p>当前只接入下面五个 phase。Python 方法均为普通实例方法，只接收 self。</p></div></div>
       <div class="phase-layout"><div class="phase-list" role="group" aria-label="支持的 phase">
         <button type="button" data-phase="build_phase" aria-pressed="true"><code>build_phase</code><span>function</span></button>
         <button type="button" data-phase="connect_phase" aria-pressed="false"><code>connect_phase</code><span>function</span></button>
@@ -85,8 +94,8 @@ svx_load("uvmx.bootstrap");</code></pre></div></div>
     </section>
 
     <section id="iteration">
-      <div class="section-heading"><span class="section-no">05</span><div><h2>新增 Python 用例，不新增 SV 用例类</h2><p>只要继续使用已编译的 SV 基类与既有可见契约，就可以保持同一份仿真可执行文件。</p></div></div>
-      <div class="iteration-grid"><div><div class="mini-label">首次构建 · 固定接入能力</div><ol class="build-list"><li>编译原有环境、UVMX 包和 Test bridge</li><li>生成所选自定义 SV 基类的注册代码</li><li>构建 / 加载 SVX native 运行库</li></ol><div class="frozen"><span class="dot"></span> 之后保留 executable / native 库 / 生成 SV</div></div><div class="python-example"><div class="code-label">后续迭代 · 仅新增 Python 声明</div><pre><code>from uvmx import Test, uvm_test
+      <div class="section-heading"><span class="section-no">06</span><div><h2>新增 Python 用例，不新增 SV 用例类</h2><p>只要继续使用已编译的 SV 基类与既有可见契约，就可以保持同一份仿真可执行文件。</p></div></div>
+      <div class="iteration-grid"><div><div class="mini-label">首次构建 · 固定接入能力</div><ol class="build-list"><li>加入 UVMX 固定包，保留原有环境</li><li>默认基类不生成；自定义基类按需注册</li><li>复用已准备好的 SVX native 库</li></ol><div class="frozen"><span class="dot"></span> 之后保留 executable / native 库 / 生成 SV</div></div><div class="python-example"><div class="code-label">后续迭代 · 仅新增 Python 声明</div><pre><code>from uvmx import Test, uvm_test
 
 @uvm_test(
     canonical_id="py://verification/NewTest",
@@ -106,7 +115,7 @@ class NewTest(Test):
     </section>
 
     <section id="evidence">
-      <div class="section-heading"><span class="section-no">06</span><div><h2>已经验证什么，还有什么没做</h2><p>以下为既有集成验证记录，并已于 2026-10-30 使用新的 uvmx_init 入口和标准 new 构造完成仿真重验。</p></div></div>
+      <div class="section-heading"><span class="section-no">07</span><div><h2>已经验证什么，还有什么没做</h2><p>以下为既有集成验证记录，并已于 2026-10-30 使用新的 uvmx_init 入口和标准 new 构造完成仿真重验。</p></div></div>
       <div class="evidence-list">
         <div><span class="check">✓</span><div><h3>同一 factory 选择 Python 与原有 SV 用例</h3><p>对等启动、原生参数选择与优先级、返回模式、未知名称及异常路径通过重验。</p></div><span class="evidence-tag">Peer selection</span></div>
         <div><span class="check">✓</span><div><h3>冻结二进制后新增 Python 用例</h3><p>只增加 Python 模块及导入，验证新 phase、实例状态和类型化事务；5 个编译／生成文件的哈希、大小、修改时间和 inode 完全不变。</p></div><span class="evidence-tag">无重编译</span></div>
@@ -118,8 +127,9 @@ class NewTest(Test):
     </section>
 
     <section id="sources">
-      <div class="section-heading"><span class="section-no">07</span><div><h2>从讲解走到源码</h2><p>页面对应实际实现，示例中包含构建步骤、运行选择与通过标记。</p></div></div>
+      <div class="section-heading"><span class="section-no">08</span><div><h2>从讲解走到源码</h2><p>页面对应实际实现，示例中包含构建步骤、运行选择与通过标记。</p></div></div>
       <div class="source-links">
+        <a href="docs/UVMX_GETTING_STARTED.zh-CN.html"><span>首次接入</span><strong>准备和使用 UVMX</strong><b>↗</b></a>
         <a href="incubator/uvmx/examples/peer_test_selection/README.zh-CN.html"><span>入门示例</span><strong>Python / SV 对等启动</strong><b>↗</b></a>
         <a href="incubator/uvmx/examples/register_lab/README.zh-CN.html"><span>完整闭环</span><strong>寄存器项目的 UVM 启动</strong><b>↗</b></a>
         <a href="incubator/uvmx/python/uvmx/declarations.source.html"><span>Python 声明</span><strong>Test 与 @uvm_test</strong><b>↗</b></a>

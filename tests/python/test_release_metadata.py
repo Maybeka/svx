@@ -27,9 +27,9 @@ def test_public_version_matches_project_metadata():
     release_contract = Path("docs/RELEASE_1.0.0.md").read_text()
     assert "| SvTypes | `>=1.4.2,<2.0.0` |" in release_contract
     assert "-DSVX_ENABLE_SANITIZERS=ON" in release_contract
-    requirements = Path("docs/SVX_1_0_REQUIRED_FEATURES.md").read_text()
+    requirements = Path("docs/CROSS_LANGUAGE_HANDLE_ADAPTERS.md").read_text()
     specification = Path("docs/SVX_SPEC.md").read_text()
-    assert "RemoteRef(target_type_name)" in requirements
+    assert "RemoteRef[target_type_name]" in requirements
     assert "RemoteRef(target_type_name)" in specification
     assert "RemoteRef(target_type_id)" not in requirements
     assert "RemoteRef(target_type_id)" not in specification

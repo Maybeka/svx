@@ -138,8 +138,70 @@ def test_uvmx_uses_relative_assets_and_navigation(built):
     output, _ = built
     page = Page((output / "uvmx.html").read_text())
     assert all(not url.startswith(("/", "http")) for url in page.links)
-    for anchor in ["overview", "architecture", "startup", "phases", "iteration", "evidence", "sources"]:
+    for anchor in ["overview", "preparation", "architecture", "startup", "phases", "iteration", "evidence", "sources"]:
         assert anchor in page.ids
+
+
+def test_uvmx_preparation_separates_default_and_optional_generation(built):
+    output, _ = built
+    content = (output / 'uvmx.html').read_text()
+    preparation = content.split('<section id="preparation">', 1)[1].split('<section id="architecture">', 1)[0]
+    class Text(HTMLParser):
+        def __init__(self, html):
+            super().__init__()
+            self.parts = []
+            self.feed(html)
+
+        def handle_data(self, data):
+            self.parts.append(data)
+
+    plain = ''.join(Text(preparation).parts)
+    for term in ('UVMX_ROOT', 'PYTHONPATH', 'uvmx_pkg.sv', 'uvmx_pkg::uvmx_init("my_tests")',
+                 'uvm_pkg::run_test()', '+UVM_TESTNAME=python_smoke',
+                 '不运行基类注册生成器', 'UVMX_MINIMAL_PASS', '复用原工程的 UVM 配置'):
+        assert term in plain
+    assert preparation.count('class="prep-guide-step"') == 6
+    optional = plain.split('6.', 1)[1]
+    assert '--sv-base-source' in optional
+    assert 'uvmx_generated_pkg' in optional
+    assert (output / 'docs/UVMX_GETTING_STARTED.zh-CN.html').is_file()
+    assert (output / 'docs/UVMX_GETTING_STARTED.html').is_file()
+
+
+def test_uvmx_preparation_is_generated_from_the_authoritative_guide(built, tmp_path, monkeypatch):
+    output, _ = built
+    template = (site.HERE / 'uvmx.html').read_text()
+    assert '<!-- UVMX_PREPARATION -->' in template
+    assert 'class SmokeTest' not in template
+    assert '<!-- UVMX_PREPARATION -->' not in (output / 'uvmx.html').read_text()
+    assert 'docs/README.html' in (output / 'index.html').read_text()
+    assert 'SVX_GENERATION_WORKFLOW.html' in (output / 'index.html').read_text()
+    guide = Path('docs/UVMX_GETTING_STARTED.zh-CN.md')
+    original = Path.read_text
+
+    def updated(path, *args, **kwargs):
+        text = original(path, *args, **kwargs)
+        if path == site.ROOT / guide:
+            return text.replace('## 2.', 'PREPARATION_SINGLE_SOURCE_SENTINEL\n\n## 2.', 1)
+        return text
+
+    monkeypatch.setattr(Path, 'read_text', updated)
+    site.build(tmp_path)
+    assert 'PREPARATION_SINGLE_SOURCE_SENTINEL' in (tmp_path / 'uvmx.html').read_text()
+
+
+def test_uvmx_bilingual_guide_snippets_match_runnable_minimal_example():
+    expected = {
+        'python': (ROOT / 'incubator/uvmx/examples/minimal_test/my_tests.py').read_text().strip(),
+        'systemverilog': (ROOT / 'incubator/uvmx/examples/minimal_test/tb.sv').read_text().strip(),
+    }
+    for name in ('UVMX_GETTING_STARTED.md', 'UVMX_GETTING_STARTED.zh-CN.md'):
+        tokens = site.md.parse((ROOT / 'docs' / name).read_text())
+        for language, source in expected.items():
+            first = next(token.content.strip() for token in tokens
+                         if token.type == 'fence' and token.info == language)
+            assert first == source, (name, language)
+    assert 'sv_base=' not in expected['python']
 
 
 def test_site_without_incubator_omits_uvmx_page(tmp_path, monkeypatch):

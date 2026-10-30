@@ -1,8 +1,5 @@
-# SVX M7 SystemVerilog Typed Helper Guide
+# SystemVerilog Typed Helpers
 
-This milestone guide has been folded into the active
-[SVX User Manual](SVX_USER_MANUAL.md).
-
-Use the manual sections on generated SystemVerilog typed-channel helpers,
-helper naming, metadata validation, and the M7 reference example for current
-usage.
+Use the [typed helper example](../examples/milestone_7_sv_typed_helpers/README.md)
+for code, generation and checks; use the [API Reference](SVX_API_REFERENCE.md#generated-interfaces)
+for interface classification. This retained link does not maintain another recipe.

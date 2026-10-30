@@ -1,7 +1,9 @@
 # SVX Project Specification
 
-Status: architectural baseline. The normative `1.0.0` feature and
-release contract is [SVX_1_0_REQUIRED_FEATURES.md](SVX_1_0_REQUIRED_FEATURES.md).
+This document owns project intent and architectural boundaries. Exact interfaces
+belong to the [API Reference](SVX_API_REFERENCE.md), compatibility and release
+gates to the [Release Contract](RELEASE_1.0.0.md). Use the
+[documentation map](README.md) to find the owner of each detailed topic.
 
 ## 1. Purpose
 
@@ -69,9 +71,9 @@ Python execution is governed by the CPython GIL. Multiple simulator processes
 may request Python callback execution, but all Python interpreter entry must be
 managed by SVX.
 
-Milestone implementations should prefer a conservative model: one interpreter,
-shared GIL, and serialized Python bytecode execution unless a later spec defines
-a stricter reentrant execution contract.
+The runtime uses one interpreter and simulator-owned evaluator states, with
+explicit restoration when suspended calls resume. The current callback isolation
+mechanism is described in [CPython State Isolation](architecture/gil_management.md).
 
 ### 3.3 Host Concurrency
 

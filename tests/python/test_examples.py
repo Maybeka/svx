@@ -18,7 +18,7 @@ def test_signal_force_example_and_operational_docs_require_explicit_cleanup():
     protected = next(node for node in test.body if isinstance(node, ast.Try))
     assert any(isinstance(node, ast.Assert) for node in protected.body)
     assert [ast.unparse(node) for node in protected.finalbody] == ['data.release()']
-    manual = Path('docs/SVX_USER_MANUAL.md').read_text()
+    manual = Path('docs/SVX_API_REFERENCE.md').read_text()
     cookbook = Path('docs/SVX_COOKBOOK.zh-CN.md').read_text()
     assert 'but does not release those forces' in manual
     assert 'does not maintain nested force stacks' in manual
@@ -30,7 +30,7 @@ def test_signal_force_example_and_operational_docs_require_explicit_cleanup():
 
 def test_operational_lifecycle_docs_match_terminal_cooperative_shutdown():
     cookbook = Path('docs/SVX_COOKBOOK.zh-CN.md').read_text()
-    manual = Path('docs/SVX_USER_MANUAL.md').read_text()
+    manual = Path('docs/SVX_API_REFERENCE.md').read_text()
     spec = Path('docs/SVX_SPEC.md').read_text()
     primitives = cookbook.split('## 3.', 1)[1].split('## 4.', 1)[0]
     teardown = cookbook.split('## 8.', 1)[1].split('## 9.', 1)[0]
@@ -39,8 +39,8 @@ def test_operational_lifecycle_docs_match_terminal_cooperative_shutdown():
     assert '关闭是终态' in teardown
     assert '新的仿真器进程' in teardown
     assert '保留到仿真器进程退出' in teardown
-    assert 'cannot finish until a non-cooperative user SV task returns' in manual
-    assert 'does not finalize CPython' in manual
+    assert 'before shutdown can finish; shutdown cannot forcibly unwind' in manual
+    assert 'The embedded interpreter is retained until simulator exit.' in manual
     assert 'the embedded interpreter remains alive until simulator exit' in spec
     assert 'Embedded CPython interpreter startup and shutdown.' not in spec
 
@@ -48,26 +48,21 @@ def test_operational_lifecycle_docs_match_terminal_cooperative_shutdown():
 def test_operational_constructor_docs_describe_natural_routing_without_public_hooks():
     manual = Path('docs/SVX_USER_MANUAL.md').read_text()
     concepts = Path('docs/SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md').read_text()
-    assert 'There is no public post-bind hook API.' in manual
-    assert 'metadata is not an exclusive permission' in manual
-    assert 'is the sole owner and exposes the generated public factory' not in manual
-    assert 'then runs the post-bind hook' not in manual
-    assert 'they do not necessarily wait until every SV descendant constructor has returned.' in manual
-    assert 'Source-integrated generation supports independent ancestor constructor arguments.' in manual
-    assert 'Each Python initializer executes once and suspends' in manual
-    assert 'corresponding SV `super.new(...)`' in manual
-    assert 'Independent ancestor constructor argument routing is not complete.' not in manual
-    assert '没有公开的 post-bind hook API' in concepts
-    assert 'bind -> post-bind hook' not in concepts
-    assert '源码集成生成路径支持不同祖先的独立构造参数' in concepts
-    assert '每段只执行一次' in concepts
-    assert '不同祖先的独立构造参数路由尚未完成' not in concepts
-    assert '方法可以是 virtual、' in concepts
-    assert 'nonvirtual 或 static' in concepts
+    lineage = ' '.join(Path('docs/CROSS_LANGUAGE_INHERITANCE_LINEAGE.md').read_text().split())
+    assert 'CROSS_LANGUAGE_INHERITANCE_LINEAGE.md' in manual
+    assert 'CROSS_LANGUAGE_INHERITANCE_LINEAGE.md' in concepts
+    assert 'There is no public post-bind hook API.' in lineage
+    assert 'origin metadata is not an exclusive permission' in lineage
+    assert 'supports independent ancestor constructor arguments.' in lineage
+    assert 'Each Python initializer executes once and suspends' in lineage
+    assert 'corresponding SV `super.new(...)`' in lineage
+    assert 'it need not wait until every later SV descendant constructor has returned.' in lineage
 
 
 def test_required_contract_preserves_confirmed_constructor_and_function_rules():
-    text = Path('docs/SVX_1_0_REQUIRED_FEATURES.md').read_text()
+    index = Path('docs/SVX_1_0_REQUIRED_FEATURES.md').read_text()
+    assert 'CROSS_LANGUAGE_INHERITANCE_LINEAGE.md' in index
+    text = ' '.join(Path('docs/CROSS_LANGUAGE_INHERITANCE_LINEAGE.md').read_text().split())
     assert 'origin metadata is not an exclusive permission' in text
     assert 'same validated linear lineage' in text
     assert 'does not require static analysis of arbitrary Python call graphs' in text
@@ -75,9 +70,9 @@ def test_required_contract_preserves_confirmed_constructor_and_function_rules():
 
 
 def test_shutdown_guides_do_not_reintroduce_interpreter_finalization_requirement():
-    manual = Path('docs/SVX_USER_MANUAL.md').read_text()
+    manual = Path('docs/SVX_API_REFERENCE.md').read_text()
     cookbook = Path('docs/SVX_COOKBOOK.zh-CN.md').read_text()
-    assert 'missing interpreter-finalization feature' in manual
+    assert 'The embedded interpreter is retained until simulator exit.' in manual
     assert 'interpreter finalization remain unimplemented' not in manual
     assert '解释器保留到进程退出是有意的设计' in cookbook
     assert '解释器 finalization 是尚未完成的实现要求' not in cookbook
@@ -117,10 +112,11 @@ def test_inheritance_guides_preserve_python_construction_and_explicit_handoff():
     concepts = Path('docs/SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md').read_text()
     assert 'Python creates the instance; SV calls the override' in english
     assert 'Python 创建实例，SV 通过基类句柄调用 override' in chinese
-    assert 'svx_start("inheritance.create_driver")' in concepts
-    assert '`SVX_GET_OBJECT(example_driver_pkg::BaseDriver, "example.driver", driver)' in concepts
-    assert '不是可直接传给 CLI 的完整 JSON' in concepts
-    assert '实验性接口' in concepts
+    assert 'cross_language_inheritance/README.zh-CN.md' in concepts
+    example = Path('examples/cross_language_inheritance/tb.sv').read_text()
+    assert 'svx_start("inheritance.create_driver")' in example
+    assert 'SVX_GET_OBJECT(example_driver_pkg::BaseDriver, "example.driver", driver)' in example
+    assert 'Experimental Python API' in Path('docs/SVX_API_REFERENCE.md').read_text()
 
 
 @pytest.mark.parametrize("document", [
@@ -130,12 +126,11 @@ def test_running_guides_distinguish_discovery_from_artifact_checks(document):
     text = Path(document).read_text()
     section = text.split("## 2.", 1)[1].split("## 3.", 1)[0]
     assert section.index("inheritance-manifest") < section.index("inheritance-gen")
-    assert "SVX_USER_MANUAL.md#21-iterative-development" in section
+    assert "SVX_GENERATION_WORKFLOW.md" in section
     assert "Handwritten manifests" in section or "手写 manifest" in section
 
 
 @pytest.mark.parametrize("document", [
-    "README.md", "docs/SVX_COOKBOOK.zh-CN.md",
     "examples/RUNNING_EXAMPLES.md", "examples/RUNNING_EXAMPLES.zh-CN.md",
 ])
 def test_development_recipe_installs_editable_dependency_and_source_frontend(document):
@@ -329,17 +324,28 @@ def test_register_lab_guides_match_sources_and_fault_cases():
 
 
 def test_operational_docs_do_not_require_duplicating_observed_discovery_sources():
-    manual = Path('docs/SVX_USER_MANUAL.md').read_text()
+    workflow = ' '.join(Path('docs/SVX_GENERATION_WORKFLOW.md').read_text().split())
     cookbook = Path('docs/SVX_COOKBOOK.zh-CN.md').read_text()
-    assert 'they do not need a duplicate explicit' in manual
-    assert 'a persistent dependency graph for the later artifact-generation command' not in manual
-    assert '无需再次逐个列出已记录的发现依赖' in cookbook
-    assert '不持久保存发现依赖' not in cookbook
-    assert 'interactive\nrefresh does not require immediately repeating' in manual
-    assert 'build, CI or release gate without modifying them' in manual
-    assert '无需紧接着再重复' in cookbook
-    assert '重新执行发现和生成，再顺序执行两道' not in cookbook
-    assert '验证现有产物的只读构建、CI 或发布门禁必须按顺序执行' in cookbook
+    assert 'they do not need a duplicate explicit file list' in workflow
+    assert 'interactive refresh does not require immediately repeating' in workflow
+    assert 'build, CI or release gate without modifying existing artifacts' in workflow
+    assert 'SVX_GENERATION_WORKFLOW.md' in cookbook
+    assert '第二步不能代替第一步' in cookbook
+
+
+def test_documentation_maps_route_to_owners_without_duplicate_setup():
+    for path in ('README.md', 'docs/SVX_COOKBOOK.zh-CN.md', 'docs/SVX_USER_MANUAL.md'):
+        text = Path(path).read_text()
+        assert 'RUNNING_EXAMPLES' in text
+        assert 'python3 -m venv' not in text
+    index = Path('docs/README.md').read_text()
+    for owner in ('SVX_API_REFERENCE.md', 'SVX_GENERATION_WORKFLOW.md',
+                  'SVX_BUILD_INPUTS.md', 'CROSS_LANGUAGE_INHERITANCE_LINEAGE.md',
+                  'CROSS_LANGUAGE_HANDLE_ADAPTERS.md', 'RELEASE_1.0.0.md'):
+        assert owner in index
+    lineage = Path('docs/CROSS_LANGUAGE_INHERITANCE_LINEAGE.md').read_text()
+    assert '## Planned Source-Managed Mirror Interface' not in lineage
+    assert '`mirror_method`, `parameter` or `_svx_call_base` API.' in lineage
 
 
 def test_cross_language_inheritance_example_artifacts_are_current():

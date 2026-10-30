@@ -11,11 +11,10 @@ The version applies to SVX only. SvTypes is an external, independently
 versioned dependency. SVX 1.x preserves its documented stable Python,
 SystemVerilog, manifest, generated-artifact, and runtime contracts.
 
-The version label alone is not proof of complete conformance to every item in
-the required-feature document. See its
-[implementation conformance note](SVX_1_0_REQUIRED_FEATURES.md#implementation-conformance-note)
-for known current gaps. Release qualification must cover those requirements,
-not only the existing passing examples.
+The version label alone does not prove qualification on every toolchain or
+lineage. Use the [current inheritance scope](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md#executable-scope)
+and the release gates below. The [feature map](SVX_1_0_REQUIRED_FEATURES.md)
+links each requirement to its owning contract.
 
 ## Compatibility
 
@@ -73,12 +72,9 @@ The default CMake configuration without `vpi_user.h` builds the core runtime
 with a signal-service stub for non-simulator development only. It does not
 provide hierarchical signal access and is not a release-qualified runtime.
 
-For source development, use the editable sibling dependency:
-
-```sh
-python -m pip install -e ../svtypes
-python -m pip install -e .
-```
+For source development, follow the shared
+[Running Examples setup](../examples/RUNNING_EXAMPLES.md), including the editable
+sibling dependency and source-discovery extras.
 
 Set `SVX_LIB_DIR` to the CMake output directory when `svx libs` cannot infer
 it. Set `SVX_SHARE_DIR` only when SV support files are installed

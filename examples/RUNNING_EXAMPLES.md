@@ -66,7 +66,7 @@ An artifact check verifies output against the supplied manifest; it does not
 rediscover edited Python declarations. Refreshing artifact input hashes against
 an old manifest cannot replace the discovery check. Handwritten manifests have
 no discovery command: update their contracts explicitly before checking output.
-See [Iterative Development](../docs/SVX_USER_MANUAL.md#21-iterative-development)
+See [Iterative Development](../docs/SVX_GENERATION_WORKFLOW.md)
 for the ordered commands and body-only edit workflow.
 
 ## 3. Compile and Load

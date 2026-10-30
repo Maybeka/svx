@@ -1,8 +1,6 @@
 # SVX Migration Playbook
 
-This playbook has been folded into the active
-[SVX User Manual](SVX_USER_MANUAL.md).
-
-Use the manual sections on first adoption, existing SV driver and monitor
-patterns, existing UVM environment patterns, lifecycle rules, debugging, and
-anti-patterns for current migration guidance.
+Use the [real UART migration](../examples/opentitan_uart/README.md) for a complete
+baseline, mixed-mode and Python-led path with verification results.
+The [Cookbook](SVX_COOKBOOK.zh-CN.md) connects this route to the prerequisite
+capabilities; [Running Examples](../examples/RUNNING_EXAMPLES.md) owns common setup.

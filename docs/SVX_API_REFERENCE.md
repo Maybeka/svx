@@ -40,6 +40,10 @@ the older `1.4.1` release is not sufficient. See the
 [release dependency note](RELEASE_1.0.0.md#compatibility).
 The runtime supports one initialized session per simulator process; shutdown is
 terminal, not an invitation to call `svx_init()` again.
+SVX owns the codec session used by its channels and inheritance services.
+Applications must not close it or clear its registries while the runtime is
+ready. Independent application codecs own separate sessions; resetting the
+default SvTypes registry is not resetting SVX's active session.
 
 `close_instance(instance)` releases an allocated cross-language pair without
 requiring application access to generated private object-ID attributes.
@@ -177,6 +181,22 @@ an object with a reinterpreted pointer. Per-ancestor constructor records are
 private generated transport, not a user-facing constructor API. Qualified
 alternating chains, including Python-root chains, use the integrated source path.
 
+## Hierarchical Signal Access
+
+`declare_signal(path, codec)` declares one whole packed HDL object using a
+two-state or four-state SvTypes codec. Import the declaration module before
+runtime initialization so startup can validate every path, width and type.
+`Signal.path` is the declared path; `read()` decodes its current value,
+`write(value)` deposits a codec-encoded value, `force(value)` forces it, and
+`release()` releases that force. These operations require active context.
+The service uses direct C VPI from the existing DPI context, not a system task.
+
+Always release temporary forces in `try/finally`. Shutdown invalidates handles
+but does not release those forces. SVX does not maintain nested force stacks
+or provide a force context manager; a release follows the HDL object's own
+semantics, not restoration of a saved Python value. Use this API for occasional
+diagnostics, not bulk sampling. See the [runnable signal example](../examples/hierarchical_signal_access/README.md).
+
 ## Signal Subscriptions
 
 `Signal.read()` reads the current HDL value. `Signal.subscribe()` creates an
@@ -276,43 +296,12 @@ implementation exceptions are not suppressed.
 - `svx inheritance-gen` validates a manifest and generates Python mirrors,
   SystemVerilog mirrors, and an optional compatibility artifact manifest.
   `--check` verifies that all three requested output groups are current.
-  Python and staged SV output directories have generator-owned file inventories;
-  checks include obsolete owned files, and regeneration removes them. Other user
-  files are retained. Use a dedicated output root for each manifest. The first
-  inventory cannot identify unrecorded artifacts left by older generators.
-  Before changing outputs, generation rejects existing non-generated files at
-  target paths and paths escaping the output root, including through parent
-  symlinks. The ownership checks cover Python, staged SV, and merged SV targets.
-  Atomic replacement applies to individual files, not a crash-safe transaction
-  spanning every output; use `--check` after an interrupted generation.
-  Regeneration preserves timestamps of byte-identical files, including the
-  ownership inventories, so unchanged generated inputs do not force recompilation.
-  `--sv-source` additionally scans interface declarations to generate
-  virtual-interface views.
-  `--sv-integrated-dir DIR` emits `DIR/source.sv`, integrating the selected
-  original source units with ordered bridge declarations. Compile it in place
-  of those originals, after the runtime packages; original files are not edited.
-  It is mutually exclusive with `--sv-out` and `--sv-stage-dir`. Multiple ordered
-  source inputs require `--sv-compilation-unit`. Shared macro input files,
-  definitions and include paths participate in the artifact freshness check.
-  Integrated outputs use the same inventory, input-overwrite protection and
-  unchanged-file timestamp policy. Invalid output combinations and missing
-  required options reject before loading declarations or parsing source.
-  Ordinary user source imports actually compiled during generation are persisted as
-  `generation_inputs.python_imports`; changes make `--check` stale even when
-  bridge output matches. Reused audited cached imports remain recorded and
-  protected against output replacement; changed cached sources require a fresh
-  command process. This is not discovery-to-generation provenance or tracking
-  of custom importers and arbitrary external build dependencies.
-  SVX/SvTypes/source-parser implementation sources are excluded from automatic user input
-  records so framework preloads do not change freshness. Consumed-source
-  stability/overwrite guards and explicit `--python-source` inputs are retained;
-  these records are not a framework dependency lock.
-  Automatic import records reject malformed digests, noncanonical/absolute paths
-  and duplicate resolved source paths, including symlink aliases. Fresh command
-  processes recompute the import set and prune dependencies no longer imported.
-  This is not automatic declaration discovery or support for every source form;
-  see [the source workflow](SVX_USER_MANUAL.md) for the build and check sequence.
+  `--sv-source` scans interface declarations for restricted VIF views.
+  `--sv-integrated-dir DIR` emits integrated `DIR/source.sv` in place of
+  supplied originals; it is mutually exclusive with `--sv-out` and
+  `--sv-stage-dir`. Multiple ordered source inputs require
+  `--sv-compilation-unit`. See [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md)
+  for refresh order, input evidence, ownership, unchanged-output handling and recovery.
 - `svx inheritance-migrate` converts the supported legacy manifest to the
   declarative schema without evaluating source expressions.
 - `svx inheritance-manifest` normalizes decorated Python classes and versioned
@@ -497,8 +486,8 @@ SVX type schema.
 | class | Stable | `canonical_id`, `language`, `symbol`, `methods`, `constructor`, `specialization`, `fields`, `base_lineage` | ID, language and symbol required; methods, fields and lineage default empty; constructor and specialization optional. Lineage entries cannot contain base_lineage. |
 | method | Stable | `canonical_id`, `name`, `parameters`, `return_type`, `return_handle`, `timing`, `virtual`, `pure_virtual`, `static` | ID, name, return_type, timing and virtual required; parameters default empty; pure_virtual and static default false; return_handle optional. |
 | parameter | Stable | `name`, `type`, `direction`, `handle` | Name and type required; direction defaults input independently for each parameter; handle optional. ref and const ref rejected. |
-| field | Stable | `name`, `type`, `handle` | Name and type required; optional handle uses the same static endpoint metadata as parameters. Initialization and policy metadata are not implemented in this field shape. |
-| constructor | Stable | `initiator`, `parameters` | Initiator required, python or sv; parameters default empty and must be input. This is not the planned per-ancestor ConstructionRequest. |
+| field | Stable | `name`, `type`, `handle` | Name and type required; optional handle uses the same static endpoint metadata as parameters. Declaration defaults come from the SvTypes declaration, not an extra manifest initializer key. |
+| constructor | Stable | `initiator`, `parameters` | Initiator required, python or sv; parameters default empty and must be input. Per-ancestor transport records are generated privately. |
 | type_binding | Stable | `unified_type_name`, `svtypes`, `python`, `sv`, `sv_packer`, `encoding_descriptor` | Exactly one of canonical svtypes or legacy python; other fields required. Identity and encoding are compared with the materialized codec. SV type/packer spellings receive character validation, not a semantic equivalence proof. The string void is accepted only in return positions. |
 | encoding_descriptor | Stable | `unified_type_name`, `encoding_fingerprint`, `binary_format_version` | All required by comparison with the public SvTypes encoding descriptor. |
 | python_factory | Legacy | `module`, `symbol`, `args`, `kwargs` | Module and symbol required; args and kwargs default empty. New source declarations emit canonical SvTypes identities. |
@@ -508,72 +497,12 @@ SVX type schema.
 | specialization_type_argument | Stable | `kind`, `type` | Required; kind is type and type is a non-void type binding. |
 | specialization_value_argument | Stable | `kind`, `sv_type`, `value` | Required; kind is value, with normalized JSON scalar literal and concrete SV type. |
 
-The discovery CLI automatically emits `discovery_provenance` and a sibling
-`<manifest-name>.svx-discovery.json`; keep both files together. Its object has exactly
-`schema_version` (`1.0.0`) and `path` (a canonical relative path, resolved from
-the manifest directory). The referenced JSON record has exactly `schema_version`,
-`contract_sha256`, `sources` and `configuration`. Each source has a canonical
-relative `path` and lowercase SHA-256 `sha256`; resolved identities must be
-unique and cannot include the manifest or the provenance record itself.
-Discovery stages changed members of the pair before publication and attempts
-rollback on handled publication errors. Successful rollback preserves existing
-files and removes newly published members; incomplete recovery reports saved
-originals. Matching files are not rewritten. This is not crash-atomic publication,
-multi-writer locking, or a transaction covering all generated bridge artifacts.
-Readers must validate the pair and reject transient missing or mismatched evidence.
-`contract_sha256` binds the manifest content excluding the provenance reference,
-using sorted compact ASCII JSON. Configuration records discovery options, not
-generation targets or a simulator build recipe. Accepted configuration keys are
-`python_modules`, `python_selections`, `python_namespaces`, `python_sources`, `sv_declarations`, `sv_sources`, `sv_dependencies`,
-`sv_predefines`, `sv_undefines`, `sv_include_dirs` and `source_mode`.
-Ordered sources/include paths and macro options are retained. Automatically
-compiled ordinary user imports are recorded without an additional file list;
-standard-library, framework and source-parser implementation imports are excluded
-from that automatic user graph. Standard-library roots and module identities are
-checked together: installed third-party packages and same-name user modules are
-not excluded. Explicit source inputs retain their fingerprints and protection.
-For source-scanned SV records, validation replays the stored source order,
-include search paths, macros and compilation-unit mode and compares the selected
-dependency identities, not only file contents. Adding a preferred include
-candidate invalidates the record even when it has the same bytes as the old
-header. This validation requires the `manifest` installation extra even if the
-generation command does not repeat `--sv-source`. Older source-scanned records
-without the selected dependency inventory require rediscovery; they are not
-silently accepted as complete evidence.
-
-`load_manifest(path)` and `inheritance-gen` validate referenced evidence before
-class/codec-factory parsing. Missing evidence, source edits or contract mismatch
-reject rather than falling back to a handwritten manifest. `parse_manifest`
-requires `source_path` when this reference is present. CLI generation includes
-the evidence and sources in final stability checks and input-overwrite protection.
-File-backed API parsing also revalidates evidence after class materialization.
-A manifest without the reference remains compatible but provides no discovery
-evidence. Discovery checks both files read-only. A body-only edit makes the source
-record stale; rediscovery refreshes it without rewriting a matching manifest.
-Regeneration then refreshes artifact inputs without rewriting matching bridges.
-An already-cached entry requires current prior discovery evidence, otherwise
-use a fresh command process. This is not complete tracking of custom importers,
-unaudited cached dependencies or external build inputs; keep the two-stage checks.
-Ordinary imports from actively audited declaration sources reject cached helpers
-without current prior discovery evidence; this includes `from`/relative imports
-and `importlib.import_module()`. Valid prior evidence permits unchanged reuse.
-Explicit source listing cannot prove which bytes produced cached definitions.
-Use fresh command processes when rejected. Existing object references, custom
-loaders and imports outside audited source execution are not fully certified.
-`python_selections` records ordinary file-backed user modules as objects with
-`module` and canonical relative `path`. Validation resolves their current filesystem
-selection before class parsing, without running package initializers or trusting
-cached module paths. Added preferred same-name modules invalidate the record even
-when recorded source bytes are unchanged. Python-entry records without a selection
-inventory require rediscovery. Use the application's current import paths for checks.
-`python_namespaces` records participating namespace ancestors as objects with
-`module` and ordered relative directory `paths` (where `.` denotes the manifest
-directory). Validation compares package kind and ordered locations; adding an
-initializer or changing namespace locations invalidates old evidence even if
-the selected child source is unchanged. Older incomplete namespace evidence
-requires rediscovery. This does not certify arbitrary custom importers, runtime
-package-path mutations or external build inputs; keep the ordered two-stage checks.
-Applications should not manufacture provenance records to certify old declarations.
+The discovery CLI emits a manifest plus validated file-backed provenance.
+Their format, source-selection checks, caching boundaries and publication rules
+are specified in [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md).
+`load_manifest(path)` and `inheritance-gen` validate evidence before materializing
+classes/codecs; `parse_manifest` requires `source_path` when evidence is present.
+A manifest without evidence remains valid as an explicitly maintained contract.
 
 Generated artifact manifests are generator/runtime validation metadata. Applications
 may inspect their public type-name mappings but must not hand-author private
@@ -584,5 +513,5 @@ or interpret bridge object IDs. The typed implementation-selection constructor
 described above is the explicit exception for forwarding its opaque ID to
 super.new; that documented forwarding does not expose registry or DPI APIs.
 Use the generated public mirror/proxy classes and typed implementation-selection
-factories instead. [Lineage status](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md) records
-the design capabilities that are not yet executable.
+factories instead. [Lineage scope](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md#executable-scope) defines
+the supported construction and dispatch shapes.

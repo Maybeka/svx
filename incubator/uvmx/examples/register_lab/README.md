@@ -2,6 +2,10 @@
 
 [中文](README.zh-CN.md)
 
+See [Prepare And Use UVMX](../../../../docs/UVMX_GETTING_STARTED.md) for initial
+setup and the default-base route. This integration reuses Register Lab contracts;
+those data and inheritance steps are not required by a minimal default-base test.
+
 This temporary UVMX adapter reuses the [core register project](../../../../examples/register_lab/README.md)
 without changing its data, driver, monitor or inheritance implementation. The
 core does not import UVMX or require UVM. This directory is source-development

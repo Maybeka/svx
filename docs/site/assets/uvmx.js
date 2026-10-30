@@ -111,3 +111,17 @@ if ("IntersectionObserver" in window) {
   document.querySelectorAll("main section").forEach(section => observer.observe(section));
 }
 renderStep();
+
+
+document.querySelectorAll(".copy-code").forEach(button => {
+  button.addEventListener("click", async () => {
+    const code = button.closest(".code-block").querySelector("code").textContent;
+    try {
+      await navigator.clipboard.writeText(code);
+      button.textContent = "已复制";
+    } catch {
+      button.textContent = "复制不可用";
+    }
+    setTimeout(() => { button.textContent = "复制"; }, 1800);
+  });
+});

@@ -59,7 +59,7 @@ PYTHONPATH=python:../svtypes/python:. python -m svx inheritance-gen \
 产物检查只验证其与给定 manifest 是否一致，不会重新发现已编辑的 Python
 声明。对旧 manifest 刷新输入摘要不能代替发现检查。手写 manifest 没有
 发现命令，需先显式更新契约，再检查产物。两阶段命令和仅修改方法体的流程见
-[迭代开发](../docs/SVX_USER_MANUAL.md#21-iterative-development)。
+[迭代开发](../docs/SVX_GENERATION_WORKFLOW.md)。
 
 ## 3. 编译与加载
 

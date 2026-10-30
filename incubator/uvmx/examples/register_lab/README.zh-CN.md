@@ -2,6 +2,9 @@
 
 [English](README.md)
 
+首次准备 UVMX 的路径和默认基类用法见[准备和使用 UVMX](../../../../docs/UVMX_GETTING_STARTED.zh-CN.md)。
+下面复用的是已有寄存器项目的数据和继承契约，不表示默认用例需要重新生成这些内容。
+
 Python 用例名在启动时动态注册，不再生成逐用例 SV 类。首次构建后，新增使用
 已编译基类的 Python Test，直接通过新的 `+UVM_TESTNAME` 启动；保持原二进制
 和 native 库不变，不需要重新生成或编译 SV。

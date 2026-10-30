@@ -42,6 +42,9 @@ expose local filesystem paths. Rebuild after editing the Markdown sources.
 ## Checks
 
 The Chinese `uvmx.html` explainer is also linked from the reference navigation.
+Its preparation section starts with the built-in uvm_test route without a
+generator, then separates optional bases and data contracts. The bilingual
+[getting-started guide](../UVMX_GETTING_STARTED.md) contains the full procedure.
 It visualizes ownership, Python/SV test selection, synchronous phase callbacks,
 recompilation boundaries, existing qualification and current limitations. Its
 template and `assets/uvmx.{css,js}` describe the current incubator implementation;
@@ -58,3 +61,7 @@ python -m pytest -q tests/python/test_cookbook_site.py
 These checks require the `docs` extra. Browser QA should additionally check the
 home page, a chapter, search, code copying, mobile navigation, and a linked
 project guide. The two build-time dependencies do not affect SVX runtime users.
+
+The UVMX preparation accordion is rendered directly from the Chinese getting-started
+guide at build time. Edit that Markdown, not a second set of HTML instructions.
+The document map and generation workflow are available in reference navigation.

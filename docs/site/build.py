@@ -22,6 +22,9 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 COOKBOOK = Path("docs/SVX_COOKBOOK.zh-CN.md")
 UVMX_SOURCES = [
+    Path("docs/UVMX_GETTING_STARTED.zh-CN.md"),
+    Path("incubator/uvmx/examples/minimal_test/my_tests.py"),
+    Path("incubator/uvmx/examples/minimal_test/tb.sv"),
     Path("incubator/uvmx/python/uvmx/declarations.py"),
     Path("incubator/uvmx/python/uvmx/bootstrap.py"),
     Path("incubator/uvmx/sv/uvmx_bridge.sv"),
@@ -88,7 +91,8 @@ def build(output: Path) -> dict:
     shutil.copytree(HERE / "assets", output / "assets", dirs_exist_ok=True)
     (output / "assets" / "syntax.css").write_text(HtmlFormatter(style="friendly").get_style_defs(".highlight"))
     has_uvmx = all((ROOT / path).is_file() for path in UVMX_SOURCES)
-    queue = deque([COOKBOOK, Path("docs/SVX_API_REFERENCE.md"),
+    queue = deque([COOKBOOK, Path("docs/README.md"), Path("docs/SVX_GENERATION_WORKFLOW.md"),
+                   Path("docs/SVX_API_REFERENCE.md"),
                    Path("examples/opentitan_uart/README.zh-CN.md"),
                    Path("examples/register_lab/README.zh-CN.md"),
                    *(UVMX_SOURCES if has_uvmx else [])])
@@ -172,6 +176,8 @@ def build(output: Path) -> dict:
                 nav += f'<a href="{relative(f"learn/{index:02}.html", current)}"{active}>{escape(label)}</a>'
             nav += '</div>'
         nav += '<div class="nav-group"><p>参考资料</p>'
+        nav += '<a href="' + relative('docs/README.html', current) + '">文档地图 <span>↗</span></a>'
+        nav += '<a href="' + relative('docs/SVX_GENERATION_WORKFLOW.html', current) + '">生成与增量构建 <span>↗</span></a>'
         if has_uvmx:
             nav += '<a href="' + relative('uvmx.html', current) + '">UVMX 实现图解 <span>↗</span></a>'
         nav += '<a href="' + relative(destination(Path("docs/SVX_API_REFERENCE.md")), current) + '">API Reference <span>↗</span></a></div>'
@@ -216,6 +222,21 @@ def build(output: Path) -> dict:
         rendered = re.sub(r'<h2([^>]*)>', r'<h1\1>', rendered, count=1)
         rendered = rendered.replace('</h2>', '</h1>', 1)
         shell(title, rendered, current, headings, index, source=COOKBOOK)
+    preparation = ""
+    if has_uvmx:
+        guide = Path("docs/UVMX_GETTING_STARTED.zh-CN.md")
+        lines = (ROOT / guide).read_text().splitlines(keepends=True)
+        tokens = md.parse(''.join(lines))
+        sections = [(token.map, tokens[i + 1].content)
+                    for i, token in enumerate(tokens)
+                    if token.type == "heading_open" and token.tag == "h2"]
+        for index, (location, title) in enumerate(sections):
+            end = sections[index + 1][0][0] if index + 1 < len(sections) else len(lines)
+            content, _ = render(''.join(lines[location[1]:end]), guide, "uvmx.html")
+            opened = " open" if index == 0 else ""
+            preparation += (f'<details class="prep-guide-step" id="prep-{index + 1}"{opened}>'
+                            f'<summary>{escape(title)}</summary><div class="prep-guide-body">'
+                            + content + '</div></details>')
     while queue:
         source = queue.popleft()
         if source in seen:
@@ -238,6 +259,7 @@ def build(output: Path) -> dict:
           (2, "沿着能力依赖前进", "route"), (2, "进入真实项目", "project")], home=True)
     if has_uvmx:
         uvmx = (HERE / "uvmx.html").read_text()
+        uvmx = uvmx.replace("<!-- UVMX_PREPARATION -->", preparation)
         (output / "uvmx.html").write_text(uvmx)
         records.append({"title": "UVMX 实现图解", "url": "uvmx.html",
                         "text": re.sub('<[^>]+>', ' ', uvmx), "source": "incubator/uvmx"})

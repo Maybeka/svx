@@ -2,6 +2,11 @@
 
 [中文](README.zh-CN.md)
 
+Start with [Prepare And Use UVMX](../../../../docs/UVMX_GETTING_STARTED.md).
+The default uvm_test route needs no base registration generator. This example
+additionally uses a custom SV base and typed transactions; the generation below
+is for those additional contracts, not a mandatory step for all UVMX users.
+
 This temporary U0 example proves that one ordinary UVM selection path can
 choose either a pre-existing SystemVerilog test or an opt-in Python test.
 It is intentionally outside the published SVX package.

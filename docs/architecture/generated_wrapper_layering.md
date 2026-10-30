@@ -1,6 +1,6 @@
 # SVX Generated Wrapper Layering
 
-M6 standardizes the intended layering for generated files and user-owned code.
+Generated files and user-owned code have separate responsibilities.
 This is documentation for the current CLI and examples, not a new RPC or
 component framework.
 
@@ -28,13 +28,13 @@ Python SvTypes models
   -> user Python tests/checkers/sequences
 ```
 
-The M6 implementation focused on the first and last parts:
+The current thin adapter layers provide:
 
 - `python -m svx svtypes-gen` generates deterministic SV type declarations.
-- Python role helpers wrap existing M2 typed channels.
+- Python role helpers wrap existing typed channels.
 - `svx_run_test` is a convenience wrapper over `svx_load` and `svx_start`.
 
-The M7 implementation adds generated SystemVerilog typed-channel helpers:
+The generated SystemVerilog typed-channel helpers add:
 
 - `python -m svx svtypes-gen --channel-helpers` emits typed SV channel helpers.
 - `svx_get_<TypeName>` and `svx_put_<TypeName>` wrap payload metadata checks,
@@ -99,6 +99,5 @@ Generated Python constructors also isolate their receiver, bridge imports and
 object-ID temporary from declared formals. Before SV generation or runtime call
 record construction, SVX compares the public SvTypes schema's ordered fields
 with the declared contract. Missing, renamed or reordered fields are a dependency
-contract error, not permission to drop a user parameter. The current dependency
-does not preserve underscore-prefixed explicit RecordSchema fields; complete
-construction with such formals remains unqualified despite the wrapper fix.
+contract error, not permission to drop a user parameter. A mismatched dependency schema is rejected; adapters must never silently
+drop or rename an explicit user field.

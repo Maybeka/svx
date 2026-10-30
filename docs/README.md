@@ -1,70 +1,57 @@
 # SVX Documentation
 
-## Cookbook Website
+## Choose A Route
 
-The [Cookbook website](site/README.md) builds the existing Markdown into a
-searchable learning guide with chapter navigation and complete linked examples.
-See the [Chinese build guide](site/README.zh-CN.md) for local preview instructions.
+| Need | Start here |
+|---|---|
+| Learn by doing | [Chinese Cookbook](SVX_COOKBOOK.zh-CN.md) or [its searchable website](site/README.md) |
+| Prepare a source checkout | [Running Examples](../examples/RUNNING_EXAMPLES.md) / [中文](../examples/RUNNING_EXAMPLES.zh-CN.md) |
+| Install a release | [Release installation](RELEASE_1.0.0.md#installation-model) |
+| Migrate an existing environment | [OpenTitan UART](../examples/opentitan_uart/README.md) |
+| Try a smaller complete project | [Register Lab](../examples/register_lab/README.md) |
+| Add Python UVM tests | [UVMX preparation](UVMX_GETTING_STARTED.md) / [中文](UVMX_GETTING_STARTED.zh-CN.md) |
+| Find a focused example | [Examples index](../examples/README.md) |
+| Read diagrams | [Chinese architecture reading guide](SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md) |
 
-## Core Documents
+## Authoritative References
 
-- [SVX_BUILD_INPUTS.md](SVX_BUILD_INPUTS.md): reuse original filelists and exported
-  compiler argv for discovery, generation and read-only freshness checks.
+Each topic has one current owner. The Cookbook teaches a route through these
+references; it is not another API specification. Translations describe the same
+topic, not separate contracts. Example instructions own project-specific inputs
+and expected results, not general API rules.
 
-- [RELEASE_1.0.0.md](RELEASE_1.0.0.md): supported compatibility contract,
-  installation model, and release gates for SVX 1.0.0.
-- [SVX_1_0_REQUIRED_FEATURES.md](SVX_1_0_REQUIRED_FEATURES.md): stable
-  feature contract, SvTypes prerequisites, implementation sequence, and release
-  qualification gates for SVX 1.0.0.
-- [SVX_SPEC.md](SVX_SPEC.md): project scope, architecture, concurrency model,
-  execution context, export model, process model, and non-goals.
-- [SVX_PROJECT_LAYOUT.md](SVX_PROJECT_LAYOUT.md): intended production project
-  structure and migration map.
-- [decisions/0001-svtypes-as-versioned-external-dependency.md](decisions/0001-svtypes-as-versioned-external-dependency.md):
-  accepted decision to split SVX and SvTypes into two repositories, with SVX
-  depending on versioned SvTypes.
-- [SVX_USER_MANUAL.md](SVX_USER_MANUAL.md): active user manual covering
-  adoption, SvTypes generation, Python test startup, typed channels, generated
-  SV helpers, lifecycle rules, debug flow, cross-language inheritance, signal
-  access, and anti-patterns.
-- [SVX_COOKBOOK.zh-CN.md](SVX_COOKBOOK.zh-CN.md): a standalone, step-by-step
-  Chinese cookbook with a real OpenTitan UART migration tutorial, a five-step Register Lab project route, a capability
-  index and focused chapters on runtime, channels, inheritance and signals.
-- [../examples/register_lab/README.md](../examples/register_lab/README.md):
-  one runnable register-peripheral project, with bilingual instructions,
-  generation/check commands and positive/negative result criteria.
-- [../examples/opentitan_uart/README.md](../examples/opentitan_uart/README.md):
-  real upstream UART baseline, native transaction handles, mixed and Python-led
-  scenarios, independent Python checking and explicit negative controls.
-- [../examples/project_migration/README.md](../examples/project_migration/README.md):
-  introductory four-register migration draft; not the real-project acceptance record.
-- [SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md](SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md):
-  Chinese concept guide that connects the architecture diagrams to runnable
-  examples for SvTypes data contracts, SVX primitives, typed channels, signals,
-  and both cross-language inheritance directions.
-- [../examples/RUNNING_EXAMPLES.zh-CN.md](../examples/RUNNING_EXAMPLES.zh-CN.md):
-  shared operational setup, build-input, runtime-loading, and result criteria
-  for every published example.
-- [SVX_API_REFERENCE.md](SVX_API_REFERENCE.md): stable Python, CLI, and
-  SystemVerilog surface plus private runtime ABI boundaries.
-- [CROSS_LANGUAGE_HANDLE_ADAPTERS.md](CROSS_LANGUAGE_HANDLE_ADAPTERS.md):
-  declared `RemoteRef` transport for arbitrary SV class handles and generated
-  restricted virtual-interface views.
-- [CROSS_LANGUAGE_INHERITANCE_LINEAGE.md](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md):
-  full inheritance design, target residency, construction, member semantics,
-  and explicit distinctions between implemented interfaces and planned ones.
-- [diagrams/](diagrams/): visual overview diagrams for SVX layers,
-  concurrency, and typed channels.
+| Topic | Current owner |
+|---|---|
+| Goals, scheduling and repository responsibilities | [Specification](SVX_SPEC.md) |
+| Public Python, SV and CLI surface; manifest fields | [API Reference](SVX_API_REFERENCE.md) |
+| Discovery, generation, freshness and output ownership | [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md) |
+| Original filelists, macros, includes and lazy libraries | [Build Inputs](SVX_BUILD_INPUTS.md) |
+| Inheritance, construction, dispatch and field residency | [Cross-Language Lineage](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md) |
+| External class handles and restricted virtual interfaces | [Handle Adapters](CROSS_LANGUAGE_HANDLE_ADAPTERS.md) |
+| Installation, compatibility and release qualification | [Release Contract](RELEASE_1.0.0.md) |
+| UVMX preparation and first test | [Getting Started](UVMX_GETTING_STARTED.md) / [中文](UVMX_GETTING_STARTED.zh-CN.md) |
+| Current source locations | [Project Layout](SVX_PROJECT_LAYOUT.md) |
 
-SvTypes-specific binary-format, support-matrix, and object-graph documentation
-lives in the external SvTypes repository.
+[User Manual](SVX_USER_MANUAL.md) retains its familiar section links as a reading
+map. [1.0 Feature Map](SVX_1_0_REQUIRED_FEATURES.md) routes release requirements
+to the owners above; neither maintains another implementation plan.
+SvTypes owns its own types, codecs, storage and format documentation.
 
-## Architecture Details
+## Runtime Internals
 
-Detailed architecture notes live in [architecture/](architecture/).
-The binding, cross-layer API, and type-taxonomy notes retain explicitly marked
-historical sketches; use the API reference and current source declarations for
-actual build/API contracts.
+These notes explain implementation mechanisms, not alternative public APIs:
 
-- [architecture/generated_wrapper_layering.md](architecture/generated_wrapper_layering.md):
-  generated-code and user-code layering guidance.
+- [Execution contexts](architecture/execution_context.md)
+- [CPython state isolation](architecture/gil_management.md)
+- [Simulator process scheduling](architecture/concurrency_design.md)
+- [Time conversion](architecture/delay_precision.md)
+- [Export registration](architecture/export_model.md)
+- [Binding and scope](architecture/binding_mechanism.md)
+- [Native ABI checks](architecture/cross_layer_api.md)
+- [Exception reporting](architecture/error_policy.md)
+- [Generated/user code layering](architecture/generated_wrapper_layering.md)
+
+The [SvTypes dependency decision](decisions/0001-svtypes-as-versioned-external-dependency.md)
+records why the repositories are separate. The
+[architecture reading guide](SVX_SVTYPES_CORE_CONCEPTS.zh-CN.md) links editable
+source diagrams; additional overviews live in [diagrams/](diagrams/).

@@ -32,7 +32,9 @@ python -m http.server 8765 --directory docs/site/_build --bind 127.0.0.1
 
 ## UVMX 实现图解
 
-构建后打开 `uvmx.html`，或从站内“参考资料”进入。独立的中文图解页提供职责
+构建后打开 `uvmx.html`，或从站内“参考资料”进入。独立的中文图解页先展示
+五步准备路径：默认 uvm_test 不运行生成器，自定义基类与数据契约按需
+增加。集中操作说明见[准备和使用 UVMX](../UVMX_GETTING_STARTED.zh-CN.md)。此外提供职责
 分层、Python / SV 用例启动路径切换、五个 phase 的调用顺序，以及免重编译边界、
 已有验证和当前限制。它是 `incubator/uvmx` 当前实现的讲解，不是在浏览器内执行
 UVM。页面模板在 `uvmx.html`，交互与样式在 `assets/uvmx.js`、`assets/uvmx.css`；
@@ -47,3 +49,7 @@ python -m pytest -q tests/python/test_cookbook_site.py
 
 这些检查需要 `docs` 可选依赖。浏览器还应检查首页、章节页、搜索、代码复制、
 移动导航与真实项目指南。两项构建依赖不会成为 SVX 运行时的依赖。
+
+UVMX 准备步骤在构建时直接从中文准备指南生成，折叠展开即可查看完整代码。
+修改该 Markdown 即可同步网页，不再另写一套 HTML 操作说明。侧栏的文档地图和
+生成与增量构建入口用于按问题查找唯一的权威说明。

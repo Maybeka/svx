@@ -34,17 +34,9 @@ sibling repository at `../svtypes` as the editable dependency.
 - Small-scale, predeclared hierarchical signal read, write, force, and release
   through a direct VPI C service invoked from an SV DPI context.
 
-The existing Python-owned inheritance example selects one SV implementation
-with a typed factory; it is not the complete Python-root alternating-lineage
-workflow. The public `--sv-source` / `--sv-integrated-dir` generation path supports
-qualified Python-root alternating chains; it is not a guarantee for arbitrary
-lineages or independent ancestor constructor routing. Python-source static
-function/task bridges in standalone proxies and SV-root alternating projections
-use generated class-level dispatch without allocating source instances.
-Remaining gaps are not intended inheritance
-restrictions. Check the [current conformance note](docs/SVX_1_0_REQUIRED_FEATURES.md#implementation-conformance-note)
-before adopting a deeper chain; the version number and passing examples alone
-do not establish complete conformance.
+The integrated source path supports qualified Python-root alternating chains
+and natural per-ancestor constructor argument routing. Supported inheritance
+shapes and boundaries are specified in [Cross-Language Lineage](docs/CROSS_LANGUAGE_INHERITANCE_LINEAGE.md).
 
 Hierarchical signal access is intentionally for temporary, targeted operations
 such as setup checks and fault injection. It is not a replacement for SV
@@ -52,45 +44,18 @@ drivers, monitors, or bulk signal databases.
 
 ## Build And Test
 
-Create a development environment with the sibling SvTypes package visible:
+Use [Running Examples](examples/RUNNING_EXAMPLES.md) for the source-checkout
+environment, editable SvTypes dependency, native build and simulator loading.
+Use the [release installation guide](docs/RELEASE_1.0.0.md#installation-model)
+for an installed package. Keep the same Python ABI throughout.
 
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e ../svtypes
-python -m pip install -e '.[dev,manifest]'
-```
-
-Build the simulator-loadable runtime:
-
-```sh
-cmake -S . -B build \
-  -DPython3_EXECUTABLE="$(python -c 'import sys; print(sys.executable)')" \
-  -DSVX_SIMULATOR_INCLUDE_DIR=/path/to/simulator/include \
-  -DSVX_REQUIRE_DIRECT_VPI=ON
-cmake --build build -j2
-```
-
-After installing a wheel, locate its CMake and native source tree with
-`svx native-source`, then use that directory as the CMake `-S` argument. The
-wheel ships portable build sources rather than a prebuilt simulator library.
-Use the same Python interpreter for installation, native compilation and the
-simulator-hosted runtime. Reconfigure in a fresh build directory when changing
-interpreters; an existing CMake cache can retain another Python ABI.
-
-Run the Python and native build checks:
+Run the source tests after preparing that environment:
 
 ```sh
 PYTHONPATH=python:../svtypes/python:. .venv/bin/python -m pytest -q
-cmake --build build -j2
 ```
 
 The SV and Python integration regression sources are in `tests/integration/`.
-
-For a non-default CMake build location, expose the simulator library to the
-CLI with `SVX_LIB_DIR=/path/to/build`. For an installed SV support directory,
-set `SVX_SHARE_DIR=/path/to/share/svx/sv` when automatic discovery is not
-available.
 
 ## Simulator Integration
 
@@ -114,6 +79,7 @@ loaded plugin.
 - [Step-by-step Cookbook (Chinese)](docs/SVX_COOKBOOK.zh-CN.md)
 - [Cookbook website and local preview](docs/site/README.md)
 - [Real Project Migration: OpenTitan UART](examples/opentitan_uart/README.md)
+- [Documentation map](docs/README.md)
 - [User manual](docs/SVX_USER_MANUAL.md)
 - [API reference](docs/SVX_API_REFERENCE.md)
 - [1.0.0 release contract and gates](docs/RELEASE_1.0.0.md)
