@@ -675,11 +675,20 @@ footer > span {
     Consolas,
     monospace;
 }
+.highlight code {
+  font: inherit;
+}
 .table-wrap {
   overflow: auto;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 5px;
   margin: 20px 0;
+}
+.table-wrap:focus-visible {
+  outline: 3px solid #43a38a;
+  outline-offset: 2px;
 }
 .document table {
   border-collapse: collapse;
@@ -739,6 +748,7 @@ footer > span {
 .source-caption {
   font-family: monospace;
   font-size: 11px !important;
+  overflow-wrap: anywhere;
 }
 .source-code .highlight {
   max-height: none;

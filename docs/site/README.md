@@ -23,6 +23,10 @@ An alternative output location is accepted through `--output /path/to/site`.
 The builder reads repository text and writes HTML/JSON/CSS explicitly as UTF-8,
 independent of the Windows system code page. No encoding environment override
 is required. Its terminal status is ASCII-safe JSON, including Unicode paths.
+After updating the sources, rebuild and open the generated `_build/index.html`
+or its HTTP address, not the `home.html`/`uvmx.html` source templates. Table
+scrolling and source-path wrapping work without JavaScript; scripts only add
+interactive navigation, search and copying.
 
 The site includes full-text search, local source reading, syntax highlighting,
 code copying, chapter navigation, per-page contents, and mobile navigation.

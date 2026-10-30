@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from urllib.parse import unquote, urlsplit
@@ -68,6 +69,65 @@ def test_all_generated_links_and_fragments_resolve(built):
             elif parsed.fragment and target in pages and unquote(parsed.fragment) not in pages[target].ids:
                 problems.append(f"{path.relative_to(output)} -> missing anchor {url}")
     assert not problems, "\n".join(problems)
+
+
+def test_tables_have_static_scroll_containers_without_javascript(built):
+    class Tables(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.divs = []
+            self.count = 0
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "div":
+                self.divs.append(attrs)
+            if tag == "table":
+                wrappers = [div for div in self.divs
+                            if "table-wrap" in div.get("class", "").split()]
+                assert len(wrappers) == 1
+                assert wrappers[0].get("tabindex") == "0"
+                self.count += 1
+
+        def handle_endtag(self, tag):
+            if tag == "div":
+                self.divs.pop()
+
+    output, _ = built
+    count = 0
+    for page in output.rglob("*.html"):
+        # The custom UVMX page also contains manually authored, already wrapped tables.
+        if page.name == "uvmx.html":
+            continue
+        parser = Tables()
+        parser.feed(page.read_text(encoding="utf-8"))
+        count += parser.count
+    assert count > 10
+    assert 'document.querySelectorAll("table")' not in (output / "assets/app.js").read_text(encoding="utf-8")
+
+
+def test_source_paths_wrap_and_code_uses_the_configured_font(built):
+    output, _ = built
+    css = (output / "assets/style.css").read_text(encoding="utf-8")
+    caption = re.search(r"\.source-caption\s*\{([^}]+)\}", css).group(1)
+    code = re.search(r"\.highlight code\s*\{([^}]+)\}", css).group(1)
+    assert "overflow-wrap: anywhere" in caption
+    assert "font: inherit" in code
+
+
+def test_highlighting_does_not_override_code_layout_and_disclosures_are_styled(built):
+    output, _ = built
+    syntax = (output / "assets/syntax.css").read_text(encoding="utf-8")
+    assert ".highlight .k" in syntax
+    assert not re.search(r"(?m)^pre\s*\{", syntax)
+    css = (output / "assets/uvmx.css").read_text(encoding="utf-8")
+    assert ".prep-guide-step>summary::-webkit-details-marker{display:none}" in css
+    assert ".prep-guide-step[open]>summary::after" in css
+    assert ".prep-guide-step>summary:focus-visible" in css
+    pre = re.search(r"\.prep-guide-body pre\s*\{([^}]+)\}", css).group(1)
+    assert "line-height:1.8" in pre
+    assert "overflow-x:auto" in pre
+    assert "white-space:pre" in pre
 
 
 def test_search_is_local_and_includes_chapters_sources_and_examples(built):

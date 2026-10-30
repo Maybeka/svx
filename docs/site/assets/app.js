@@ -116,12 +116,6 @@ document.querySelector("main").addEventListener("click", () => {
   document.body.classList.remove("nav-open");
   menu.setAttribute("aria-expanded", "false");
 });
-document.querySelectorAll("table").forEach((table) => {
-  const wrap = document.createElement("div");
-  wrap.className = "table-wrap";
-  table.before(wrap);
-  wrap.append(table);
-});
 let toastTimer;
 document.querySelectorAll(".copy-code").forEach((button) =>
   button.addEventListener("click", async () => {

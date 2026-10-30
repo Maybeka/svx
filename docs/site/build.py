@@ -89,8 +89,10 @@ def build(output: Path) -> dict:
     # Only managed outputs are replaced; never recursively delete a user directory.
     output.mkdir(parents=True, exist_ok=True)
     shutil.copytree(HERE / "assets", output / "assets", dirs_exist_ok=True)
+    # Only token colors belong to the highlighter; page CSS owns pre layout.
     (output / "assets" / "syntax.css").write_text(
-        HtmlFormatter(style="friendly").get_style_defs(".highlight"), encoding="utf-8")
+        '\n'.join(HtmlFormatter(style="friendly").get_token_style_defs(".highlight")),
+        encoding="utf-8")
     has_uvmx = all((ROOT / path).is_file() for path in UVMX_SOURCES)
     queue = deque([COOKBOOK, Path("docs/README.md"), Path("docs/SVX_GENERATION_WORKFLOW.md"),
                    Path("docs/SVX_API_REFERENCE.md"),
@@ -165,6 +167,11 @@ def build(output: Path) -> dict:
                     + '<pre class="highlight"><code>' + code_html(token.content, language)
                     + '</code></pre></div>')
         md.renderer.rules["fence"] = fence
+        md.renderer.rules["table_open"] = lambda tokens, idx, options, env: (
+            '<div class="table-wrap" role="region" aria-label="表格" tabindex="0">'
+            + md.renderer.renderToken(tokens, idx, options, env))
+        md.renderer.rules["table_close"] = lambda tokens, idx, options, env: (
+            md.renderer.renderToken(tokens, idx, options, env) + '</div>\n')
         return md.renderer.render(tokens, md.options, {}), headings
 
     def shell(title, body, current, headings=(), chapter_index=None, home=False, source=None):
@@ -236,7 +243,8 @@ def build(output: Path) -> dict:
             content, _ = render(''.join(lines[location[1]:end]), guide, "uvmx.html")
             opened = " open" if index == 0 else ""
             preparation += (f'<details class="prep-guide-step" id="prep-{index + 1}"{opened}>'
-                            f'<summary>{escape(title)}</summary><div class="prep-guide-body">'
+                            f'<summary><span class="prep-step-title">{escape(title)}</span></summary>'
+                            '<div class="prep-guide-body">'
                             + content + '</div></details>')
     while queue:
         source = queue.popleft()
