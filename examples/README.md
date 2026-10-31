@@ -28,6 +28,9 @@ the [example run guide](RUNNING_EXAMPLES.md).
 | Move transactions across the boundary | [Typed bus testbench](milestone_7_sv_typed_helpers) | SvTypes models, generated SV helpers, request/response and monitor channels |
 | Introduce SVX into a maintained testbench | [Existing SV environment](milestone_5_existing_env) | Leave driving and monitoring in SV; move scenario and checking policy to Python |
 | Use generated types in a build | [CLI workflow](milestone_6_cli_workflow) | `svx svtypes-gen` and CLI discovery commands |
+| Import existing SV declarations without declaration JSON | [Direct SV export](sv_export/README.md) | Original filelist, automatic signatures/ancestry, classes, values/constants, package functions/tasks, output/inout, opaque/VIF handles and Python virtual override |
+| Use package-owned nested SV classes | [Scoped classes](sv_scoped/README.md) | Original nested identity, natural Python type names, no owner-object allocation, same-named classes, fields/tasks and virtual callback |
+| Use SV classes without a package | [Compilation-unit classes](sv_scoped/README.md#classes-without-a-package) | Source-only CLI discovery, original unit ownership, inherited fields and Python virtual overrides |
 | Derive an SV class in Python | [Cross-language inheritance](cross_language_inheritance) | Manifest validation, generated mirrors, Python construction, explicit SV handle handoff, and a timed Python override |
 | Derive a Python class in SV | [Python-owned inheritance](python_owned_inheritance) | Python-initiated construction, SV factory registration, and cross-language `super()` |
 | Pass an arbitrary SV class or a virtual interface | [Foreign handles](foreign_handles) | Opaque class `RemoteRef`, generated VIF view, static modport access, and handle identity |

@@ -15,13 +15,15 @@ _search = ContextVar('svx_sv_library_search', default=None)
 class _SearchContext:
     directories: tuple
     extensions: tuple
+    top_modules: tuple = ()
     owners: list = field(default_factory=list)
 
 
 @contextmanager
 def library_search(configuration):
     token = _search.set(_SearchContext(tuple(configuration.library_dirs),
-                                      tuple(configuration.library_extensions)))
+                                      tuple(configuration.library_extensions),
+                                      tuple(configuration.top_modules)))
     try:
         yield
     finally:
@@ -30,16 +32,19 @@ def library_search(configuration):
 
 def _symbols(trees):
     from pyslang.syntax import SyntaxKind
+    from .sv_frontend import source_elaboration_mode
+    from .sv_scan import _token_text
     known, referenced, reference_set = set(), [], set()
+    packages_only = source_elaboration_mode() == 'packages'
 
     def declare(node):
         header = getattr(node, 'header', node)
-        name = str(getattr(header, 'name', '')).strip()
+        name = _token_text(getattr(header, 'name', ''))
         if name:
             known.add(name)
 
     def reference(name):
-        name = str(name).strip()
+        name = _token_text(name)
         if name and name not in reference_set:
             reference_set.add(name)
             referenced.append(name)
@@ -51,7 +56,7 @@ def _symbols(trees):
     visitors = {kind: declare for kind in (
         SyntaxKind.ModuleDeclaration, SyntaxKind.InterfaceDeclaration,
         SyntaxKind.ProgramDeclaration, SyntaxKind.PackageDeclaration, SyntaxKind.UdpDeclaration)}
-    visitors.update({SyntaxKind.HierarchyInstantiation: lambda n: reference(n.type),
+    visitors.update({SyntaxKind.HierarchyInstantiation: lambda n: None if packages_only else reference(n.type),
                      SyntaxKind.VirtualInterfaceType: lambda n: reference(n.name),
                      SyntaxKind.PackageImportItem: lambda n: reference(n.package),
                      SyntaxKind.ScopedName: scope})
@@ -74,6 +79,7 @@ def load_libraries(trees, paths, source_manager, parse_options, compilation_unit
     extensions = extensions or ('',)
     from pyslang.driver import Driver, SourceLoader
     from .sv_scan import _check_source_diagnostics
+    from .source_selection import record_library_query, record_source_trees
 
     selected, attempted = [], set()
     owners = (source_manager,)
@@ -89,15 +95,10 @@ def load_libraries(trees, paths, source_manager, parse_options, compilation_unit
             # Design-unit identifiers cannot be interpreted as paths or globs.
             if not name.isascii() or not name.isidentifier():
                 continue
-            for directory in directories:
-                for extension in extensions:
-                    filename = (directory / (name + extension)).resolve()
-                    if filename.is_file():
-                        candidate, requested = filename, name
-                        break
-                if candidate:
-                    break
+            candidate = resolve_library_file(name, directories, extensions)
+            record_library_query(name, candidate)
             if candidate:
+                requested = name
                 break
         if candidate is None:
             # Driver-produced trees borrow parser/macro storage. Keep it alive
@@ -135,6 +136,19 @@ def load_libraries(trees, paths, source_manager, parse_options, compilation_unit
             filename = next((tree.sourceManager.getRawFileName(buffer) for buffer in buffers
                              if tree.sourceManager.getRawFileName(buffer)), str(paths[0]))
             trees.append((Path(filename), tree))
+        record_source_trees(trees)
         found, _ = _symbols(trees)
         if requested not in found:
             raise SVXInheritanceError(f'library file {candidate} does not declare requested unit {requested}')
+
+
+def resolve_library_file(name, directories, extensions):
+    """One lookup rule shared by parsing and incremental selection checks."""
+    directories = tuple(directories)
+    extensions = tuple(extensions) or ('',)
+    for directory in directories:
+        for extension in extensions:
+            filename = (directory / (name + extension)).resolve()
+            if filename.is_file():
+                return filename
+    return None

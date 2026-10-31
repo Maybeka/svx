@@ -7,8 +7,100 @@ from pathlib import Path
 import subprocess
 import sys
 import json
+import pytest
 
 from svx.cli import _fresh_declaration_entries
+
+
+def test_import_audit_reuses_resolution_but_rechecks_module_origin(tmp_path, monkeypatch):
+    from types import ModuleType
+    import svx.cli
+
+    name = 'svx_resolution_audit_probe'
+    trusted = str(Path(svx.cli.__file__).resolve())
+    module = ModuleType(name)
+    module.__spec__ = importlib.machinery.ModuleSpec(
+        name, importlib.machinery.SourceFileLoader(name, trusted), origin=trusted)
+    monkeypatch.setitem(sys.modules, name, module)
+    real_resolve = Path.resolve
+    resolutions = []
+    def observed(path, *args, **kwargs):
+        if os.fspath(path) == trusted:
+            resolutions.append(trusted)
+        return real_resolve(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'resolve', observed)
+    with pytest.raises(svx.cli.SVXInheritanceError, match='cached without current discovery evidence'):
+        with _fresh_declaration_entries((), all_sources=True, cached_sources={}):
+            for _ in range(20):
+                assert importlib.import_module(name) is module
+            assert resolutions == [trusted]
+            foreign = tmp_path / 'foreign.py'
+            foreign.write_text('VALUE = 1\n', encoding='utf-8')
+            module.__spec__.origin = str(foreign)
+            importlib.import_module(name)
+
+
+def test_import_audit_resolution_cache_invalidates_retargeted_symlink(tmp_path, monkeypatch):
+    from types import ModuleType
+    import svx.cli
+
+    name = 'svx_symlink_audit_probe'
+    first, second, alias = (tmp_path / value for value in ('first.py', 'second.py', 'alias.py'))
+    first.write_text('VALUE = 1\n', encoding='utf-8')
+    second.write_text('VALUE = 2\n', encoding='utf-8')
+    try:
+        alias.symlink_to(first)
+    except OSError:
+        pytest.skip('symlinks unavailable')
+    module = ModuleType(name)
+    module.__spec__ = importlib.machinery.ModuleSpec(
+        name, importlib.machinery.SourceFileLoader(name, str(alias)), origin=str(alias))
+    monkeypatch.setitem(sys.modules, name, module)
+    with pytest.raises(svx.cli.SVXInheritanceError, match='cached without current discovery evidence'):
+        with _fresh_declaration_entries((), all_sources=True, cached_sources={first.resolve(): set()}):
+            assert importlib.import_module(name) is module
+            alias.unlink()
+            alias.symlink_to(second)
+            importlib.import_module(name)
+
+
+def test_import_audit_reuses_framework_root_resolution_but_observes_retargeting(tmp_path, monkeypatch):
+    from types import ModuleType
+    import svx.cli
+
+    first, second, alias = (tmp_path / value for value in ('first', 'second', 'framework'))
+    first.mkdir()
+    second.mkdir()
+    source = first / 'codec.py'
+    source.write_text('VALUE=1\n', encoding='utf-8')
+    try:
+        alias.symlink_to(first, target_is_directory=True)
+    except OSError:
+        pytest.skip('symlinks unavailable')
+    package = ModuleType('pyslang')
+    package.__path__ = [str(alias)]
+    monkeypatch.setitem(sys.modules, 'pyslang', package)
+    name = 'svx_framework_root_audit_probe'
+    module = ModuleType(name)
+    module.__spec__ = importlib.machinery.ModuleSpec(
+        name, importlib.machinery.SourceFileLoader(name, str(source)), origin=str(source))
+    monkeypatch.setitem(sys.modules, name, module)
+    real_resolve = Path.resolve
+    resolutions = []
+    def observed(path, *args, **kwargs):
+        if os.fspath(path) == str(alias):
+            resolutions.append(str(alias))
+        return real_resolve(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'resolve', observed)
+    with pytest.raises(svx.cli.SVXInheritanceError, match='cached without current discovery evidence'):
+        with _fresh_declaration_entries((), all_sources=True, cached_sources={}):
+            for _ in range(20):
+                assert importlib.import_module(name) is module
+            assert resolutions == [str(alias)]
+            alias.unlink()
+            alias.symlink_to(second, target_is_directory=True)
+            importlib.import_module(name)
+    assert resolutions == [str(alias), str(alias)]
 
 
 def run_cli(root, *args, preload=()):

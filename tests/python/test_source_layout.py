@@ -21,8 +21,6 @@ SOURCE = Path(__file__).parents[1] / 'integration' / 'same_package_source.sv'
     (['--sv-out', 'a.sv', '--sv-integrated-dir', 'integrated'], 'only one'),
     (['--sv-stage-dir', 'stages', '--sv-integrated-dir', 'integrated'], 'only one'),
     (['--sv-integrated-dir', 'integrated'], 'requires --sv-source'),
-    (['--sv-integrated-dir', 'integrated', '--sv-source', 'one.sv', '--sv-source', 'two.sv'],
-     'require --sv-compilation-unit'),
     (['--check', '--sv-integrated-dir', 'integrated', '--sv-source', 'one.sv'],
      '--check requires'),
 ])

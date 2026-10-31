@@ -9,6 +9,19 @@ from svx.compile_config import import_compile_configuration, replay_build_record
 from svx.errors import SVXInheritanceError
 
 
+@pytest.mark.parametrize('flag', ['-top', '--top-module', '-top=', '--top-module='])
+def test_import_preserves_original_top_selection(tmp_path, flag):
+    source = tmp_path / 'design.sv'
+    source.write_text('module selected;endmodule module unused;endmodule')
+    argument = flag + 'selected' if flag.endswith('=') else flag + ' selected'
+    filelist = tmp_path / 'project.f'
+    filelist.write_text('design.sv ' + argument + '\n')
+    config = import_compile_configuration(dict(directory=str(tmp_path), filelists=['project.f']))
+    assert config.top_modules == ['selected']
+    assert config.as_dict(tmp_path)['top_modules'] == ['selected']
+    assert not config.ignored
+
+
 def test_nested_filelists_macros_paths_and_order(tmp_path, monkeypatch):
     (tmp_path / 'lists').mkdir()
     for name in ('base.sv', 'child.sv'):

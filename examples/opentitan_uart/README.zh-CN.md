@@ -46,27 +46,31 @@ dvsim hw/ip/uart/dv/uart_sim_cfg.hjson \
 实际初始化、约束、sequencer 行为和事务服务都来自上游。新增方法只负责暴露
 寄存器读回结果和独立监视记录，不另建 UART agent。
 
-[`generate.py`](generate.py) 只声明本例使用的方法；值与 handle 的编码均由 SvTypes
-公开接口生成。在开发环境安装 SVX/SvTypes 后，将产物放到独立构建目录：
-
-```sh
-python examples/opentitan_uart/generate.py "$UART_GENERATED"
-```
-
-推荐让原构建系统在调用编译器时，把实际工作目录与完整 argv 导出为
+让原构建系统在调用编译器时，把实际工作目录与完整 argv 导出为
 `compiler-input.json`（对象只有 `directory` 与 `arguments` 两个成员，argv 首项
 是编译器）。这样无需重列 UVM、UART 环境和 RTL 的依赖、宏与 include 路径：
 
 ```sh
 svx compile-config --sv-build-command "$UART_BUILD_COMMAND"
-python examples/opentitan_uart/generate.py "$UART_GENERATED" \
-  --sv-build-command "$UART_BUILD_COMMAND"
+svx export --class uart_svx_bridge_pkg::UartSequence \
+  --member body process_tx process_rx uart_init dut_shutdown \
+    spinwait_txidle spinwait_rxidle send_tx_byte send_rx_byte read_rx \
+    observed_count observed_item parity_enabled parity_odd \
+    item_data item_frame item_identity same_item make_item set_item_data \
+  --sv-build-command "$UART_BUILD_COMMAND" \
+  --sv-source examples/opentitan_uart/uart_bridge.sv --out "$UART_GENERATED"
 ```
 
-`generate.py` 自动追加本例的 `uart_bridge.sv`；其余解析输入直接复用原工程。
-只读检查重复同一条命令并加 `--check`。保留原编译器环境，以便找到其隐式 UVM
+CLI 从源码自动发现这20个方法的签名和完整11层祖先，包括已经求值的原生类
+类型参数；无需 declarations JSON，也无需人为添加 Python target。
+只有 UartSequence 是导出目标，import 和原生 class handle 不会请求导出整个 UVM。
+只读检查重复同一条 export 命令并加 `--check`。保留原编译器环境，以便找到其隐式 UVM
 库。输入与支持边界见[编译配置导入](../../docs/SVX_BUILD_INPUTS.md)。这里验证
 已选接口的依赖上下文，不意味着将全部上游类自动选为生成目标。
+
+[`generate.py`](generate.py) 保留显式维护的契约快照，便于未准备上游源码时查看
+本例的接口。它复用同一生成后端，但直接源码导出不需要该脚本。快照与源码发现
+的输出不要混用同一个生成目录。
 
 原命令若包含 `-y` / `+libext+`，无需先展开目录。SVX 保留其搜索顺序，按缺失
 单元名选择具体文件；未选文件不会进入解析或依赖记录。导出检查仍用同一条命令。
@@ -211,11 +215,7 @@ class Test(PythonUart):
 完成构建后，只增加 Python 源码即可加入此类用例。这个选择器属于本项目，不等于
 注册新的 `+UVM_TESTNAME`。
 
-可只读检查现有生成契约：
-
-```sh
-python examples/opentitan_uart/generate.py "$UART_GENERATED" --check
-```
+只读检查现有生成契约时，重复第2节的 export 命令并加 --check，保持原工程输入一致。
 
 ## 验证与迭代
 

@@ -105,6 +105,14 @@ order. `input` is passed as its decoded value. `svx.Inout(value)` and
 by Python and is updated after a Python-to-SV call. A function returns its
 ordinary Python result; a task returns `None`. Generated SvTypes request and
 response records remain private transport implementation details.
+Collection arguments accept plain lists/maps or materialized SvTypes
+Array/DynArray/Queue/AssocArray descriptors; the latter supply their public
+.value snapshot without changing the formal prototype. Automatic collection
+coverage is disabled in private generated call records, not in user declarations.
+Enum call-record fields also disable automatic coverage and plusarg parsing:
+class-owned enum literals are not imported into the record's scope. These
+transport-only options do not change the public enum schema or wire encoding.
+The checked SvTypes encoding descriptor must remain unchanged by that policy.
 Functions without a value result are supported, including virtual void callbacks
 with copy-out parameters. They return `None` in Python. A formal named `result`
 is an ordinary parameter, not an application-visible return-record slot.
@@ -293,20 +301,84 @@ implementation exceptions are not suppressed.
 - `svx svtypes-gen` generates SystemVerilog declarations and optional typed
   channel helpers from SvTypes modules. With `--out`, byte-identical output
   preserves its existing timestamp instead of triggering downstream rebuilds.
+- `svx inspect` lists preprocessed SV declarations and lexical owners from the
+  same original build inputs. `--kind` and `--name` filter the display; `--json`
+  includes locations, compilation units and current export-availability reasons.
+  It writes no generated files and does not elaborate instances. Scope eligibility
+  is not semantic type/signature qualification. See the
+  [generation workflow](SVX_GENERATION_WORKFLOW.md#direct-sv-export) for the inventory
+  contract and unfinished owner-bound scopes.
+- `svx export` discovers selected SV package or compilation-unit classes and generates their Python
+  mirrors and SV bridges in one dedicated `--out` directory. `--class` and
+  `--package` select targets; `--recursive-packages`, `--exclude-class`,
+  `--member` and `--exclude-member` control selection. `--check` verifies both
+  discovery and generation. See [Direct SV Export](SVX_GENERATION_WORKFLOW.md#direct-sv-export)
+  for ownership/import semantics, output paths and current type/scope limits.
+  `--type` selects named value typedefs as public SvTypes declarations;
+  `--exclude-type` excludes optional value targets. Package selection includes
+  owned classes, supported value typedefs and parameter/localparam snapshots.
+  `--constant` selects these compile-time constants independently;
+  `--exclude-constant` excludes snapshots. Required signature/constant value types are
+  discovered automatically, not duplicated in Python by the user.
+  `--callable` selects package functions/tasks; `--exclude-callable` excludes them.
+  Package selection includes owned functions/tasks. Generated Python functions
+  preserve all formal positions and use the existing output/inout holders.
+  Package-owned nested classes accept full names such as pkg::Outer::Inner and
+  publish the same type object at svx_mirror.pkg.Outer.Inner. An unselected
+  lexical owner is a namespace, not another constructor target. Public nested
+  value typedefs likewise accept --type pkg::Outer::Packet and publish
+  svx_mirror.pkg.Outer.Packet as a real SvTypes declaration; see the workflow
+  for supported layouts and unfinished non-package instance bindings.
+  `--sv-elaboration packages` skips design-instance elaboration and DUT-only
+  hierarchy-instantiation library requests while retaining explicit source
+  preprocessing and package/VIF dependencies. Default all is unchanged.
+  `--integrated` emits original source copies and the existing bridges instead
+  of mirrors.sv. Single/shared-unit inputs use sv/source.sv; independent direct
+  SV inputs use ordered sv/units/*.sv replacements. The artifact describes
+  source_replacements and systemverilog_compile_order. Preserve original unit
+  boundaries and replace, rather than also compile, the original inputs.
+  Package-owned direct SV runtime bindings provide svx_exports_pkg::initialize(); call it after svx_init
+  and before loading/starting Python to explicitly register generated bindings.
+  See the workflow for the supported lineage layouts.
+  `--incremental` reuses a complete unchanged direct-SV export after source,
+  include/library choice, framework and output verification. `--refresh-cache`
+  requires --incremental and forces the full operation. `--check` does not write
+  cache data. Changed dependencies still rerun the full frontend; see the
+  workflow for eligibility and invalidation details.
+  Compilation-unit values accept --type/--constant '$unit::*', bare unique names,
+  or owner-qualified selectors such as '$unit[1]::Mode'. They publish at
+  svx_mirror_unit.unit_<index>, not a fabricated native SV package. See
+  [Compilation-Unit Values](SVX_GENERATION_WORKFLOW.md#compilation-unit-values)
+  for scope metadata, source grouping and current owner-local runtime limits.
+  Compilation-unit classes, including nested classes, accept --class Outer::Inner
+  or indexed '$unit[1]::Outer::Inner'. export automatically emits original source
+  replacements and one svx_exports startup module; call its initialize method
+  after svx_init. Python types live at svx_mirror_unit.unit_1.Outer.Inner.
+  Instance classes accept concrete paths such as --class tb.agent.Driver or
+  --class 'tb.lanes[1].agent.Driver'; unique short names, patterns and exclusions
+  use the same source-driven discovery. Original build top selection is reused.
+  Python types publish at svx_mirror_instance.tb.agent.classes.Driver. See
+  [Instance-Owned Classes](SVX_GENERATION_WORKFLOW.md#instance-owned-classes)
+  for source replacements, initialization, performance and remaining boundaries.
+  Root and class-owned enum/struct dependencies can be transported by classes in their own unit;
+  package/cross-unit access and specialization-aware nominal layouts remain separate
+  restrictions. See [Compilation-Unit Classes](SVX_GENERATION_WORKFLOW.md#compilation-unit-classes).
 - `svx inheritance-gen` validates a manifest and generates Python mirrors,
   SystemVerilog mirrors, and an optional compatibility artifact manifest.
   `--check` verifies that all three requested output groups are current.
   `--sv-source` scans interface declarations for restricted VIF views.
-  `--sv-integrated-dir DIR` emits integrated `DIR/source.sv` in place of
-  supplied originals; it is mutually exclusive with `--sv-out` and
-  `--sv-stage-dir`. Multiple ordered source inputs require
-  `--sv-compilation-unit`. See [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md)
+  `--sv-integrated-dir DIR` emits source replacements in place of supplied
+  originals; it is mutually exclusive with `--sv-out` and `--sv-stage-dir`.
+  Direct SV inputs may retain independent units. Supported alternating chains
+  use --sv-compilation-unit when the original build actually shares one unit.
+  See [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md)
   for refresh order, input evidence, ownership, unchanged-output handling and recovery.
 - `svx inheritance-migrate` converts the supported legacy manifest to the
   declarative schema without evaluating source expressions.
 - `svx inheritance-manifest` normalizes decorated Python classes and versioned
-  SV declaration metadata to the sole inheritance manifest schema. `--check`
-  rejects a stale output.
+  SV declaration metadata or direct `--sv-class`/`--sv-package` selectors to the
+  sole inheritance manifest schema. `--class`/`--package` are aliases, with the
+  same filters as export. `--check` rejects a stale output.
 
 ## Callback Integration Generator
 
@@ -445,7 +517,7 @@ private classes inherit their private classification.
 | Private | Enum members | `FINISHED`, `RUNNING`, `WAITING`, `SUSPENDED`, `KILLED`, `NOT_CREATED`, `REMOVED`, `FORK_JOIN`, `FORK_JOIN_ANY`, `FORK_JOIN_NONE`, `SVX_TIME_S`, `SVX_TIME_MS`, `SVX_TIME_US`, `SVX_TIME_NS`, `SVX_TIME_PS`, `SVX_TIME_FS` |
 | Private | Channel storage and cancellation | `svx_channel`, `svx_channel_registry`, `svx_channel_put_payload_cancelable`, `svx_channel_get_payload_cancelable`, `svx_channel_peek_payload_cancelable` |
 | Private | Generated payload validation | `svx_require_svtypes_payload`, `svx_require_svtypes_wire_payload`, `svx_payload_to_checked_byte_queue`, `svx_require_unpacked_all` |
-| Private | Object and session interfaces | `svx_dispatchable`, `svx_function_dispatchable`, `svx_static_function_dispatchable`, `svx_static_dispatchable`, `svx_factory`, `svx_external_handle`, `svx_session_resource` |
+| Private | Object and session interfaces | `svx_dispatchable`, `svx_function_dispatchable`, `svx_static_function_dispatchable`, `svx_static_dispatchable`, `svx_factory`, `svx_external_handle`, `svx_session_resource`, `svx_owner_initializer` |
 | Private | Object registries | `svx_object_id_allocator`, `svx_external_handle_registry`, `svx_inheritance_registry` |
 | Private | Callback execution isolation | `svx_callback_contexts`, `svx_inheritance_context_id` |
 | Private | Staged construction context | `svx_construction_frame`, `svx_construction_context`, `svx_constructor_cache`, `svx_constructor_cache_registry` |
@@ -467,6 +539,10 @@ factories are classified in [the API reference](SVX_API_REFERENCE.md).
 Their registration, request/response records, field endpoints, and raw dispatch
 methods are private generated ABI even when SV makes them accessible.
 
+Direct SV export's svx_exports_pkg::initialize() is a public generated startup
+entry, not a private dispatcher. Its function name is also recorded by
+systemverilog_startup in the artifact. See the generation workflow for ordering.
+
 `SVX_GET_OBJECT` is an experimental application macro. `SVX_PY_PROXY` is a
 source-discovery declaration marker, not a runtime bridge. Include guards and
 internal macro expansion names are not application interfaces.
@@ -482,8 +558,8 @@ SVX type schema.
 
 | Object | Classification | Accepted Fields | Rules |
 |---|---|---|---|
-| root | Stable | `schema_uri`, `schema_version`, `generator_abi_version`, `required_runtime_capabilities`, `classes`, `discovery_provenance` | The first five fields are required; classes contains only explicit generation targets. Optional discovery_provenance requires validated file-backed evidence. |
-| class | Stable | `canonical_id`, `language`, `symbol`, `methods`, `constructor`, `specialization`, `fields`, `base_lineage` | ID, language and symbol required; methods, fields and lineage default empty; constructor and specialization optional. Lineage entries cannot contain base_lineage. |
+| root | Stable | `schema_uri`, `schema_version`, `generator_abi_version`, `required_runtime_capabilities`, `classes`, `discovery_provenance`, `value_types`, `constants`, `callables` | The first five fields are required; classes contains only explicit class generation targets and may be empty when value_types, constants or callables is nonempty. Optional discovery_provenance requires validated file-backed evidence. Source-generated values use schema2.1.0; constants use schema2.2.0; callables use schema2.3.0; unit value scope uses schema2.4.0; unit class scope uses schema2.5.0; instance value scope uses schema2.6.0; generator ABI2 is unchanged. |
+| class | Stable | `canonical_id`, `language`, `symbol`, `methods`, `constructor`, `specialization`, `fields`, `base_lineage`, `source_scope` | ID, language and symbol required; methods, fields and lineage default empty; constructor and specialization optional. Lineage entries cannot contain base_lineage. Unit-owned class discovery emits schema2.5 and the source_scope descriptor below. |
 | method | Stable | `canonical_id`, `name`, `parameters`, `return_type`, `return_handle`, `timing`, `virtual`, `pure_virtual`, `static` | ID, name, return_type, timing and virtual required; parameters default empty; pure_virtual and static default false; return_handle optional. |
 | parameter | Stable | `name`, `type`, `direction`, `handle` | Name and type required; direction defaults input independently for each parameter; handle optional. ref and const ref rejected. |
 | field | Stable | `name`, `type`, `handle` | Name and type required; optional handle uses the same static endpoint metadata as parameters. Declaration defaults come from the SvTypes declaration, not an extra manifest initializer key. |
@@ -497,7 +573,110 @@ SVX type schema.
 | specialization_type_argument | Stable | `kind`, `type` | Required; kind is type and type is a non-void type binding. |
 | specialization_value_argument | Stable | `kind`, `sv_type`, `value` | Required; kind is value, with normalized JSON scalar literal and concrete SV type. |
 
+The owner-local class backend preserves compilation-unit ownership through
+source_scope={"kind":"compilation_unit","index":N}, where N is a nonnegative
+integer, not a Boolean. Its native symbol stays $unit::Class and its canonical
+ID is sv://unit/N/Class (closed ancestor specializations may append a specialization path). Python mirrors keep the source name in
+svx_mirror_unit.unit_N.Class. Package bridge emission rejects these declarations;
+the bridge must remain in the owning compilation unit. The export CLI discovers
+this metadata automatically and emits owner-local source replacements plus a
+single svx_exports startup module. Users do not need to handcraft source_scope.
+See [Compilation-Unit Classes](SVX_GENERATION_WORKFLOW.md#compilation-unit-classes)
+for source grouping, startup and remaining owner-local layouts.
+
+The instance-bound class backend additionally accepts source_scope with
+kind=instance, path=<concrete native hierarchy path>, and optional container
+(module by default, interface or program otherwise). Normalization records the
+container explicitly. Its symbol is the
+owner-local class name, such as Driver or Outer::Inner, not a fabricated package.
+For tb.a / Driver the canonical ID is sv://instance/tb/a/class/Driver and the Python
+type is svx_mirror_instance.tb.a.classes.Driver. Instance modules are Python packages so
+parent and child owners may both expose types. Array indices use reversible
+svx_scope_<name-length>_<name>_p<index> components (_m<index> for negative
+indices); the reserved owner name classes, native identifiers starting svx_scope_ and Python keywords use an
+id_ escape. There are no hashes. Case-insensitive output path collisions reject.
+
+Generated bind modules/interfaces receive the original class and ancestor types through
+SV type parameters; they neither relocate nor redeclare user classes. The
+existing startup module initializes their factories/static dispatchers after
+svx_init. Artifact instance_bindings records each class ID, native instance
+path, bridge design unit/kind/instance and initializer. The export CLI discovers
+these bindings directly from real source hierarchy and evaluated member types;
+users do not maintain handwritten instance manifests. Interface static gateways
+remain inside source copies of the original interface, under scalar owner
+specialization guards. instance_bindings.initialization_key identifies the
+owner callback in the existing SV inheritance registry; an optional
+static_initialization_key identifies the owner-local static gateway. The same
+startup invokes both callbacks. Legacy initialize/static_initialize paths for
+non-program owners remain diagnostic locations, not the startup dispatch path. Static
+ancestors register once per canonical class, even when also selected as targets.
+These gateways do not allocate source objects. Interface owner type/structured
+parameters, library-only replacement and macro-generated owner endings still
+need placement support.
+These are implementation gaps, not bans on legal SV class
+declarations. Instance-owned nominal values, handle adapters, alternating
+lineage also need additional support.
+
+The same instance source_scope.path may name an active generate block. Its
+container still identifies the nearest original module/interface/program, not a new
+native instance. Source integration keeps complete adapters local to that
+generate scope. Such instance_bindings entries use bridge_kind=generate,
+bridge_instance=<local block name>, and initialization_key=<registry key>;
+they omit bridge_module because no bound design unit is created. The startup
+module handles both placements identically. Named/unnamed explicit begin/end
+blocks retain their actual hierarchy names and class identities. See
+[Generate-Owned Classes](SVX_GENERATION_WORKFLOW.md#generate-owned-classes).
+
+Program classes likewise retain local adapters; direct program owners report
+bridge_kind=program and omit illegal external initialize paths. When any
+program target is selected, systemverilog_startup_module adds timing=task. The
+same initialize entry waits for declaration-time callbacks through a named SV
+event, without advancing simulation time or depending on Python scheduling.
+Non-program-only outputs retain a function entry. See
+[Program-Owned Classes](SVX_GENERATION_WORKFLOW.md#program-owned-classes).
+
+Unit-class artifacts add systemverilog_startup_module with module=svx_exports
+and method=initialize. Their systemverilog_compile_order includes the startup
+source after every source replacement. source_replacements describes only
+original-to-generated input replacements, not the extra startup file. Ordinary
+package-only exports keep the existing systemverilog_startup entry instead.
+
 The discovery CLI emits a manifest plus validated file-backed provenance.
+Optional callables entries contain exactly symbol and method. symbol identifies
+a package-owned function/task; method uses the existing method object shape,
+with canonical ID svpkg://<package>#<name>, static true and virtual/pure_virtual
+false. static selects receiver-free transport and does not alter the original
+SV subroutine lifetime. See [Direct SV Export](SVX_GENERATION_WORKFLOW.md#direct-sv-export).
+
+Optional constants entries contain symbol, svtypes, schema,
+encoding_descriptor and data, plus source_scope for compilation-unit or instance entries;
+data is one complete public SvTypes encoding in canonical lowercase hex.
+These are generated compile-time snapshots, not a new transport codec or live
+parameter access API. See [Direct SV Export](SVX_GENERATION_WORKFLOW.md#direct-sv-export).
+
+Optional value_types entries contain symbol, svtypes and schema: the
+native SV symbol, public SvTypes identity, and public SchemaDescriptor.schema.
+The frontend checks them by constructing the public declaration and comparing
+its identity/schema. This is not a second SVX value schema or executable source
+expression. Aliases reuse the original type identity. Generated public names
+are svx_mirror.<package>.<type>; private declaration modules contain the same
+class objects, not extra public wrapper classes.
+Compilation-unit entries additionally require source_scope with exactly
+kind=compilation_unit and a nonnegative integer index (not a Boolean). Their
+native symbol starts with $unit:: and public module is svx_mirror_unit.unit_<index>.
+The native symbol plus its owner index identifies a declaration; same-named
+values in different units are not merged. See the generation workflow for
+the index convention, same-owner root/class-owned value transport and unfinished
+specialization-aware record layouts.
+Instance-owned value/constant entries use source_scope with kind=instance, path
+and optional module/interface/program container, normalized to module by default.
+The symbol is owner-local (for example Mode or Holder::Tag); names are published
+in svx_mirror_instance.<encoded-owner>.classes. Source discovery emits schema2.6.0.
+These values support type declarations and compile-time snapshots. Classes
+automatically collect same-owner value dependencies for live fields, constructors
+and method transport; module/interface/program runtime paths are qualified.
+Generate-owned nominal runtime combinations and cross-owner dependencies remain
+unfinished. See [Instance-Owned Values](SVX_GENERATION_WORKFLOW.md#instance-owned-values).
 Their format, source-selection checks, caching boundaries and publication rules
 are specified in [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md).
 `load_manifest(path)` and `inheritance-gen` validate evidence before materializing

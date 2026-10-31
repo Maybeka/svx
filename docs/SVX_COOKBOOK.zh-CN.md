@@ -502,10 +502,177 @@ svx.set_exception_policy(svx.REPORT)
 
 ## 9. 需要面向对象扩展时，使用声明式跨语言继承
 
+原生类不在 package 中，也可以直接导出，不必先造一个 package 或手写 JSON：
+
+```sh
+svx export --class Driver -f examples/sv_scoped/unit_classes.f \
+  --sv-elaboration packages --out .tmp/unit-classes
+```
+
+Python 使用 `from svx_mirror_unit.unit_0 import Driver`。命令自动生成原编译单元
+的源码副本和统一启动模块。按输出提示替换原输入，另编译 sv/exports.sv；在 top
+例化 `svx_exports exports();`，在 `svx_init()` 后、加载 Python 前调用
+`exports.initialize()`。不要同时编译原文件和副本，也不要靠未引用单元的静态
+初始化完成注册。独立单元重名时，使用 `--class '$unit[1]::Driver'` 消歧。
+
+[完整示例](../examples/sv_scoped/README.zh-CN.md#无-package-的类)验证构造、
+继承字段、2ns task 的 output/inout、静态方法和 SV 原始类句柄的 Python 虚方法
+回调。完整输入/编译顺序及尚未实现的 owner-local 记录布局见
+[单元类导出规则](SVX_GENERATION_WORKFLOW.md#compilation-unit-classes)。
+
+嵌套类同样可以直接选择 `Outer::Inner`；重名时写成
+`'$unit[1]::Outer::Inner'`。Python 通过 `Outer.Inner` 使用它，未选中的 Outer
+只是命名空间，不会分配外层对象。同一单元的根级或类内枚举、packed struct 及其容器
+可以作为字段、参数和返回值，仍使用 SvTypes 的标准类型；需要公开容器 typedef
+名字时另加 `--type UnitModes`。[嵌套单元示例](../examples/sv_scoped/README.zh-CN.md#嵌套编译单元类)
+包含同名类型、类别名、类内类型及继承遮蔽、X/Z 局部写、数组传输、2ns task
+和原生句柄虚回调。类内类型还可用 `--type Outer::Inner::State` 单独导出；
+跨单元重名时仍用 `$unit[N]::` 消歧，不需要额外的声明 JSON。
+
+模块实例中的类同样直接从原工程导出，例如
+`svx export --class tb.agent.Driver -f project.f --out generated`，Python 使用
+`from svx_mirror_instance.tb.agent.classes import Driver`。命令复用原 top 设置、解析
+实际参数位宽和继承链，不需要原型 package 或 stub。类内嵌套仍写成
+`tb.agent.Outer::Inner`，数组下标可写 `[1]` 或 `[*]`。具体路径只查询所需
+owner，不遍历无关 DUT 子树；短名和通配需要更广的实例发现来消歧。
+[完整实例示例](../examples/sv_scoped/README.zh-CN.md#实例内的类)已远端验证
+构造、实时上下文、继承/静态方法、2ns task 和原始 SV 句柄上的 Python 虚回调。
+interface 的静态方法由工具自动放回原接口的源码副本中，仍使用同一个 initialize，
+不需要用户额外维护桥接层，也不会为了静态调用构造源类对象。继承的静态方法、
+protected 静态成员、参数化数组和耗时静态 task 已远端验证。复杂 owner 参数、
+实例值类型/handle 等剩余边界见
+[实例类权威流程](SVX_GENERATION_WORKFLOW.md#instance-owned-classes)，不应把
+`inspect` 的词法定义名直接当成运行实例路径。
+
+generate 块中的类也使用同一条 CLI，例如
+`svx export --class 'tb_generate_classes.*.lane[*].active.Driver' -f examples/sv_scoped/generate_classes.f --out generated`。
+工具会把完整适配器保留在原 generate 作用域的源码副本中，而不是移动类或要求
+用户写原型 package。[完整 generate 示例](../examples/sv_scoped/README.zh-CN.md#generate-作用域内的类)
+验证六个真实 owner、不同 lane 位宽、父参数被内部同名参数遮蔽、实时状态、
+静态/耗时方法及 SV 原始句柄上的 Python 虚回调。匿名 begin/end 块也可导出；
+唯一短类名可以自动定位实际路径，未展开分支不会成为导出目标。
+仍使用统一 initialize 和 artifact 编译顺序，更多边界见
+[权威流程](SVX_GENERATION_WORKFLOW.md#generate-owned-classes)。
+
+program 中的类也可直接导出，例如
+`svx export --class 'tb_program_classes.*.Driver' -f examples/sv_scoped/program_classes.f --out generated`。
+适配器留在原 program 内，通过同一个 SV 注册表和 initialize 入口接入，不从
+module 层级访问 program 的局部类型或变量。因为 program 声明初始化晚于 module
+零时刻 initial，选中 program 时 initialize 是 task，须在 initial/task 中调用；
+它通过原生事件等待注册，不推进仿真时间。没有 program 目标时仍是 function。
+[完整 program 示例](../examples/sv_scoped/README.zh-CN.md#program-作用域内的类)
+验证零时刻启动、独立 owner、字段、继承静态方法、1ns task 和原始句柄虚回调。
+
+如果现在只需要导出没有 package 的枚举、typedef 或单元级编译期常量，也不需要
+先声明类或手写 manifest：
+
+```sh
+svx export --type '$unit::*' --constant '$unit::*' \
+  --sv-source examples/sv_scoped/unit_values.sv --out .tmp/unit-values
+PYTHONPATH=.tmp/unit-values/python python examples/sv_scoped/unit_values.py
+```
+
+从 svx_mirror_unit.unit_0 导入 Mode、Packet、INITIAL、Holder 等。这里的 Holder
+只是嵌套类型的命名空间，不会额外生成可构造的 Holder 镜像。多个独立编译单元
+各有 unit_索引 模块；重名时可用 --type '$unit[1]::Mode' 消歧。纯类型与常量
+导入只需要 SvTypes，不需要启动仿真或加载 SVX 原生库。详见
+[单元值导出规则](SVX_GENERATION_WORKFLOW.md#compilation-unit-values)和
+[双语可运行示例](../examples/sv_scoped/README.zh-CN.md#无-package-的值声明)。
+
+若 typedef、枚举、packed struct 或编译期常量位于实际 module/interface/program
+实例或 generate 作用域，用 `--type 'tb.a.Mode'`、`--constant 'tb.a.W'` 选择原始
+层级路径即可。它们发布在 `svx_mirror_instance.tb.a.classes`，不需要运行库启动。
+[实例类型快照示例](../examples/sv_scoped/README.zh-CN.md#实例作用域的类型快照)
+已将五个实例与两个 generate 作用域的 Python 结果和原始 SV 求值逐项比对。
+如果要导出的类使用了同一实例内的枚举、结构体或容器 typedef，只选择类即可，
+无需另外维护类型清单：
+
+```sh
+svx export --class 'tb_instance_runtime_values.*.Driver' \
+  -f examples/sv_scoped/instance_runtime_values.f --out .tmp/instance-runtime-values
+```
+
+按 artifacts.json 编译替换后的源文件和启动单元，不能再重复编译原文件。
+[运行时示例](../examples/sv_scoped/README.zh-CN.md#实例局部类型的运行时传输)
+展示字段局部更新、枚举/结构体/数组/队列传参、构造、虚方法回调，以及
+output/inout task。module/interface/program 三种作用域已验证；generate
+局部命名类型的运行时组合和跨实例类型依赖仍待完成。边界以
+[实例值导出规则](SVX_GENERATION_WORKFLOW.md#instance-owned-values)为准。
+
 仅当扩展点本来就是一个稳定的类接口时使用跨语言继承。它不是任意对象反射：
 方法、虚分派、参数、返回值、字段和继承链都需要出现在 manifest 中。
 
+只需要导入 SV 值类型时，不必先创建一个类或写 Python 声明：
+
+```sh
+svx export --type export_driver_pkg::Mode export_driver_pkg::Packet \
+  -f examples/sv_export/design.f --out .tmp/exported-types
+```
+
+把输出的 python/ 放入导入路径，即可从 svx_mirror.export_driver_pkg 导入 Mode、
+Packet。它们是普通 SvTypes Enum/SvStruct 声明，可直接 pack/unpack；纯类型使用
+不需要 SVX 原生运行库。选择 SV 类时，其方法和字段依赖的值类型会自动带入。
+编译期参数也可单独导出，例如 --constant 'export_driver_pkg::*'，把上述
+命令中的 --type 及目标替换为该选项即可。生成后可导入 COUNT、FLAGS、
+DEFAULT_PACKET；它们是 SV 求值结果的类型化快照，不是运行期变量访问。
+参数表达式依赖 import 的其他参数时自动解析，但不会因此导出整个依赖包。
+若接口本来就是 package 函数/task，则使用 --callable 'export_driver_pkg::*'，
+不必包装成类。生成后直接导入 add、step；output/inout 仍使用 svx.Output()、
+svx.Inout(value)。完整代码和3ns验证见
+[包级调用示例](../examples/sv_export/README.zh-CN.md#包级函数和-task)。
+值类型范围、排除规则和限制见
+[直接导出规则](SVX_GENERATION_WORKFLOW.md#direct-sv-export)。
+
 ### 9.1 SV 基类由 Python 派生
+
+若已有 SV package 类，先用最短的直接导出路线：
+
+```sh
+svx inspect -f examples/sv_export/design.f --kind class type
+svx export --class export_driver_pkg::Driver \
+  -f examples/sv_export/design.f --out examples/sv_export/generated
+```
+
+不熟悉工程时，先用 inspect 查看声明及其所属作用域；加 --name '包名::*'
+筛选，或加 --json 查看源码位置和导出限制。它不会生成文件，也不会展开 DUT
+实例。selectable 仅表示作用域可选择，具体类型和方法签名仍由 export 校验；
+owner-bridge-pending 表示声明虽已找到，但对应作用域的导出桥接尚未实现。
+
+原始 filelist 提供依赖，CLI 自动发现构造、方法、字段和基类，不需要手写
+manifest 或 Python stub。生成后从 `svx_mirror.export_driver_pkg` 导入 Driver，
+即可创建真实 SV 对象；普通 Python 子类可覆盖已导出的 virtual 方法。
+在 SV 启动处按 svx_init()、svx_exports_pkg::initialize()、svx_load()/svx_start()
+的顺序调用；生成的 initialize 会明确注册工厂与分派器，避免独立分析时依赖
+package 静态变量初始化。它是同步、幂等的注册，不会创建用户 Driver 实例。
+[完整示例](../examples/sv_export/README.zh-CN.md)还演示继承字段、output/inout、
+延时 task、静态方法，以及把 Python 子类交还 SV 基类句柄。它已经通过远端
+生成、编译和仿真验证，两个 pass marker 都出现，仿真在2ns结束。
+
+嵌套类可直接指定 --class 'pkg::Outer::Inner'，从 svx_mirror.pkg 导入 Outer
+后使用 Outer.Inner，不需要先创建 Outer 对象。只请求 Inner 不会额外生成 Outer
+的可构造镜像。[嵌套类示例](../examples/sv_scoped/README.zh-CN.md)验证同名 Inner、
+完整原生继承链、字段/延时调用及 Python 覆盖后的 SV 基类句柄回调。
+类内公开的枚举或 packed struct 也可用 --type 'pkg::Outer::Packet' 单独导出，
+通过 Outer.Packet 使用；方法和字段引用的类型依赖会自动补齐。上述示例还验证
+Outer.LocalPacket 的跨语言往返与局部字段写入，保留未修改字段的 X/Z。
+
+导出整个包的自有类可用 `--package`；依赖解析与递归导出不是一回事。
+若只导出包内 API，可以附加 --sv-elaboration packages：保留原 filelist 的
+显式源码、宏和 include，只跳过设计实例展开与 DUT 实例化触发的 RTL 库加载，
+包 import 和 VIF 依赖仍按原顺序解析。显式列出的 RTL 仍会解析和校验语法，
+不要把它当作忽略错误或增量缓存开关。手工分步发现/生成时，两步使用同一选项。
+直接 SV 导出也可加 --integrated。单输入或共享编译单元生成 generated/sv/source.sv，
+多个独立编译单元则分别生成 generated/sv/units/*.sv；按 artifact 中的
+source_replacements 和 systemverilog_compile_order 替换原文件，不要强行合并
+编译单元，也不要同时编译原文件和副本。它保留原 package/类作用域，
+在原生类型声明之后放置调用记录和桥接，Python 的公开导入路径保持不变。
+反复使用同一组 SV 目标时，可加 --incremental 自动保存本地复用信息；输入、
+include/库选择及生成文件均未变化时，不再运行 SV 解析和生成。--check 同样可以
+复用且不写缓存；--refresh-cache 强制完整重查。它目前是整次导出的无变化复用，
+不是只解析发生变化的文件。Python 声明输入仍执行完整审计，不跳过其导入。
+模式、成员筛选与当前类型/作用域边界，以
+[直接导出规则](SVX_GENERATION_WORKFLOW.md#direct-sv-export)为准。
+下面保留显式 manifest 的继承示例，适合查看声明契约及更复杂的生成集成。
 
 适用情形：SV 已有 `virtual class BaseDriver`，希望 Python 编写某个 virtual
 override。本示例由 Python 创建对象，再把对象交给 SV 基类句柄使用。

@@ -228,6 +228,10 @@ class svx_constructor_cache_registry;
   endfunction
 endclass
 
+interface class svx_owner_initializer;
+  pure virtual function void svx_initialize_owner();
+endclass
+
 interface class svx_static_dispatchable;
   pure virtual task svx_invoke_static(
     string method_id,
@@ -364,6 +368,26 @@ class svx_inheritance_registry;
   static svx_static_dispatchable static_objects[string];
   static svx_factory factories[string];
   static longint unsigned published_object_ids[string];
+  static svx_owner_initializer owner_initializers[string];
+  static event owner_initializers_changed;
+
+  static function void register_owner_initializer(string key, svx_owner_initializer initializer);
+    if (key == "" || initializer == null) $fatal(2, "SVX invalid native owner initializer");
+    if (owner_initializers.exists(key) && owner_initializers[key] != initializer)
+      $fatal(2, "SVX duplicate native owner initializer: %s", key);
+    owner_initializers[key] = initializer;
+    ->owner_initializers_changed;
+  endfunction
+
+  static function void initialize_owner(string key);
+    if (!owner_initializers.exists(key)) $fatal(2, "SVX native owner is not ready: %s", key);
+    owner_initializers[key].svx_initialize_owner();
+  endfunction
+
+  static task wait_initialize_owner(string key);
+    while (!owner_initializers.exists(key)) @(owner_initializers_changed);
+    initialize_owner(key);
+  endtask
 
   static function longint unsigned allocate_object_id();
     return svx_object_id_allocator::allocate();
@@ -421,6 +445,7 @@ class svx_inheritance_registry;
     static_objects.delete();
     factories.delete();
     published_object_ids.delete();
+    owner_initializers.delete();
     svx_construction_context::clear();
   endfunction
 

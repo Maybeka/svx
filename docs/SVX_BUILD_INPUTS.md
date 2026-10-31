@@ -4,6 +4,9 @@ SVX can import the source order, macro definitions and include paths from the
 project's existing build. Do not maintain a second list of class dependencies.
 Importing build inputs supplies parsing context; it does not select additional
 classes for generation, replace the project build system, or execute a compiler.
+For direct target selection, use [svx export](SVX_GENERATION_WORKFLOW.md#direct-sv-export).
+`-f`, `-F`, `-I`, `-D` and `-U` are CLI aliases for --sv-filelist,
+--sv-relative-filelist, --sv-include-dir, --sv-define and --sv-undefine.
 
 ## Original Filelists
 
@@ -77,11 +80,14 @@ actual command record when mixed ordering matters.
 
 The importer supports ordered SV sources, nested filelists, `+incdir+`, `-I`,
 `+define+`, `-D`, `-U`, explicit library files (`-v`), ordered library-directory
-search (`-y` / `+libext+`), and compilation-unit
+search (`-y` / `+libext+`), explicit top selection (`-top` / `--top-module`), and compilation-unit
 selection. Repeated imported definitions use their final replacement; a later
 definition cancels an earlier undefinition. Known tool defaults and implicit
 UVM sources are resolved from the original compiler environment where supported.
 Inspect `compilation_unit` and the resolved source list with `compile-config`.
+Imported tops are retained in `top_modules` and constrain instance discovery;
+unused design units are not silently promoted to additional roots. Package-only
+analysis deliberately skips DUT hierarchy elaboration instead.
 For a standalone filelist or an unrecognized tool default, use
 `--sv-compilation-unit` if the original build shares macros across source files.
 
@@ -113,6 +119,13 @@ Class/interface/package references are obtained from parsed syntax, not regular
 expression scans. A selected source containing extra declarations is kept as a
 whole file, as in ordinary source-library compilation; those declarations do not
 automatically become generation targets.
+
+Package-only export can use --sv-elaboration packages to omit library requests
+driven solely by design hierarchy instantiations. Explicit source preprocessing
+and package/VIF dependency lookup remain intact. The
+[generation workflow](SVX_GENERATION_WORKFLOW.md#direct-sv-export) owns the policy,
+limitations and recorded-input invalidation rules. This does not change the
+original simulation compiler's source selection.
 
 Protected source regions remain opaque. Recognizing their boundaries does not
 decrypt them or make hidden classes available for mapping. Selected public

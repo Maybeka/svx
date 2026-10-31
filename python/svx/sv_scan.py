@@ -9,9 +9,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from pathlib import Path
+import json
+import re
 from typing import Callable, Iterable
 
 from .errors import SVXInheritanceError
+from .sv_frontend import (_analysis, analysis_source_manager, elaborate_sources, compile_source_trees,
+                          source_elaboration_mode)
+from .sv_instance_scan import with_instance_discovery
 
 
 @dataclass(frozen=True)
@@ -105,7 +110,7 @@ def _method_name(item: object) -> str | None:
     name = getattr(prototype, "name", None)
     if name is None:
         return None
-    result = str(name).strip()
+    result = _token_text(name)
     return result if result and result != "new" else None
 
 
@@ -235,16 +240,44 @@ def _python_proxy_context(declarations):
 
 def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, compilation_unit=False,
                    proxy_context=()):
-    from pyslang import SourceManager
+    from time import perf_counter
+    from .sv_library_search import _search
+
     paths = tuple(paths)
     if not paths:
         return
-    source_manager = source_manager or SourceManager()
+    source_manager = source_manager or analysis_source_manager()
+    state = _analysis.get()
+    shared = state is not None and source_manager is state.source_manager
+    search = _search.get()
+    key = (tuple(str(path) for path in paths), id(parse_options), compilation_unit,
+           id(search), source_elaboration_mode())
+    if shared and key in state.trees:
+        trees = state.trees[key]
+        state.syntax_reuses += 1
+    else:
+        start = perf_counter()
+        trees = tuple(_parse_source_batch(syntax, paths, source_manager,
+                                         parse_options=parse_options, compilation_unit=compilation_unit))
+        if shared:
+            state.trees[key] = trees
+            # Trees and library parser storage must outlive every semantic probe.
+            # Retain option/search identities too, preventing object-id reuse.
+            state.owners.append((parse_options, search))
+            state.parse_batches += 1
+            state.parse_seconds += perf_counter() - start
+    # Proxy members depend on Python discovery context, not just SV source.
+    # Never reuse a transformed tree for a different set of Python declarations.
+    for path, tree in trees:
+        yield path, _with_python_proxy_members(tree, proxy_context) if proxy_context else tree
+
+
+def _parse_source_batch(syntax, paths, source_manager, *, parse_options, compilation_unit):
     trees = []
     if compilation_unit:
         options = {} if parse_options is None else {"options": parse_options}
         tree = syntax.SyntaxTree.fromFiles([str(path) for path in paths],
-                                          source_manager or SourceManager(), **options)
+                                          source_manager, **options)
         _check_source_diagnostics(tree, paths[0])
         trees.append((paths[0], tree))
     else:
@@ -252,20 +285,28 @@ def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, co
             tree = _parse_source(syntax, path, source_manager, parse_options=parse_options)
             trees.append((path, tree))
     from .sv_library_search import load_libraries
-    for path, tree in load_libraries(trees, paths, source_manager, parse_options, compilation_unit):
-        yield path, _with_python_proxy_members(tree, proxy_context) if proxy_context else tree
+    from .source_selection import record_source_trees
+    record_source_trees(trees)
+    yield from load_libraries(trees, paths, source_manager, parse_options, compilation_unit)
+
+
+def _token_text(token: object) -> str:
+    identifier = getattr(token, 'identifier', None)
+    if identifier is not None:
+        return _token_text(identifier)
+    return str(getattr(token, "valueText", token)).strip()
 
 
 def _is_virtual(item: object) -> bool:
     return any(
-        str(qualifier).strip() == "virtual"
+        _token_text(qualifier) == "virtual"
         for qualifier in getattr(item, "qualifiers", ())
     )
 
 
 def _is_static(item: object) -> bool:
     return any(
-        str(qualifier).strip() == "static"
+        _token_text(qualifier) == "static"
         for qualifier in getattr(item, "qualifiers", ())
     )
 
@@ -278,20 +319,20 @@ def _declarator_type(sv_type: str, declarator: object) -> str:
 def _method_fact(item: object, *, include_constructor: bool = False) -> SVInterfaceMemberFact | None:
     declaration = getattr(item, "declaration", item)
     prototype = getattr(declaration, "prototype", None)
-    name = str(getattr(prototype, "name", "")).strip()
+    name = _token_text(getattr(prototype, "name", ""))
     if not name or (name == "new" and not include_constructor):
         return None
-    is_task = str(getattr(prototype, "keyword", "")).strip() == "task"
+    is_task = _token_text(getattr(prototype, "keyword", "")) == "task"
     parameters: list[SVInterfaceParameterFact] = []
     direction = "input"
     sv_type = "logic"
     for port in getattr(getattr(prototype, "portList", None), "ports", ()):
-        parameter_name = str(getattr(getattr(port, "declarator", None), "name", "")).strip()
+        parameter_name = _token_text(getattr(getattr(port, "declarator", None), "name", ""))
         if not parameter_name:
             continue
         # A new explicit direction starts a new type group (default logic).
         # Only an omitted direction carries the preceding type forward.
-        explicit_direction = str(getattr(port, "direction", None) or "").strip()
+        explicit_direction = _token_text(getattr(port, "direction", None) or "")
         if explicit_direction:
             direction = explicit_direction
             sv_type = "logic"
@@ -304,10 +345,10 @@ def _method_fact(item: object, *, include_constructor: bool = False) -> SVInterf
             if port.__class__.__name__ != "PortDeclarationSyntax":
                 continue
             header = port.header
-            direction = str(getattr(header, "direction", None) or "input").strip()
+            direction = _token_text(getattr(header, "direction", None) or "input")
             sv_type = str(getattr(header, "dataType", None) or "logic").strip()
             for declarator in getattr(port, "declarators", ()):
-                parameter_name = str(getattr(declarator, "name", "")).strip()
+                parameter_name = _token_text(getattr(declarator, "name", ""))
                 if parameter_name:
                     parameters.append(SVInterfaceParameterFact(
                         parameter_name, direction, _declarator_type(sv_type, declarator)
@@ -323,7 +364,7 @@ def _source_class_name(node: object) -> str:
     if node.__class__.__name__ == "ScopedNameSyntax":
         return _source_class_name(node.left) + "::" + _source_class_name(node.right)
     identifier = getattr(node, "identifier", None)
-    return str(identifier if identifier is not None else node).strip()
+    return _token_text(identifier) if identifier is not None else str(node).strip()
 
 
 def _source_lineage(fact: SVClassFact, facts: dict[str, SVClassFact]) -> tuple[SVClassFact, ...]:
@@ -342,6 +383,115 @@ def _source_lineage(fact: SVClassFact, facts: dict[str, SVClassFact]) -> tuple[S
     return tuple(chain)
 
 
+def _unit_scope(symbol):
+    owner, _, tail = symbol.partition('::')
+    match = re.fullmatch(r'\$unit\[([0-9]+)\]', owner)
+    return (int(match[1]), tail) if match else None
+
+
+def _source_class_id(symbol):
+    instance = _instance_scope(symbol)
+    if instance is not None:
+        from .source_scopes import instance_class_id
+        return instance_class_id(*instance)
+    unit = _unit_scope(symbol)
+    return ('sv://unit/' + str(unit[0]) + '/' + unit[1].replace('::', '/')
+            if unit else 'sv://' + symbol.replace('::', '/'))
+
+
+def _source_class_selector(class_id):
+    path = class_id.removeprefix('sv://').split('/')
+    if len(path) >= 3 and path[0] == 'unit' and path[1].isdigit():
+        return '$unit[' + path[1] + ']::' + '::'.join(path[2:])
+    return '::'.join(path)
+
+
+def _instance_scope(symbol):
+    match = re.fullmatch(r'\$instance\[(.*)\]::(.*)', symbol)
+    return match.groups() if match else None
+
+
+def _source_display_name(symbol):
+    instance = _instance_scope(symbol)
+    return instance[0] + '.' + instance[1] if instance is not None else symbol
+
+
+def _has_instance_named_values(value, owner=None):
+    if isinstance(value, dict):
+        reference = value.get('sv')
+        if (owner is not None and isinstance(reference, str)
+                and re.fullmatch(r'[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*', reference)):
+            native = owner
+            for component in reference.split('::'):
+                if native is not None and native.kind.name == 'TypeAlias' and native.canonicalType.isClass:
+                    native = native.canonicalType
+                find = getattr(native, 'find', None)
+                native = find(component) if find is not None else None
+                if native is None:
+                    break
+            if native is not None and native.kind.name == 'TypeAlias' and not native.canonicalType.isClass:
+                return True
+        return any(_has_instance_named_values(item, owner) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return any(_has_instance_named_values(item, owner) for item in value)
+    return isinstance(value, str) and value.startswith('svx_mirror_instance.')
+
+
+def _class_fact(symbol, member, *, concrete_alias=False):
+    extends = getattr(member, 'extendsClause', None)
+    methods = tuple(method for item in member.items
+                    if (method := _method_fact(item)) is not None)
+    return SVClassFact(
+        symbol, _source_class_name(extends.baseName) if extends is not None else None,
+        frozenset(name for item in member.items if _is_virtual(item)
+                  and (name := _method_name(item)) is not None),
+        frozenset(name for item in member.items if _is_static(item)
+                  and (name := _method_name(item)) is not None),
+        () if concrete_alias else tuple('type' if parameter.__class__.__name__ == 'TypeParameterDeclarationSyntax'
+            else 'value' for parameter in getattr(getattr(member, 'parameters', None), 'declarations', ())
+            for declarator in getattr(parameter, 'declarators', ()) if _token_text(getattr(declarator, 'name', ''))),
+        methods,
+        tuple(SVClassFieldFact(_token_text(declarator.name), ' '.join(str(item.declaration.type).split()),
+                              frozenset(_token_text(value) for value in item.qualifiers),
+                              bool(getattr(declarator, 'dimensions', ())))
+              for item in member.items if item.__class__.__name__ == 'ClassPropertyDeclarationSyntax'
+              and item.declaration.__class__.__name__ == 'DataDeclarationSyntax'
+              for declarator in item.declaration.declarators if _token_text(getattr(declarator, 'name', ''))),
+        next((method for item in member.items
+              if (method := _method_fact(item, include_constructor=True)) is not None and method.name == 'new'), None),
+        _python_proxy_id(member))
+
+
+def _declaration_source_symbol(declaration):
+    symbol = declaration.get('symbol')
+    scope = declaration.get('source_scope')
+    if isinstance(scope, dict) and scope.get('kind') == 'compilation_unit':
+        return f"$unit[{scope['index']}]::" + symbol.removeprefix('$unit::')
+    if isinstance(scope, dict) and scope.get('kind') == 'instance':
+        return f"$instance[{scope['path']}]::" + symbol
+    return symbol
+
+
+def _semantic_class_selector(actual):
+    """Use the actual declaring scope, not an assumed package prefix."""
+    node = getattr(actual, 'syntax', None)
+    while node is not None:
+        if str(node.kind) == 'SyntaxKind.PackageDeclaration':
+            return actual.lexicalPath
+        if str(node.kind) in {'SyntaxKind.ModuleDeclaration', 'SyntaxKind.InterfaceDeclaration',
+                              'SyntaxKind.ProgramDeclaration', 'SyntaxKind.GenerateBlock'}:
+            from .sv_instance_scan import semantic_instance_selector
+            return semantic_instance_selector(actual)
+        node = node.parent
+    parent = getattr(actual, 'parentScope', None)
+    if parent is not None:
+        unit = parent.compilationUnit
+        for index, candidate in enumerate(parent.compilation.getRoot().compilationUnits):
+            if candidate == unit:
+                return f'$unit[{index}]::' + actual.lexicalPath
+    return actual.lexicalPath
+
+
 def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, parse_options=None,
                     compilation_unit=False, proxy_context=()) -> dict[str, SVClassFact]:
     """Parse SV package classes with pyslang and return inheritance facts.
@@ -353,102 +503,168 @@ def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, p
 
     syntax = _pyslang()
     facts: dict[str, SVClassFact] = {}
+    paths = tuple(paths)
     trees = tuple(_parse_sources(syntax, paths, parse_options=parse_options,
                                  compilation_unit=compilation_unit, proxy_context=proxy_context))
     aliases = []
-    for path, tree in trees:
+
+    def class_members(scope, members):
+        for member in members:
+            declaration = getattr(member, 'declaration', member)
+            if type(declaration).__name__ == 'TypedefDeclarationSyntax':
+                qualifiers = {_token_text(value) for value in getattr(member, 'qualifiers', ())}
+                if not qualifiers & {'local', 'protected'}:
+                    aliases.append((scope, _token_text(declaration.name)))
+            if type(member).__name__ == 'ClassDeclarationSyntax':
+                symbol = scope + '::' + _token_text(member.name)
+                yield symbol, member
+                yield from class_members(symbol, member.items)
+
+    for unit_index, (path, tree) in enumerate(trees):
         roots = [tree.root]
-        if not getattr(getattr(tree.root, "header", None), "name", None):
+        if tree.root.kind not in {syntax.SyntaxKind.PackageDeclaration, syntax.SyntaxKind.ClassDeclaration}:
             roots = list(getattr(tree.root, "members", ()))
+        scopes = [(f'$unit[{unit_index}]', roots)]
         package_count = 0
         for root in roots:
-            package_name = str(
-                getattr(getattr(root, "header", None), "name", "")
-            ).strip()
+            if root.kind != syntax.SyntaxKind.PackageDeclaration:
+                continue
+            package_name = _token_text(getattr(getattr(root, "header", None), "name", ""))
             if not package_name:
                 continue
             package_count += 1
-            for member in getattr(root, "members", ()):
-                if member.__class__.__name__ == "TypedefDeclarationSyntax":
-                    aliases.append((package_name, str(member.name).strip()))
-                if member.__class__.__name__ != "ClassDeclarationSyntax":
-                    continue
-                name = str(member.name).strip()
-                symbol = f"{package_name}::{name}"
-                extends = getattr(member, "extendsClause", None)
-                direct_base = (
-                    _source_class_name(getattr(extends, "baseName", ""))
-                    if extends is not None
-                    else None
-                )
-                virtual_methods = frozenset(
-                    name
-                    for item in getattr(member, "items", ())
-                    if _is_virtual(item) and (name := _method_name(item)) is not None
-                )
-                static_methods = frozenset(
-                    name
-                    for item in getattr(member, "items", ())
-                    if _is_static(item) and (name := _method_name(item)) is not None
-                )
+            scopes.append((package_name, getattr(root, 'members', ())))
+        for scope, members in scopes:
+            for symbol, member in class_members(scope, members):
                 if symbol in facts:
                     raise SVXInheritanceError(
                         f"duplicate SystemVerilog class definition {symbol}"
                     )
-                facts[symbol] = SVClassFact(
-                    symbol, direct_base, virtual_methods, static_methods,
-                    tuple(
-                        "type" if parameter.__class__.__name__ == "TypeParameterDeclarationSyntax"
-                        else "value"
-                        for parameter in getattr(getattr(member, "parameters", None), "declarations", ())
-                        for declarator in getattr(parameter, "declarators", ())
-                        if str(getattr(declarator, "name", "")).strip()
-                    ),
-                    tuple(
-                        method for item in getattr(member, "items", ())
-                        if (method := _method_fact(item)) is not None
-                    ),
-                    tuple(
-                        SVClassFieldFact(
-                            str(declarator.name).strip(),
-                            " ".join(str(item.declaration.type).split()),
-                            frozenset(str(value).strip() for value in item.qualifiers),
-                            bool(getattr(declarator, "dimensions", ())),
-                        )
-                        for item in getattr(member, "items", ())
-                        if item.__class__.__name__ == "ClassPropertyDeclarationSyntax"
-                        and item.declaration.__class__.__name__ == "DataDeclarationSyntax"
-                        for declarator in item.declaration.declarators
-                        if str(getattr(declarator, "name", "")).strip()
-                    ),
-                    next((
-                        method for item in getattr(member, "items", ())
-                        if (method := _method_fact(item, include_constructor=True)) is not None
-                        and method.name == "new"
-                    ), None),
-                    _python_proxy_id(member),
-                )
+                facts[symbol] = _class_fact(symbol, member)
         if not package_count and not allow_no_packages:
             raise SVXInheritanceError(
                 f"SystemVerilog source {path} must contain a package declaration"
             )
-    if aliases:
+    imported_bases = [fact for fact in facts.values()
+                      if fact.direct_base and fact.direct_base not in facts
+                      and ('::' in fact.direct_base or
+                           fact.symbol.rsplit('::', 1)[0] + '::' + fact.direct_base not in facts)]
+    if aliases or imported_bases:
         from pyslang.ast import Compilation
         compilation = Compilation()
         for _, tree in trees:
             compilation.addSyntaxTree(tree)
-        compilation.getRoot()
+        compilation = compile_source_trees(compilation.getSyntaxTrees())
+        alias_sources = {}
         for package_name, alias in aliases:
-            package = compilation.getPackage(package_name)
-            member = package.lookupName(alias) if package is not None else None
+            member = _lookup_sv_symbol(compilation, package_name + '::' + alias)
             actual = getattr(member, "canonicalType", None)
             if actual is None or not actual.isClass:
                 continue
-            source = facts.get(actual.lexicalPath)
+            actual_symbol = _semantic_class_selector(actual)
+            source = facts.get(actual_symbol)
             if source is not None:
-                facts[f"{package_name}::{alias}"] = replace(
-                    source, symbol=f"{package_name}::{alias}", parameter_kinds=())
+                alias_symbol = f"{package_name}::{alias}"
+                alias_sources[alias_symbol] = actual_symbol
+                facts[alias_symbol] = replace(source, symbol=alias_symbol, parameter_kinds=())
+        # Import lookup returns the declaring symbol, including named typedefs;
+        # a short base name need not belong to the derived class's package.
+        for fact in imported_bases:
+            scope_name = fact.symbol.rsplit('::', 1)[0]
+            scope = _lookup_sv_symbol(compilation, scope_name)
+            base = scope.lookupName(fact.direct_base) if scope is not None else None
+            resolved = _semantic_class_selector(base) if base is not None and getattr(base, 'canonicalType', None) and base.canonicalType.isClass else None
+            if resolved in facts:
+                facts[fact.symbol] = replace(fact, direct_base=resolved)
+        for alias_symbol, source_symbol in alias_sources.items():
+            facts[alias_symbol] = replace(facts[source_symbol], symbol=alias_symbol, parameter_kinds=())
+    from .sv_instance_scan import active_instance_facts
+    facts.update(active_instance_facts(paths, parse_options, compilation_unit))
     return facts
+
+
+def _lookup_sv_symbol(compilation, symbol):
+    instance = re.fullmatch(r'\$instance\[(.*)\]::(.*)', symbol)
+    if instance:
+        from .source_scopes import lookup_native_scope
+        owner = lookup_native_scope(compilation, instance[1])
+        scope = getattr(owner, 'body', owner)
+        return (scope.lookupName(instance[2]) if instance[2] else scope) if scope is not None and hasattr(scope, 'lookupName') else None
+    unit = _unit_scope(symbol)
+    if unit is not None:
+        units = compilation.getRoot().compilationUnits
+        if unit[0] >= len(units):
+            return None
+        scope = units[unit[0]]
+        return scope.lookupName(unit[1]) if unit[1] else scope
+    package, _, member = symbol.partition('::')
+    scope = compilation.getPackage(package)
+    return scope.lookupName(member) if scope is not None and member else scope
+
+
+def _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context=(),
+                          scope_probes=None):
+    """Keep unit-local type checks in their original semantic compilation unit.
+
+    Reparse only owners needing checks from their original buffers and options.
+    Printing preprocessed syntax would lose compiler directives such as
+    timescale and change package parameters/types. These are analysis-only
+    trees; emitted source copies also preserve the original input context.
+    """
+    if not unit_probes and not scope_probes:
+        return elaborate_sources(compilation)
+    from pyslang.ast import Compilation
+    from .source_layout import _inline_active_source_includes
+    from .source_scopes import native_scope_insertions
+
+    insertions = (native_scope_insertions(elaborate_sources(compilation), scope_probes, manager=manager, guarded=False)
+                  if scope_probes else {})
+
+    checked = Compilation()
+    for index, tree in enumerate(compilation.getSyntaxTrees()):
+        paths = source_units.get(index, ())
+        buffers = [manager.readSource(str(path), library=tree.sourceLibrary) for path in paths]
+        root_buffers = [buffer.id if buffer is not None else None for buffer in buffers]
+        if insertions:
+            candidates = []
+            for location in (tree.root.sourceRange.start, tree.root.sourceRange.end):
+                while manager.isMacroLoc(location):
+                    location = manager.getExpansionRange(location).start
+                candidates.append(location.buffer)
+            for directive in tree.getIncludeDirectives():
+                candidates.extend((directive.syntax.sourceRange.start.buffer, directive.buffer.id))
+            candidates.extend(insertions)
+            by_path = {}
+            known_buffers = set(manager.getAllBuffers())
+            for buffer in candidates:
+                if buffer not in known_buffers:
+                    continue
+                filename = manager.getFullPath(buffer)
+                if filename:
+                    by_path.setdefault(Path(filename).resolve(), buffer)
+            root_buffers = [by_path.get(Path(path).resolve(), buffer) for path, buffer in zip(paths, root_buffers)]
+        active_buffers = set(root_buffers)
+        active_buffers.update(directive.buffer.id for directive in tree.getIncludeDirectives())
+        local_checks = bool(active_buffers.intersection(insertions))
+        if index in unit_probes or local_checks:
+            if any(buffer is None for buffer in buffers):
+                raise SVXInheritanceError(f'cannot read compilation-unit {index} inputs for owner-local checks')
+            if local_checks:
+                buffers = [manager.assignText(str(path) + f'.svx-probe-{len(manager.getAllBuffers())}',
+                    '`line 1 ' + json.dumps(str(path), ensure_ascii=False) + ' 0\n'
+                    + _inline_active_source_includes(tree, manager.getSourceText(buffer).removesuffix('\0'),
+                        root_buffer=buffer, insertions=insertions), library=tree.sourceLibrary)
+                    for path, buffer in zip(paths, root_buffers)]
+            if index in unit_probes:
+                buffers.append(manager.assignText(f'<svx-owner-checks-{index}>', '\n'.join(unit_probes[index]) + '\n',
+                                                  library=tree.sourceLibrary))
+            tree = _pyslang().SyntaxTree.fromBuffers(buffers, manager,
+                **({} if parse_options is None else {'options': parse_options}))
+            _check_source_diagnostics(tree, f'compilation-unit {index} type checks')
+            if proxy_context:
+                tree = _with_python_proxy_members(tree, proxy_context)
+        checked.addSyntaxTree(tree)
+    return elaborate_sources(checked)
 
 
 def scan_sv_virtual_interfaces(paths: Iterable[Path], *, parse_options=None, compilation_unit=False) -> dict[str, SVVirtualInterfaceFact]:
@@ -471,7 +687,7 @@ def scan_sv_virtual_interfaces(paths: Iterable[Path], *, parse_options=None, com
             if str(getattr(member, "kind", "")) != "SyntaxKind.InterfaceDeclaration":
                 continue
             header = getattr(member, "header", None)
-            name = str(getattr(header, "name", "")).strip()
+            name = _token_text(getattr(header, "name", ""))
             if not name:
                 raise SVXInheritanceError(
                     f"SystemVerilog interface in {path} has no name"
@@ -483,7 +699,7 @@ def scan_sv_virtual_interfaces(paths: Iterable[Path], *, parse_options=None, com
                 if item.__class__.__name__ == "DataDeclarationSyntax":
                     sv_type = str(getattr(item, "type", "")).strip()
                     for declarator in getattr(item, "declarators", ()):
-                        declarator_name = str(getattr(declarator, "name", "")).strip()
+                        declarator_name = _token_text(getattr(declarator, "name", ""))
                         if declarator_name:
                             members.append(
                                 SVInterfaceMemberFact(
@@ -499,7 +715,7 @@ def scan_sv_virtual_interfaces(paths: Iterable[Path], *, parse_options=None, com
                 if item.__class__.__name__ != "ModportDeclarationSyntax":
                     continue
                 for modport in getattr(item, "items", ()):
-                    modport_name = str(getattr(modport, "name", "")).strip()
+                    modport_name = _token_text(getattr(modport, "name", ""))
                     if not modport_name:
                         raise SVXInheritanceError(
                             f"SystemVerilog interface {name} has an unnamed modport"
@@ -514,11 +730,11 @@ def scan_sv_virtual_interfaces(paths: Iterable[Path], *, parse_options=None, com
                     for group in getattr(modport, "ports", ()):
                         if not group.__class__.__name__.startswith("Modport"):
                             continue
-                        direction = str(
+                        direction = _token_text(
                             getattr(group, "direction", getattr(group, "importExport", ""))
-                        ).strip()
+                        )
                         for port in getattr(group, "ports", ()):
-                            port_name = str(getattr(port, "name", "")).strip()
+                            port_name = _token_text(getattr(port, "name", ""))
                             if port_name:
                                 visible[port_name] = direction
                     modport_members.append(
@@ -553,6 +769,9 @@ def discover_sv_class_declarations(
     binding: Callable[..., dict], *, parse_options=None, compilation_unit=False,
     existing: Iterable[dict] = (),
     python_context: Iterable[dict] = (),
+    member_patterns: Iterable[str] = (),
+    exclude_member_patterns: Iterable[str] = (),
+    value_exports=None,
 ) -> list[dict]:
     """Collect requested source ancestors, using the caller's SvTypes bindings.
 
@@ -561,15 +780,30 @@ def discover_sv_class_declarations(
     """
     paths = tuple(paths)
     python_context = tuple(python_context)
+    member_patterns = tuple(member_patterns)
+    exclude_member_patterns = tuple(exclude_member_patterns)
+    from fnmatch import fnmatchcase
+
+    def selected_member(symbol, name):
+        spellings = {name, symbol + '.' + name, _source_display_name(symbol) + '.' + name}
+        matches = lambda pattern: any(fnmatchcase(spelling, pattern) for spelling in spellings)
+        return ((not member_patterns or any(matches(pattern) for pattern in member_patterns))
+                and not any(matches(pattern) for pattern in exclude_member_patterns))
     facts = scan_sv_sources(paths, allow_no_packages=True, parse_options=parse_options,
                             compilation_unit=compilation_unit, proxy_context=python_context)
     from pyslang.ast import Compilation, MethodFlags
 
-    compilation = Compilation()
-    for _, tree in _parse_sources(_pyslang(), paths, parse_options=parse_options,
-                                  compilation_unit=compilation_unit, proxy_context=python_context):
-        compilation.addSyntaxTree(tree)
-    compilation.getRoot()
+    from .sv_instance_scan import active_instance_analysis
+    instance_analysis = active_instance_analysis(paths, parse_options, compilation_unit)
+    if instance_analysis is not None:
+        compilation = instance_analysis.compilation
+    else:
+        compilation = Compilation()
+        for _, tree in _parse_sources(_pyslang(), paths, parse_options=parse_options,
+                                      compilation_unit=compilation_unit, proxy_context=python_context):
+            compilation.addSyntaxTree(tree)
+        compilation = compile_source_trees(compilation.getSyntaxTrees())
+    source_ids = {_source_class_id(symbol): symbol for symbol in facts}
     collected: dict[str, dict] = {}
     explicit = {item["canonical_id"]: item for item in existing}
     foreign = {item["canonical_id"]: item for item in python_context}
@@ -586,16 +820,31 @@ def discover_sv_class_declarations(
                 arguments.append("type_" + token(_canonical_sv_handle_type(member.targetType.type)))
             elif member.kind.name == "Parameter" and not member.isLocalParam:
                 arguments.append("value_" + token(str(member.type)) + "_" + token(str(member.value)))
-        return "sv://" + symbol.replace("::", "/") + "/specialization/" + "/".join(arguments)
+        return _source_class_id(symbol) + "/specialization/" + "/".join(arguments)
 
     def collect(class_id: str, *, actual_source=None, source_symbol=None):
+        if value_exports is None:
+            return collect_bound(class_id, actual_source=actual_source, source_symbol=source_symbol)
+        symbol = source_symbol or source_ids.get(class_id, _source_class_selector(class_id))
+        instance = _instance_scope(symbol)
+        scope = None
+        if instance is not None:
+            from .source_scopes import lookup_native_scope, native_scope_chain
+            native = lookup_native_scope(compilation, instance[0])
+            body = native_scope_chain(compilation, instance[0])[0]
+            scope = {'kind': 'instance', 'path': instance[0], 'container': body.definition.definitionKind.name.lower()}
+            value_exports.register_instance(getattr(native, 'body', native), scope)
+        with value_exports.instance_context(scope):
+            return collect_bound(class_id, actual_source=actual_source, source_symbol=source_symbol)
+
+    def collect_bound(class_id: str, *, actual_source=None, source_symbol=None):
         if class_id in explicit:
             return explicit[class_id]
         if class_id in collected:
             return collected[class_id]
         if class_id in visiting:
             raise SVXInheritanceError(f"cyclic SV source discovery at {class_id}")
-        symbol = source_symbol or class_id.removeprefix("sv://").replace("/", "::")
+        symbol = source_symbol or source_ids.get(class_id, _source_class_selector(class_id))
         fact = facts.get(symbol)
         if fact is None:
             raise SVXInheritanceError(f"SV mirror base {class_id!r} was not found in scanned sources")
@@ -622,9 +871,8 @@ def discover_sv_class_declarations(
                 raise SVXInheritanceError(f"SV Proxy {symbol} base does not match Python lineage")
             return parent
         visiting.add(class_id)
-        package_name, class_name = symbol.split("::")
-        package = compilation.getPackage(package_name)
-        source = actual_source or (package.lookupName(class_name) if package is not None else None)
+        package_name = symbol.split('::')[0]
+        source = actual_source or _lookup_sv_symbol(compilation, symbol)
         if source is not None and source.isClass:
             source = source.canonicalType
         if source is None or not hasattr(source, "constructor"):
@@ -634,8 +882,13 @@ def discover_sv_class_declarations(
             arguments = []
             for member in source:
                 if member.kind.name == "TypeParameter":
-                    arguments.append({"kind": "type", "type": binding(
-                        member.targetType.type, where=f"{symbol} parameter {member.name}")})
+                    actual_type = member.targetType.type
+                    argument_binding = binding(actual_type, where=f"{symbol} parameter {member.name}")
+                    if actual_type.canonicalType.isClass or actual_type.canonicalType.isVirtualInterface:
+                        # A type parameter instantiates the original native SV
+                        # class; its RemoteRef codec is only the transport ABI.
+                        argument_binding['sv'] = _canonical_sv_handle_type(actual_type)
+                    arguments.append({"kind": "type", "type": argument_binding})
                 elif member.kind.name == "Parameter" and not member.isLocalParam:
                     if member.type.isIntegral and not member.value.hasUnknown():
                         value = int(member.value.value)
@@ -654,15 +907,14 @@ def discover_sv_class_declarations(
         if fact.direct_base:
             parent_symbol = fact.direct_base
             if "::" not in parent_symbol:
-                parent_symbol = f"{package_name}::{parent_symbol}"
-            parent_id = "sv://" + parent_symbol.replace("::", "/")
+                lexical = symbol.rsplit('::', 1)[0] + '::' + parent_symbol
+                parent_symbol = lexical if lexical in facts else f"{package_name}::{parent_symbol}"
+            parent_id = _source_class_id(parent_symbol)
             parent_actual = None
             if (parent_id not in explicit and source.baseClass is not None
                     and parent_symbol in facts and facts[parent_symbol].python_proxy_id is None):
-                parent_package_name, parent_name = parent_symbol.split("::")
-                parent_package = compilation.getPackage(parent_package_name)
-                parent_source = parent_package.lookupName(parent_name) if parent_package is not None else None
-                if parent_source is not None and not source.baseClass.isMatching(parent_source.canonicalType):
+                parent_source = _lookup_sv_symbol(compilation, parent_symbol)
+                if parent_source is None or not source.baseClass.isMatching(parent_source.canonicalType):
                     parent_actual = source.baseClass
                     parent_id = specialization_id(parent_symbol, parent_actual)
             parent = collect(parent_id, actual_source=parent_actual, source_symbol=parent_symbol)
@@ -683,11 +935,15 @@ def discover_sv_class_declarations(
             result = {"type": binding(actual, where=location)}
             handle = _source_handle_metadata(actual, where=location, collections=True)
             if handle is not None:
+                if _instance_scope(symbol) is not None:
+                    raise SVXInheritanceError(f'{location}: instance-owned handle adapters remain unfinished')
                 result["handle"] = handle
             return result
 
         methods = []
         for method in fact.methods:
+            if not selected_member(symbol, method.name):
+                continue
             member = source.lookupName(method.name)
             if member is None or not hasattr(member, "arguments"):
                 raise SVXInheritanceError(f"cannot resolve SV signature {symbol}.{method.name}")
@@ -706,13 +962,15 @@ def discover_sv_class_declarations(
             methods.append(entry)
         fields = []
         for field in fact.fields:
+            if not selected_member(symbol, field.name):
+                continue
             member = source.lookupName(field.name)
             if member is None or not hasattr(member, "type"):
                 raise SVXInheritanceError(f"cannot resolve SV field {symbol}.{field.name}")
             if member.visibility.name == "Local":
                 continue
             if "static" in field.qualifiers:
-                raise SVXInheritanceError(f"SV source discovery {symbol}.{field.name} requires explicit static field metadata")
+                raise SVXInheritanceError(f"cannot automatically export static SV field {symbol}.{field.name}; exclude it with --exclude-member")
             fields.append({"name": field.name, **value_type(member.type, f"{symbol}.{field.name}")})
         declaration = {"canonical_id": class_id, "language": "sv", "symbol": symbol,
                        "constructor": {"initiator": "sv", "parameters": (
@@ -720,6 +978,14 @@ def discover_sv_class_declarations(
                            if source.constructor is not None else [])},
                        "methods": methods, "fields": fields, "base_lineage": [],
                        "discovery_base_id": base_id}
+        unit = _unit_scope(symbol)
+        if unit is not None:
+            declaration['symbol'] = '$unit::' + unit[1]
+            declaration['source_scope'] = {'kind': 'compilation_unit', 'index': unit[0]}
+        instance = _instance_scope(symbol)
+        if instance is not None:
+            declaration['symbol'] = instance[1]
+            declaration['source_scope'] = instance_analysis.scopes[symbol]
         if specialization is not None:
             declaration["specialization"] = specialization
         visiting.remove(class_id)
@@ -728,9 +994,17 @@ def discover_sv_class_declarations(
 
     for class_id in class_ids:
         collect(class_id)
+    exposed = [(_declaration_source_symbol(item), member['name']) for item in collected.values()
+               for member in (*item['methods'], *item['fields'])]
+    for pattern in member_patterns:
+        if not any(fnmatchcase(name, pattern) or fnmatchcase(symbol + '.' + name, pattern)
+                   or fnmatchcase(_source_display_name(symbol) + '.' + name, pattern)
+                   for symbol, name in exposed):
+            raise SVXInheritanceError(f'SV member selector {pattern!r} matched no accessible member in selected classes or their ancestors')
     return list(collected.values())
 
 
+@with_instance_discovery
 def validate_sv_declarations(
     declarations: Iterable[dict[str, object]], paths: Iterable[Path], *, parse_options=None,
     compilation_unit=False, proxy_context=()
@@ -744,13 +1018,18 @@ def validate_sv_declarations(
         if item.get("language", "sv") == "sv"
     )
     paths = tuple(paths)
+    if any((declaration.get('source_scope') or {}).get('kind') == 'instance' for declaration in declarations):
+        from .sv_instance_scan import prepare_instance_analysis
+        patterns = [(item['source_scope']['path'] + '.' + item['symbol']) for item in declarations
+                    if (item.get('source_scope') or {}).get('kind') == 'instance']
+        prepare_instance_analysis(paths, parse_options=parse_options, compilation_unit=compilation_unit, patterns=patterns)
     facts = scan_sv_sources(paths, allow_no_packages=True, parse_options=parse_options,
                             compilation_unit=compilation_unit, proxy_context=proxy_context)
     for declaration in declarations:
         symbol = declaration.get("symbol")
         if not isinstance(symbol, str):
             continue
-        fact = facts.get(symbol)
+        fact = facts.get(_declaration_source_symbol(declaration))
         if fact is None:
             raise SVXInheritanceError(
                 f"SV declaration {symbol} was not found in scanned sources"
@@ -778,7 +1057,7 @@ def validate_sv_declarations(
                 parent_symbol = direct_parent.get("symbol")
                 if isinstance(parent_symbol, str):
                     expected = parent_symbol.rsplit("::", 1)[-1]
-                    if fact.direct_base not in {expected, parent_symbol}:
+                    if fact.direct_base not in {expected, parent_symbol, _declaration_source_symbol(direct_parent)}:
                         raise SVXInheritanceError(
                             f"SV declaration {symbol} expects direct base {expected}, "
                             f"but source extends {fact.direct_base or '<none>'}"
@@ -848,6 +1127,8 @@ def _declared_sv_type(value: object, handle: object = None) -> str | None:
 def _declared_class_reference(declaration) -> str:
     from .inheritance import _sv_specialization_value
     reference = declaration["symbol"]
+    if _unit_scope(_declaration_source_symbol(declaration)) is not None:
+        reference = reference.removeprefix('$unit::')
     specialization = declaration.get("specialization")
     if isinstance(specialization, dict):
         arguments = [(_declared_sv_type(argument.get("type")) if argument["kind"] == "type"
@@ -864,7 +1145,11 @@ def _canonical_sv_handle_type(actual) -> str:
     if actual.isVirtualInterface:
         return "virtual " + str(actual)
     spelling = str(actual)
-    return (actual.lexicalPath + spelling[len(actual.name):]
+    selector = _semantic_class_selector(actual) if actual.isClass else actual.lexicalPath
+    unit = _unit_scope(selector)
+    instance = _instance_scope(selector)
+    native = '$unit::' + unit[1] if unit is not None else instance[1] if instance is not None else selector
+    return (native + spelling[len(actual.name):]
             if spelling.startswith(actual.name) else spelling)
 
 
@@ -877,11 +1162,13 @@ def _source_handle_metadata(actual, *, where, collections=False):
     if actual.isClass:
         if actual.genericClass is not None:
             if original.kind.name == "TypeAlias":
-                return {"kind": "sv_class", "sv_type": original.lexicalPath,
-                        "target_type_name": "sv://" + original.lexicalPath.replace("::", "/")}
+                selector = _semantic_class_selector(original)
+                unit = _unit_scope(selector)
+                return {"kind": "sv_class", "sv_type": '$unit::' + unit[1] if unit is not None else selector,
+                        "target_type_name": _source_class_id(selector)}
             raise SVXInheritanceError(f"{where} requires explicit closed class-handle target metadata")
         return {"kind": "sv_class", "sv_type": _canonical_sv_handle_type(actual),
-                "target_type_name": "sv://" + actual.lexicalPath.replace("::", "/")}
+                "target_type_name": _source_class_id(_semantic_class_selector(actual))}
     if actual.isVirtualInterface:
         interface = actual.iface.body.definition.name
         modport = actual.modport.name if actual.modport is not None else "full"
@@ -896,39 +1183,49 @@ def _source_handle_metadata(actual, *, where, collections=False):
 def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compilation_unit=False,
                                proxy_context=()) -> None:
     """Canonicalize all resolvable endpoint types together, not field by field."""
-    from pyslang import SourceManager
     from pyslang.ast import Compilation
 
     syntax = _pyslang()
     declarations = tuple(declarations)
+    def member_handles(member):
+        if not isinstance(member, dict):
+            return
+        for item in (member, *member.get('parameters', [])):
+            handle = item.get('handle')
+            if isinstance(handle, dict):
+                yield handle
+                for operation in handle.get('operations', []):
+                    yield from member_handles(operation.get('method'))
+        if isinstance(member.get('return_handle'), dict):
+            yield member['return_handle']
+
+    def declared_handles(declaration):
+        for base in declaration.get('base_lineage', []):
+            yield from declared_handles(base)
+        for member in (*declaration.get('fields', []), declaration.get('constructor'), *declaration.get('methods', [])):
+            yield from member_handles(member)
+
+    if not any(True for declaration in declarations for _ in declared_handles(declaration)):
+        return
     proxy_context = tuple(proxy_context) or _python_proxy_context(declarations)
     compilation = Compilation()
-    manager = SourceManager()
+    manager = analysis_source_manager()
     occupied = set()
     paths = tuple(paths)
     facts = scan_sv_sources(paths, allow_no_packages=True, parse_options=parse_options,
                             compilation_unit=compilation_unit, proxy_context=proxy_context)
-    for path, tree in _parse_sources(syntax, paths, manager, parse_options=parse_options,
-                                     compilation_unit=compilation_unit, proxy_context=proxy_context):
+    source_units = {}
+    for unit_index, (path, tree) in enumerate(_parse_sources(syntax, paths, manager, parse_options=parse_options,
+                                     compilation_unit=compilation_unit, proxy_context=proxy_context)):
+        source_units[unit_index] = paths if compilation_unit and unit_index == 0 else (path,)
         compilation.addSyntaxTree(tree)
         for node in (tree.root, *getattr(tree.root, "members", ())):
             name = str(getattr(getattr(node, "header", None), "name", "")).strip()
             if name:
                 occupied.add(name)
 
-    def member_handles(member):
-        if not isinstance(member, dict):
-            return
-        for item in (member, *member.get("parameters", [])):
-            handle = item.get("handle")
-            if isinstance(handle, dict):
-                yield handle
-                for operation in handle.get("operations", []):
-                    yield from member_handles(operation.get("method"))
-        if isinstance(member.get("return_handle"), dict):
-            yield member["return_handle"]
-
     probes = []
+    unit_probes = {}
     def visit(declaration):
         for base in declaration.get("base_lineage", []):
             visit(base)
@@ -942,28 +1239,35 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
             package += "_"
         occupied.add(package)
         symbol = declaration.get("symbol")
-        source_known = declaration.get("language") == "sv" and symbol in facts
-        lines = [f"package {package};"]
-        if source_known:
+        source_known = declaration.get("language") == "sv" and _declaration_source_symbol(declaration) in facts
+        unit = _unit_scope(_declaration_source_symbol(declaration)) if source_known else None
+        lines = [] if unit is not None else [f"package {package};"]
+        if source_known and unit is None:
             lines.append(f"import {symbol.split('::')[0]}::*;")
         extends = " extends " + _declared_class_reference(declaration) if source_known else ""
-        lines.append(f"virtual class Probe{extends};")
+        probe_name = package if unit is not None else 'Probe'
+        lines.append(f"virtual class {probe_name}{extends};")
         for index, handle in enumerate(handles):
             lines.extend([f"function void check_{index}(input {handle['sv_type']} value);", "endfunction"])
-        lines.extend(["endclass", "endpackage"])
+        lines.append('endclass')
+        if unit is not None:
+            unit_probes.setdefault(unit[0], []).append('\n'.join(lines))
+            probes.append((f'$unit[{unit[0]}]::{probe_name}', handles))
+            return
+        lines.append('endpackage')
         tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", manager,
                                           **({} if parse_options is None else {"options": parse_options}))
         if tree.diagnostics:
             raise SVXInheritanceError(f"invalid SV handle type expression in {symbol}")
         compilation.addSyntaxTree(tree)
-        probes.append((package, handles))
+        probes.append((package + '::Probe', handles))
     for declaration in declarations:
         visit(declaration)
-    compilation.getRoot()
+    compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context)
     updates = []
     targets = {}
     for package, handles in probes:
-        probe = compilation.getPackage(package).lookupName("Probe")
+        probe = _lookup_sv_symbol(compilation, package)
         for index, handle in enumerate(handles):
             actual = probe.lookupName(f"check_{index}").arguments[0].type.canonicalType
             if actual.isError:
@@ -990,23 +1294,26 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
 def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compilation_unit=False,
                               proxy_context=()) -> dict[tuple[int, str], dict[str, str]]:
     """Resolve native handle leaves, including collection fields and aliases."""
-    from pyslang import SourceManager
     from pyslang.ast import Compilation
 
     syntax = _pyslang()
     declarations = tuple(declarations)
+    paths = tuple(paths)
     proxy_context = tuple(proxy_context) or _python_proxy_context(declarations)
     compilation = Compilation()
-    manager = SourceManager()
+    manager = analysis_source_manager()
     occupied = set()
-    for path, tree in _parse_sources(syntax, paths, manager, parse_options=parse_options,
-                                     compilation_unit=compilation_unit, proxy_context=proxy_context):
+    source_units = {}
+    for unit_index, (path, tree) in enumerate(_parse_sources(syntax, paths, manager, parse_options=parse_options,
+                                     compilation_unit=compilation_unit, proxy_context=proxy_context)):
+        source_units[unit_index] = paths if compilation_unit and unit_index == 0 else (path,)
         compilation.addSyntaxTree(tree)
         for node in (tree.root, *getattr(tree.root, "members", ())):
             name = str(getattr(getattr(node, "header", None), "name", "")).strip()
             if name:
                 occupied.add(name)
     probes = []
+    unit_probes = {}
     for declaration in declarations:
         symbol = declaration["symbol"]
         reference = _declared_class_reference(declaration)
@@ -1014,23 +1321,31 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
         while package in occupied:
             package += "_"
         occupied.add(package)
-        lines = [f"package {package};", f"import {symbol.split('::')[0]}::*;",
-                 f"virtual class Probe extends {reference};"]
+        unit = _unit_scope(_declaration_source_symbol(declaration))
+        probe_name = package if unit is not None else 'Probe'
+        lines = ([f'virtual class {probe_name} extends {reference};'] if unit is not None else
+                 [f"package {package};", f"import {symbol.split('::')[0]}::*;",
+                  f"virtual class Probe extends {reference};"])
         for index, field in enumerate(declaration.get("fields", [])):
             handle = field.get("handle")
             if isinstance(handle, dict):
                 lines.extend([f"function void check_{index}(input {handle['sv_type']} value);", "endfunction"])
-        lines.extend(["endclass", "endpackage"])
+        lines.append('endclass')
+        if unit is not None:
+            unit_probes.setdefault(unit[0], []).append('\n'.join(lines))
+            probes.append((declaration, f'$unit[{unit[0]}]::{probe_name}'))
+            continue
+        lines.append('endpackage')
         tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", manager,
                                           **({} if parse_options is None else {"options": parse_options}))
         if tree.diagnostics:
             raise SVXInheritanceError(f"SV declaration {symbol} has an invalid field handle type expression")
         compilation.addSyntaxTree(tree)
-        probes.append((declaration, package))
-    compilation.getRoot()
+        probes.append((declaration, package + '::Probe'))
+    compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context)
     result = {}
     for declaration, package in probes:
-        probe = compilation.getPackage(package).lookupName("Probe")
+        probe = _lookup_sv_symbol(compilation, package)
         source = probe.baseClass
         for index, field in enumerate(declaration.get("fields", [])):
             name = field["name"]
@@ -1075,8 +1390,8 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
                            proxy_context=()) -> None:
     """Compare language types without inferring or replacing SvTypes codecs."""
 
+    scope_probes = {}
     from pyslang.ast import Compilation, MethodFlags
-    from pyslang import SourceManager
     from .inheritance import (
         _sv_specialization_value, _type_binding, _sv_collection_typedef,
         _handle_binding, _handle_adapter_name, _sv_native_handle_collection_typedefs,
@@ -1084,16 +1399,20 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
 
     syntax = _pyslang()
     compilation = Compilation()
-    source_manager = SourceManager()
+    source_manager = analysis_source_manager()
     occupied = {symbol.split("::")[0] for symbol in facts}
-    for path, tree in _parse_sources(syntax, paths, source_manager, parse_options=parse_options,
-                                     compilation_unit=compilation_unit, proxy_context=proxy_context):
+    paths = tuple(paths)
+    source_units = {}
+    for unit_index, (path, tree) in enumerate(_parse_sources(syntax, paths, source_manager, parse_options=parse_options,
+                                     compilation_unit=compilation_unit, proxy_context=proxy_context)):
+        source_units[unit_index] = paths if compilation_unit and unit_index == 0 else (path,)
         compilation.addSyntaxTree(tree)
         for node in (tree.root, *getattr(tree.root, "members", ())):
             name = str(getattr(getattr(node, "header", None), "name", "")).strip()
             if name:
                 occupied.add(name)
     probes = []
+    unit_probes = {}
     for declaration in declarations:
         symbol = declaration.get("symbol")
         if not isinstance(symbol, str):
@@ -1146,7 +1465,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
         methods = declaration.get("methods", [])
         if not checks and not methods and not isinstance(constructor, dict):
             continue
-        reference = symbol
+        reference = symbol.removeprefix('$unit::') if _unit_scope(_declaration_source_symbol(declaration)) is not None else symbol
         specialization = declaration.get("specialization")
         if isinstance(specialization, dict):
             arguments = []
@@ -1163,23 +1482,58 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
         while package in occupied:
             package += "_"
         occupied.add(package)
-        lines = [f"package {package};", f"import {symbol.split('::')[0]}::*;",
-                 f"virtual class Probe extends {reference};"]
+        unit = _unit_scope(_declaration_source_symbol(declaration))
+        instance = _instance_scope(_declaration_source_symbol(declaration))
+        container = (declaration.get('source_scope') or {}).get('container', 'module')
+        local_instance = False
+        if instance is not None:
+            from .sv_instance_scan import active_instance_analysis
+            from .source_scopes import lookup_native_scope
+            analysis = active_instance_analysis(paths, parse_options, compilation_unit)
+            native = lookup_native_scope(analysis.compilation, instance[0]) if analysis is not None else None
+            local_instance = (analysis is not None
+                              and (native.kind.name == 'GenerateBlock'
+                                   or container == 'program'
+                                   or _has_instance_named_values(declaration, getattr(native, 'body', native))))
+        probe_name = package if unit is not None else 'Probe'
+        lines = ([f'virtual class Probe extends {reference};'] if local_instance else
+                 [f'{container} {package} #(parameter type SVXNativeType);',
+                  'virtual class Probe extends SVXNativeType;'] if instance is not None else
+                 [f'virtual class {probe_name} extends {reference};'] if unit is not None else
+                 [f"package {package};", f"import {symbol.split('::')[0]}::*;",
+                  f"virtual class Probe extends {reference};"])
         lines.extend(value_typedefs.values())
         for index, (_, _, argument_index, expected, _) in enumerate(checks):
             signature = (f"function {expected} check_{index}();" if argument_index is None
                          else f"function void check_{index}(input {expected} value);")
             lines.extend((signature, "endfunction"))
-        lines.extend(("endclass", "endpackage"))
+        lines.append('endclass')
+        if local_instance:
+            scope_probes.setdefault(instance[0], []).append({'name': package, 'text': '\n'.join(lines)})
+            probes.append((symbol, f'$instance[{instance[0]}.{package}]::Probe', checks, constructor, methods))
+            continue
+        if unit is not None:
+            unit_probes.setdefault(unit[0], []).append('\n'.join(lines))
+            probes.append((symbol, f'$unit[{unit[0]}]::{probe_name}', checks, constructor, methods))
+            continue
+        if instance is not None:
+            lines.extend([f'end{container}',
+                          f'bind {instance[0]} {package} #(.SVXNativeType({reference})) {package}();'])
+        else:
+            lines.append('endpackage')
         tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", source_manager,
                                           **({} if parse_options is None else {"options": parse_options}))
         if tree.diagnostics:
             raise SVXInheritanceError(f"SV declaration {symbol} has an invalid signature type expression")
         compilation.addSyntaxTree(tree)
-        probes.append((symbol, package, checks, constructor, methods))
-    compilation.getRoot()
+        probes.append((symbol, (f'$instance[{instance[0]}.{package}]::Probe' if instance is not None
+                                else package + '::Probe'), checks, constructor, methods))
+    compilation = _compile_owner_probes(compilation, unit_probes, source_manager, parse_options, source_units,
+                                         proxy_context, scope_probes)
     for symbol, package, checks, constructor, methods in probes:
-        probe = compilation.getPackage(package).lookupName("Probe")
+        probe = _lookup_sv_symbol(compilation, package)
+        if probe is None:
+            raise SVXInheritanceError(f'cannot bind SV signature validation to the original owner of {symbol}')
         source = probe.baseClass
         if source is None:
             raise SVXInheritanceError(f"cannot resolve SV class {symbol} in supplied sources")

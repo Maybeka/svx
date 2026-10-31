@@ -21,6 +21,10 @@ from ._constructor_continuation import ConstructorContinuations
 from ._inheritance_diagnostics import inheritance_boundary
 from ._svtypes_contract import SVTYPES_REQUIRED_CAPABILITIES, require_type_spec_api
 from .discovery_provenance import DiscoveryProvenance, discovery_marker, validate_discovery_provenance
+from .value_exports import ConstantExport, ValueExport, parse_constant_exports, parse_value_exports, value_modules, with_value_types, merge_value_sources, native_value_name, value_key
+from .package_exports import (PackageCallable, callable_owners, parse_package_callables,
+                              merge_callable_sources, emit_sv_package_callables)
+from .owner_records import _local_call_records
 
 
 SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v2"
@@ -179,6 +183,11 @@ class ForeignClass:
     # Root-to-direct-parent context for this generation target.  Its members
     # are descriptions only; they never independently request code emission.
     base_lineage: tuple["ForeignClass", ...] = ()
+    source_scope_json: str | None = dataclass_field(default=None, kw_only=True)
+
+    @property
+    def source_scope(self):
+        return json.loads(self.source_scope_json) if self.source_scope_json else None
 
     @property
     def name(self) -> str:
@@ -204,6 +213,9 @@ class Manifest:
     required_runtime_capabilities: tuple[str, ...]
     classes: tuple[ForeignClass, ...]
     discovery_provenance: DiscoveryProvenance | None = None
+    value_types: tuple[ValueExport, ...] = ()
+    constants: tuple[ConstantExport, ...] = ()
+    callables: tuple[PackageCallable, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -844,6 +856,7 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
         "constructor",
         "specialization",
         "fields",
+        "source_scope",
     }
     if not lineage_member:
         allowed.add("base_lineage")
@@ -858,7 +871,36 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
     if match.group(1) != ("sv" if language == "sv" else "py"):
         raise _error(f"{where}.canonical_id", "scheme must match language")
     symbol = _required_string(raw, "symbol", where)
-    _validate_symbol(language, symbol, f"{where}.symbol")
+    scope = raw.get('source_scope')
+    if isinstance(scope, dict) and scope.get('kind') == 'instance':
+        from .source_scopes import instance_class_id, instance_path_components
+        if (language != 'sv' or not {'kind', 'path'} <= set(scope)
+                or set(scope) - {'kind', 'path', 'container'}
+                or not isinstance(scope.get('container', 'module'), str)
+                or scope.get('container', 'module') not in {'module', 'interface', 'program'}):
+            raise _error(f'{where}.source_scope', 'must identify an SV instance with kind, path and optional native container')
+        scope = {**scope, 'container': scope.get('container', 'module')}
+        instance_path_components(scope['path'])
+        if any(not _IDENT.fullmatch(part) for part in symbol.split('::')):
+            raise _error(f'{where}.symbol', 'an instance-owned class must retain its owner-local class name')
+        expected = instance_class_id(scope['path'], symbol)
+        if canonical_id != expected and not (raw.get('specialization') is not None
+                                             and canonical_id.startswith(expected + '/specialization/')):
+            raise _error(f'{where}.canonical_id', f'must be {expected!r} for this instance owner')
+    elif scope is not None:
+        if (language != 'sv' or not isinstance(scope, dict)
+                or set(scope) != {'kind', 'index'} or scope['kind'] != 'compilation_unit'
+                or type(scope['index']) is not int or scope['index'] < 0):
+            raise _error(f'{where}.source_scope', 'must identify a nonnegative compilation_unit index for an SV class')
+        if not symbol.startswith('$unit::'):
+            raise _error(f'{where}.symbol', 'a compilation-unit class must retain its native $unit:: symbol')
+        _validate_symbol(language, 'unit::' + symbol[len('$unit::'):], f'{where}.symbol')
+        expected = 'sv://unit/' + str(scope['index']) + '/' + symbol[len('$unit::'):].replace('::', '/')
+        if canonical_id != expected and not (raw.get('specialization') is not None
+                                             and canonical_id.startswith(expected + '/specialization/')):
+            raise _error(f'{where}.canonical_id', f'must be {expected!r} for this compilation-unit owner')
+    else:
+        _validate_symbol(language, symbol, f"{where}.symbol")
     specialization_raw = raw.get("specialization")
     specialization = (
         _parse_specialization(specialization_raw, f"{where}.specialization", language)
@@ -907,6 +949,7 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
         specialization,
         fields,
         base_lineage,
+        source_scope_json=json.dumps(scope, sort_keys=True) if scope is not None else None,
     )
 
 
@@ -921,6 +964,9 @@ def parse_manifest(data: Any, *, source_path: Path | None = None) -> Manifest:
             "required_runtime_capabilities",
             "classes",
             "discovery_provenance",
+            "value_types",
+            "constants",
+            "callables",
         },
         "root",
     )
@@ -946,9 +992,63 @@ def parse_manifest(data: Any, *, source_path: Path | None = None) -> Manifest:
     if len(capabilities) != len(set(capabilities)):
         raise _error("root.required_runtime_capabilities", "contains duplicates")
     raw_classes = raw.get("classes")
-    if not isinstance(raw_classes, list) or not raw_classes:
-        raise _error("root.classes", "must be a non-empty list")
-    classes = tuple(_parse_class(item, f"root.classes[{index}]") for index, item in enumerate(raw_classes))
+    value_types = parse_value_exports(raw.get('value_types', []))
+    with value_modules(value_types):
+        constants = parse_constant_exports(raw.get('constants', []))
+        callables = parse_package_callables(raw.get('callables', []))
+        if not isinstance(raw_classes, list) or not raw_classes and not (value_types or constants or callables):
+            raise _error("root.classes", "must be a non-empty list")
+        classes = tuple(_parse_class(item, f"root.classes[{index}]") for index, item in enumerate(raw_classes))
+        def check_unit_schema(schema, allowed):
+            if isinstance(schema, dict):
+                module, name = schema.get('module', ''), schema.get('type_name', '')
+                nominal = f"{module}.{schema.get('qualname', schema.get('symbol', ''))}" if module else name
+                if ((str(module).startswith('svx_mirror_instance.') or str(name).startswith('svx_mirror_instance.'))
+                        and nominal not in allowed):
+                    raise _error('root', 'instance named values require matching owner-local call records; cross-owner references remain unfinished')
+                if ((str(module).startswith('svx_mirror_unit.') or str(name).startswith('svx_mirror_unit.'))
+                        and nominal not in allowed):
+                    raise _error('root', '$unit named values require matching owner-local call records; cross-unit/package references are not supported here')
+                for item in schema.values():
+                    check_unit_schema(item, allowed)
+            elif isinstance(schema, list):
+                for item in schema:
+                    check_unit_schema(item, allowed)
+        allowed_by_scope = {}
+        for value in value_types:
+            scope = value.source_scope
+            if (scope is not None
+                    and value.as_dict()['schema']['type_name'] == value.module + '.' + value.qualname):
+                allowed_by_scope.setdefault(json.dumps(scope, sort_keys=True), set()).add(value.module + '.' + value.qualname)
+
+        def method_bindings(method):
+            yield from (parameter.type_binding for parameter in method.parameters)
+            if method.return_type:
+                yield method.return_type
+
+        def check_bindings(bindings, scope):
+            allowed = allowed_by_scope.get(json.dumps(scope, sort_keys=True), set()) if scope is not None else set()
+            for binding in bindings:
+                identity = (json.loads(binding.svtypes_identity_json) if binding.svtypes_identity_json is not None
+                            else {'module': binding.python_module, 'symbol': binding.python_symbol})
+                check_unit_schema(identity, allowed)
+                if allowed:
+                    import svtypes
+                    check_unit_schema(svtypes.schema_descriptor(_codec_from_spec(binding.runtime_spec())).to_dict(), allowed)
+
+        for owner in (candidate for cls in classes for candidate in (*cls.base_lineage, cls)):
+            bindings = [field.type_binding for field in owner.fields]
+            bindings.extend(parameter.type_binding for parameter in (owner.constructor.parameters if owner.constructor else ()))
+            for method in owner.methods:
+                bindings.extend(method_bindings(method))
+            check_bindings(bindings, owner.source_scope)
+        for item in callables:
+            check_bindings(method_bindings(item.method), None)
+    exported_symbols = [item.key for item in (*value_types, *constants)] + [item.symbol for item in callables]
+    if (len(exported_symbols) != len(set(exported_symbols)) or
+            set(exported_symbols) & {value_key(item.symbol, item.source_scope)
+                                     for item in classes if item.language == 'sv'}):
+        raise _error('root', 'contains conflicting class, value type or constant export names')
     required_capabilities = set(REQUIRED_RUNTIME_CAPABILITIES)
     if any(
         candidate.fields
@@ -999,6 +1099,9 @@ def parse_manifest(data: Any, *, source_path: Path | None = None) -> Manifest:
         tuple(capabilities),
         classes,
         provenance,
+        value_types,
+        constants,
+        callables,
     )
     _manifest_lineage_contexts(manifest)
     if provenance is not None:
@@ -1232,6 +1335,10 @@ def _all_manifest_classes(manifest: Manifest) -> tuple[ForeignClass, ...]:
     return tuple(resolved[key] for key in sorted(resolved))
 
 
+def _transport_owners(manifest: Manifest) -> tuple[ForeignClass, ...]:
+    return (*_all_manifest_classes(manifest), *callable_owners(manifest))
+
+
 def migrate_manifest(data: Any) -> dict[str, Any]:
     """Upgrade the executable v1 type syntax to the declarative v2 schema."""
 
@@ -1283,6 +1390,15 @@ def load_manifest(path: Path) -> Manifest:
 
 
 def _python_module_for(cls: ForeignClass) -> str:
+    from .source_scopes import source_class_parts
+    if len(source_class_parts(cls.symbol, cls.source_scope)) > 1:
+        from .scoped_exports import scoped_implementation_module
+        return scoped_implementation_module(cls.symbol, cls.source_scope)
+    if cls.source_scope is not None:
+        if cls.source_scope['kind'] == 'instance':
+            from .source_scopes import instance_public_module
+            return instance_public_module(cls.source_scope['path'])
+        return 'svx_mirror_unit.unit_' + str(cls.source_scope['index'])
     module = "svx_mirror." + ".".join(cls.symbol.split("::")[:-1])
     return module
 
@@ -1302,7 +1418,11 @@ def _public_python_type_for(cls: ForeignClass) -> str | None:
 
     if cls.language != "sv":
         return None
-    return f"{_python_module_for(cls)}.{cls.generated_name}"
+    if cls.source_scope is not None:
+        from .scoped_exports import scoped_public_module
+        from .source_scopes import source_class_parts
+        return scoped_public_module(cls.symbol, cls.source_scope) + '.' + '.'.join(source_class_parts(cls.symbol, cls.source_scope))
+    return 'svx_mirror.' + cls.symbol.replace('::', '.')
 
 
 def _public_sv_type_for(cls: ForeignClass) -> str | None:
@@ -1323,10 +1443,19 @@ def _python_adapter_type_for(cls: ForeignClass) -> str | None:
 
 def _validate_generated_names(classes: tuple[ForeignClass, ...]) -> None:
     seen: dict[tuple[str, str, str], ForeignClass] = {}
+    instance_modules = {}
     for cls in classes:
         if cls.language == "sv":
             namespace = _python_module_for(cls)
             target = "Python"
+            if cls.source_scope is not None and cls.source_scope['kind'] == 'instance':
+                from .source_scopes import instance_public_module
+                parts = instance_public_module(cls.source_scope['path']).split('.')
+                for depth in range(1, len(parts) + 1):
+                    prefix = '.'.join(parts[:depth])
+                    previous_module = instance_modules.setdefault(prefix.casefold(), prefix)
+                    if previous_module != prefix:
+                        raise _error('root.classes', f'instance Python module paths collide on case-insensitive filesystems: {previous_module!r}, {prefix!r}')
         else:
             namespace = _sv_package_for(cls)
             target = "SystemVerilog"
@@ -1970,6 +2099,9 @@ def _emit_deferred_python_footer(deferred: dict[str, str]) -> list[str]:
 
 def _emit_source_python_artifacts(manifest: Manifest) -> dict[PurePosixPath, str]:
     """Assemble both logical root families in shared source-managed modules."""
+    if all(source.language == 'sv' for source in manifest.classes) and not any(
+            plan.steps for plan in projection_plans(manifest)):
+        return emit_python_mirrors(manifest)
     emitted = _emit_sv_root_artifacts(manifest, source_managed_layout=True,
                                       include_python_roots=True)
     emitted.update(_emit_python_vif_views(manifest))
@@ -2126,6 +2258,7 @@ def _vif_view_class_name(binding: HandleBinding) -> str:
     return _vif_module_parts(binding)[-1][:1].upper() + _vif_module_parts(binding)[-1][1:]
 
 
+@with_value_types
 def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = True,
                         include_sv_ancestor_members: bool = True,
                         separate_package_layout: bool = True,
@@ -2219,7 +2352,7 @@ def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = Tr
             )
             if step.kind == "sv_mirror":
                 active_mirror = source
-                module = "svx_mirror." + "_".join(source.symbol.split("::")[:-1])
+                module = _python_module_for(source)
                 projection_modules.setdefault(module, []).append(source)
             elif step.kind == "sv_proxy":
                 proxy_sources.append(source)
@@ -2510,7 +2643,28 @@ def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = Tr
         emitted[path] = "\n".join(lines).rstrip() + "\n"
 
     emitted.update(_emit_python_vif_views(manifest))
-    return emitted
+    emitted = merge_value_sources(manifest, emitted, '\n'.join(_generated_python_header(
+        manifest, role='public SvTypes value declarations', targets=())) + '\n')
+    from .scoped_exports import merge_scoped_class_sources
+    emitted = merge_scoped_class_sources(manifest, emitted)
+    from .value_exports import publish_scoped_values
+    emitted = publish_scoped_values(manifest, emitted)
+    if any(cls.language == 'sv' and cls.source_scope is not None and cls.source_scope['kind'] == 'compilation_unit'
+           for cls in _all_manifest_classes(manifest)):
+        emitted.setdefault(PurePosixPath('svx_mirror_unit/__init__.py'),
+                           _generated_python_init(manifest, 'compilation-unit mirror package'))
+    for cls in _all_manifest_classes(manifest):
+        if cls.language != 'sv' or cls.source_scope is None or cls.source_scope['kind'] != 'instance':
+            continue
+        from .source_scopes import instance_public_module
+        parts = instance_public_module(cls.source_scope['path']).split('.')
+        path = PurePosixPath(*parts).with_suffix('.py')
+        if path in emitted:
+            emitted[PurePosixPath(*parts, '__init__.py')] = emitted.pop(path)
+        for depth in range(1, len(parts) + 1):
+            emitted.setdefault(PurePosixPath(*parts[:depth], '__init__.py'),
+                               _generated_python_init(manifest, 'instance-bound mirror package'))
+    return merge_callable_sources(manifest, emitted)
 
 
 def _emit_python_vif_views(manifest: Manifest) -> dict[PurePosixPath, str]:
@@ -2602,7 +2756,7 @@ def _sv_value_type(binding: TypeBinding, *, qualified: bool = True) -> str:
     declaration = _sv_collection_typedef(binding)
     if declaration is None:
         return binding.sv
-    return ("svx_call_records_pkg::" if qualified else "") + declaration[0]
+    return ("svx_call_records_pkg::" if qualified and not _local_call_records.get() else "") + declaration[0]
 
 
 def _sv_value_package_imports(classes) -> list[str]:
@@ -2675,7 +2829,7 @@ def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
             operations=tuple(operations[key] for key in sorted(operations)),
         )
 
-    for cls in _all_manifest_classes(manifest):
+    for cls in _transport_owners(manifest):
         for field in cls.fields:
             if field.handle is not None:
                 add(field.handle)
@@ -2968,17 +3122,20 @@ def _sv_record_type(
         )
     def record_codec(binding):
         codec = _codec_from_spec(binding.runtime_spec())
-        if isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.AssocArray)):
-            # Transport envelopes do not define user coverage of handle values.
-            try:
-                _remote_ref_target(binding, 'generated call record')
-            except SVXInheritanceError:
-                pass
-            else:
-                identity = binding.runtime_spec().get('svtypes')
-                if identity is not None:
-                    declaration = svtypes.type_spec_from_identity(identity, location='generated call record')
-                    codec = declaration(cov=False)
+        options = None
+        if isinstance(codec, svtypes.Enum):
+            # Native class-owned enum literals are not visible in record scope.
+            options = {'cov': False, 'plusarg': False}
+        elif isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.Queue, svtypes.AssocArray)):
+            # Transport collections are not user coverage hosts.
+            options = {'cov': False}
+        if options is not None:
+            identity = binding.runtime_spec().get('svtypes')
+            if identity is not None:
+                declaration = svtypes.type_spec_from_identity(identity, location='generated call record')
+                codec = declaration(**options)
+                if svtypes.encoding_descriptor(codec).to_dict() != dict(binding.encoding_descriptor):
+                    raise SVXInheritanceError('disabling transport extras must not change encoding')
         return codec
 
     schema = schema_type(
@@ -3008,9 +3165,10 @@ def _validate_call_record_members(value_type: type, expected: tuple[str, ...], o
         )
 
 
+@with_value_types(codegen=True)
 def _manifest_sv_record_types(manifest: Manifest) -> list[type]:
     records: list[type] = []
-    for cls in _all_manifest_classes(manifest):
+    for cls in _transport_owners(manifest):
         if cls.constructor is not None and cls.constructor.parameters:
             records.append(
                 _sv_record_type(
@@ -3060,7 +3218,7 @@ def _manifest_sv_record_types(manifest: Manifest) -> list[type]:
 def _manifest_sv_collection_typedefs(manifest: Manifest) -> list[str]:
     bindings = []
     methods = []
-    for cls in _all_manifest_classes(manifest):
+    for cls in _transport_owners(manifest):
         if cls.constructor is not None:
             bindings.extend(parameter.type_binding for parameter in cls.constructor.parameters
                             if parameter.handle is None)
@@ -3339,7 +3497,9 @@ def _emit_sv_value_field_dispatch_cases(cls: ForeignClass, field: Field) -> list
         return _emit_sv_handle_field_dispatch_cases(cls, field)
     field_id = f"{cls.canonical_id}.{field.name}"
     import svtypes
-    packer = svtypes.sv_packer_expression(_codec_from_spec(field.type_binding.runtime_spec()))
+    codec = _codec_from_spec(field.type_binding.runtime_spec())
+    packer = svtypes.sv_packer_expression(codec)
+    struct_value = isinstance(codec, svtypes.SvStruct)
     lines = [
         f"        {json.dumps(field_id + '@svx_field_read')}: begin",
         "          if (bytes.size() != 0) begin",
@@ -3354,10 +3514,12 @@ def _emit_sv_value_field_dispatch_cases(cls: ForeignClass, field: Field) -> list
         "          end",
         "        end",
         f"        {json.dumps(field_id + '@svx_field_set')}: begin",
+        *([f'          {svtypes.sv_declaration(codec, "field_wire")};'] if struct_value else []),
         "          int field_offset;",
         "          field_offset = 0;",
-        f"          {packer}::unpack(this.{field.name}, bytes, field_offset);",
+        f"          {packer}::unpack({'field_wire' if struct_value else 'this.' + field.name}, bytes, field_offset);",
         f'          svx_require_unpacked_all("{field_id}", "field write", "field value", field_offset, bytes.size());',
+        *([f'          this.{field.name} = field_wire;'] if struct_value else []),
         "          bytes.delete();",
         "          ok = 1;",
         '          error = "";',
@@ -3753,9 +3915,11 @@ def _emit_sv_deep_field_access_body(codec: Any, expression: str, field_id: str,
              f"    {packer}::pack({expression}, bytes);",
              *["    " + line.strip() for line in _emit_sv_field_operation_success()],
              "  end else if (operation.code == 1 && operation.has_payload) begin",
+             f'    {svtypes.sv_declaration(codec, "field_wire")};',
              "    field_offset = 0;",
-             f"    {packer}::unpack({expression}, operation.payload, field_offset);",
+             f"    {packer}::unpack(field_wire, operation.payload, field_offset);",
              f'    svx_require_unpacked_all("{field_id}", "field write", "field leaf", field_offset, operation.payload.size());',
+             f'    {expression} = field_wire;',
              *["    " + line.strip() for line in _emit_sv_field_operation_success()],
              "  end"]
     if isinstance(codec, (DynArray, Queue)):
@@ -4789,6 +4953,7 @@ def _emit_sv_static_gateway(
     instance_name: str | None = None,
     source_type: str | None = None,
     inherit_source: bool = True,
+    automatic_instance: bool = True,
 ) -> list[str]:
     """Emit a class-owned static dispatch gateway without allocating ``source``.
 
@@ -4852,7 +5017,7 @@ def _emit_sv_static_gateway(
             "    endfunction",
             f"  endclass : {dispatcher_name}",
             "",
-            f"  {dispatcher_name} {instance_name or source.generated_name + '_static_dispatcher'} = new();",
+            f"  {dispatcher_name} {instance_name or source.generated_name + '_static_dispatcher'}" + (" = new();" if automatic_instance else ";"),
         ]
     )
     return lines
@@ -4881,7 +5046,8 @@ def _sv_constructor_handle_arguments(parameters: tuple[Parameter, ...]) -> tuple
     return declarations, decode, ", ".join(arguments)
 
 
-def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, announce_receiver: bool = False) -> list[str]:
+def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, announce_receiver: bool = False,
+                                automatic_instance: bool = True) -> list[str]:
     """Factory used when Python creates the paired SV mirror/proxy object."""
 
     constructor = source.constructor
@@ -4946,7 +5112,7 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, annou
             f"    svx_inheritance_registry::register_factory({json.dumps(source.canonical_id)}, factory);",
             "  endfunction",
             "",
-            f"  {factory_name} {helper_name}_factory_instance = new();",
+            *([f"  {factory_name} {helper_name}_factory_instance = new();"] if automatic_instance else []),
         ]
     )
     return lines
@@ -4960,6 +5126,9 @@ def _projection_helper_package(source: ForeignClass, kind: str) -> str:
     """
 
     if kind == "mirror":
+        if len(source.symbol.split('::')) > 2:
+            from .scoped_exports import scoped_sv_package
+            return scoped_sv_package(source.symbol, 'mirror')
         stem = "_".join(source.symbol.split("::")[:-1])
         # Mirror packages are SVX implementation packages.  Include the
         # class name because two classes in one SV package can require source
@@ -5190,9 +5359,12 @@ def _emit_sv_implementation_factory(cls: ForeignClass) -> list[str]:
     ]
 
 
+@with_value_types(codegen=True)
 def emit_sv_mirrors(manifest: Manifest) -> str:
     """Emit target-scoped SV AMirror and Proxy projection helpers."""
 
+    if any(cls.source_scope is not None for cls in _all_manifest_classes(manifest)):
+        raise SVXInheritanceError('owner-local class bridges must be emitted in their original owner; use source integration')
     _require_executable_projection_plans(manifest)
     projected = _projected_class_ids(manifest)
     packages: dict[str, list[ForeignClass]] = {}
@@ -5205,11 +5377,12 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
 
     lines = _generated_sv_header(manifest)
     record_types = _manifest_sv_record_types(manifest)
-    if record_types:
+    has_call_package = bool(record_types or (manifest.classes or manifest.callables) and manifest.value_types)
+    if has_call_package:
         imported_packages = sorted(
             {
                 binding.sv.split("::", 1)[0]
-                for cls in _all_manifest_classes(manifest)
+                for cls in _transport_owners(manifest)
                 for binding in [
                     *(
                         parameter.type_binding
@@ -5227,6 +5400,8 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                 if "::" in binding.sv and binding.sv.split("::", 1)[0] != "svtypes_pkg"
             }
         )
+        imported_packages = sorted(set(imported_packages) | {value.symbol.split('::')[0] for value in manifest.value_types
+                                                           if value.source_scope is None})
         lines.extend(
             [
                 "",
@@ -5238,12 +5413,26 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             ]
         )
         lines.extend("  " + declaration for declaration in _manifest_sv_collection_typedefs(manifest))
+        for value in manifest.value_types:
+            if value.source_scope is not None:
+                continue
+            data = value.as_dict()
+            if data['schema']['type_name'] != value.module + '.' + value.qualname:
+                continue
+            if data['schema']['kind'] == 'enum':
+                lines.append(f'  typedef {value.symbol} {native_value_name(value.symbol)};')
+            elif data['schema']['kind'] == 'struct':
+                import svtypes
+                model = svtypes.type_spec_from_identity(data['svtypes'], location=value.symbol)
+                lines.extend(['', model.to_sv_obj(1)])
         for record_type in record_types:
             lines.extend(["", record_type.to_sv_obj(1)])
         lines.extend(["endpackage : svx_call_records_pkg", ""])
     external_handle_bindings = _manifest_handle_bindings(manifest)
     lines.extend(_emit_sv_external_handle_adapters(manifest))
-    record_import = ["  import svx_call_records_pkg::*;"] if record_types else []
+    lines.extend(emit_sv_package_callables(manifest, has_records=has_call_package,
+                                          has_handles=bool(external_handle_bindings)))
+    record_import = ["  import svx_call_records_pkg::*;"] if has_call_package else []
     external_handle_import = ["  import svx_external_handles_pkg::*;"] if external_handle_bindings else []
     for package, classes in sorted(packages.items()):
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
@@ -5346,7 +5535,11 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             or not any(method.is_static for method in source.methods)
         ):
             continue
-        package = "svx_static_" + "_".join(source.symbol.split("::")[:-1]) + "_" + source.generated_name + "_pkg"
+        if len(source.symbol.split('::')) > 2:
+            from .scoped_exports import scoped_sv_package
+            package = scoped_sv_package(source.symbol, 'static')
+        else:
+            package = "svx_static_" + "_".join(source.symbol.split("::")[:-1]) + "_" + source.generated_name + "_pkg"
         static_packages.setdefault(package, []).append(source)
     for package, sources in sorted(static_packages.items()):
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
@@ -5390,7 +5583,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
     lines.extend(
         _emit_sv_projection_helpers(
             manifest,
-            has_call_records=bool(record_types),
+            has_call_records=has_call_package,
             has_external_handles=bool(external_handle_bindings),
         )
     )
@@ -5405,6 +5598,7 @@ def _projection_stage_filename(position: str, canonical_id: str) -> str:
     return f"{position}_{stem}_{digest}.svh"
 
 
+@with_value_types(codegen=True)
 def emit_sv_mirror_stages(manifest: Manifest) -> dict[str, str]:
     """Split generated projection helpers at their required SV source anchors.
 
@@ -5481,6 +5675,7 @@ def emit_sv_mirror_stages(manifest: Manifest) -> dict[str, str]:
     return result
 
 
+@with_value_types
 def artifact_manifest(
     manifest: Manifest,
     python_sources: dict[PurePosixPath, str],
@@ -5539,7 +5734,7 @@ def artifact_manifest(
     bindings: dict[str, TypeBinding] = {}
     callables: list[dict[str, Any]] = []
     constructors: list[dict[str, Any]] = []
-    declarations = _all_manifest_classes(manifest)
+    declarations = _transport_owners(manifest)
     for cls in declarations:
         for field in cls.fields:
             bindings[field.type_binding.unified_type_name] = field.type_binding
@@ -6356,6 +6551,13 @@ def _decode_vif_view(value: Any) -> Any:
 
 
 def _encode_vif_view(value: Any) -> Any:
+    """Normalize public collection values and restricted handle views."""
+    import svtypes
+
+    if isinstance(value, svtypes.AssocArray):
+        value = dict(value.value)
+    elif isinstance(value, (svtypes.Array, svtypes.DynArray, svtypes.Queue)):
+        value = list(value.value)
     if isinstance(value, list):
         return [_encode_vif_view(item) for item in value]
     if isinstance(value, tuple):

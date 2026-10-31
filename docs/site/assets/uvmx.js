@@ -31,7 +31,7 @@ const pythonSteps = [
     title: "SV bridge 与实际 Python Test 绑定",
     description: "UVM wrapper 用标准 new(name, parent) 创建 Test bridge，再绑定用例元数据、构造 CallbackAdapter 接入对象。它复用 SVX 工厂，在 Python 初始化前绑定实际用户 Test；绑定完成后才返回组件，随后开始 phase。",
     label: "SV · wrapper.create_component", source: sources.factory,
-    code: "uvmx_test_bridge#(BASE) instance;\ninstance = new(name, parent);\ninstance.bind_python_test(\n  canonical_id, factory_name, this\n);\nreturn instance;\n\n// bind_python_test 内创建接入对象\ncallbacks = new(canonical_id);"
+    code: "uvmx_test_bridge#(BASE) test_component;\ntest_component = new(name, parent);\ntest_component.bind_python_test(\n  canonical_id, factory_name, this\n);\nreturn test_component;\n\n// bind_python_test 内创建接入对象\ncallbacks = new(canonical_id);"
   },
   {
     title: "UVM 驱动 phase，Python 执行验证意图",

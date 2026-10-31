@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Callable, Generic, Iterable, T
 from .errors import SVXInheritanceError
 from ._svtypes_contract import require_type_spec_api
 from .sv_source_options import _source_parse_options
+from .sv_instance_scan import with_instance_discovery
 from .inheritance import (
     EXTERNAL_FIELD_STORAGE_CAPABILITY,
     GENERATOR_ABI_VERSION,
@@ -845,6 +846,12 @@ def load_sv_declarations(path: Path) -> list[dict[str, Any]]:
     return classes
 
 
+from .sv_value_scan import SourceValues, with_value_discovery
+from .value_exports import with_value_types
+
+
+@with_value_discovery
+@with_instance_discovery
 def manifest_from_declarations(
     *,
     python_modules: Iterable[ModuleType] = (),
@@ -854,10 +861,49 @@ def manifest_from_declarations(
     sv_undefines: Iterable[str] = (),
     sv_compilation_unit: bool = False,
     sv_include_dirs: Iterable[Path] = (),
+    sv_class_targets: Iterable[str] = (),
+    sv_package_targets: Iterable[str] = (),
+    sv_recursive_packages: bool = False,
+    sv_exclude_classes: Iterable[str] = (),
+    sv_member_targets: Iterable[str] = (),
+    sv_exclude_members: Iterable[str] = (),
+    sv_type_targets: Iterable[str] = (),
+    sv_exclude_types: Iterable[str] = (),
+    sv_constant_targets: Iterable[str] = (),
+    sv_exclude_constants: Iterable[str] = (),
+    sv_callable_targets: Iterable[str] = (),
+    sv_exclude_callables: Iterable[str] = (),
 ) -> Manifest:
     """Normalize supported declaration front ends to the sole v2 manifest model."""
 
     sv_source_files = tuple(sv_source_files)
+    sv_class_targets = tuple(sv_class_targets)
+    sv_package_targets = tuple(sv_package_targets)
+    sv_exclude_classes = tuple(sv_exclude_classes)
+    sv_member_targets = tuple(sv_member_targets)
+    sv_exclude_members = tuple(sv_exclude_members)
+    sv_type_targets = tuple(sv_type_targets)
+    sv_exclude_types = tuple(sv_exclude_types)
+    sv_constant_targets = tuple(sv_constant_targets)
+    sv_exclude_constants = tuple(sv_exclude_constants)
+    sv_callable_targets = tuple(sv_callable_targets)
+    sv_exclude_callables = tuple(sv_exclude_callables)
+    selecting_sv = bool(sv_class_targets or sv_package_targets)
+    direct_selection = bool(selecting_sv or sv_type_targets or sv_constant_targets or sv_callable_targets)
+    if sv_exclude_callables and not (sv_package_targets or sv_callable_targets):
+        raise SVXInheritanceError('SV callable exclusions require package or callable selectors')
+    if sv_exclude_types and not direct_selection:
+        raise SVXInheritanceError('SV type exclusions require class, package, type or constant selectors')
+    if sv_exclude_constants and not (sv_package_targets or sv_constant_targets):
+        raise SVXInheritanceError('SV constant exclusions require package or constant selectors')
+    if (sv_member_targets or sv_exclude_members) and not selecting_sv:
+        raise SVXInheritanceError('SV member selection requires class or package selectors')
+    if (direct_selection or sv_recursive_packages or sv_exclude_classes) and not sv_source_files:
+        raise SVXInheritanceError('SV export selection requires SV source files or original build inputs')
+    if sv_recursive_packages and not sv_package_targets:
+        raise SVXInheritanceError('recursive SV package export requires a package selector')
+    if sv_exclude_classes and not selecting_sv:
+        raise SVXInheritanceError('SV class exclusions require class or package selectors')
     sv_undefines = tuple(sv_undefines) if not isinstance(sv_undefines, str) else sv_undefines
     sv_include_dirs = tuple(sv_include_dirs) if not isinstance(sv_include_dirs, (str, bytes, Path)) else sv_include_dirs
     if (sv_predefines or sv_undefines or sv_compilation_unit or sv_include_dirs) and not sv_source_files:
@@ -880,31 +926,91 @@ def manifest_from_declarations(
     sv_classes: list[dict[str, Any]] = []
     for path in sv_declaration_files:
         sv_classes.extend(load_sv_declarations(path))
+    if not classes and not sv_classes and not direct_selection:
+        details = []
+        for module in python_modules:
+            mirrors = sorted({value.__name__ for value in module.__dict__.values()
+                              if isinstance(value, type)
+                              and '__svx_sv_mirror__' in value.__dict__})
+            defining_modules = sorted({value.__module__ for value in module.__dict__.values()
+                                      if isinstance(value, type)
+                                      and '__svx_inheritance_class__' in value.__dict__
+                                      and value.__module__ != module.__name__})
+            if mirrors:
+                details.append(f'{module.__name__} contains Mirror stubs '
+                               f'({", ".join(mirrors)}); stubs provide context, not export targets')
+            if defining_modules:
+                details.append(f'{module.__name__} re-exports declarations; select their defining '
+                               f'--python-module: {", ".join(defining_modules)}')
+        raise SVXInheritanceError(
+            'no inheritance export targets discovered. '
+            + ('; '.join(details) + '. ' if details else '')
+            + 'Select a module defining @svx.inheritance_class() classes or provide '
+            '--sv-declarations; --sv-source supplies parsing context, not target selection.'
+        )
     sv_context = []
+    auto_values = (SourceValues(_source_value_annotations(python_modules), sv_exclude_types,
+                               sv_exclude_constants, sv_exclude_callables) if direct_selection else None)
     if sv_source_files:
-        source_facts = scan_sv_sources(sv_source_files, allow_no_packages=True,
+        if auto_values is not None and (sv_type_targets or sv_constant_targets or sv_callable_targets or sv_package_targets):
+            auto_values.select(sv_source_files, types=sv_type_targets, constants=sv_constant_targets,
+                               callables=sv_callable_targets, packages=sv_package_targets,
+                               recursive=sv_recursive_packages, parse_options=parse_options,
+                               compilation_unit=sv_compilation_unit)
+        class_analysis = bool(classes or sv_classes or selecting_sv or python_ancestors)
+        source_facts = (scan_sv_sources(sv_source_files, allow_no_packages=True,
                                        parse_options=parse_options, compilation_unit=sv_compilation_unit)
-        interface_facts = scan_sv_virtual_interfaces(sv_source_files, parse_options=parse_options,
+                        if class_analysis else {})
+        from .sv_instance_scan import needs_instance_analysis, prepare_instance_analysis
+        instance_patterns = (*sv_class_targets, *(class_id for item in python_ancestors.values()
+                              for class_id in item.get('mirror_base_ids', ()) if class_id.startswith('sv://instance/')))
+        if needs_instance_analysis(sv_source_files, instance_patterns, parse_options=parse_options,
+                                   compilation_unit=sv_compilation_unit):
+            instance_analysis = prepare_instance_analysis(sv_source_files, parse_options=parse_options,
+                                                           compilation_unit=sv_compilation_unit, patterns=instance_patterns)
+            source_facts.update(instance_analysis.facts)
+        interface_facts = (scan_sv_virtual_interfaces(sv_source_files, parse_options=parse_options,
                                                     compilation_unit=sv_compilation_unit)
+                           if class_analysis or auto_values and auto_values.callables else {})
+        if auto_values and auto_values.callables:
+            _enrich_virtual_interface_handles([{'methods': [item['method'] for item in auto_values.callables.values()]}],
+                                             interface_facts)
         _enrich_python_source_handles([*classes, *python_ancestors.values()], source_facts, interface_facts)
         explicit_ids = {item["canonical_id"] for item in sv_classes}
+        selected_ids = ()
+        if selecting_sv:
+            from .sv_selection import select_sv_classes
+            selected_ids = select_sv_classes(
+                sv_source_files, source_facts, classes=sv_class_targets,
+                packages=sv_package_targets, recursive=sv_recursive_packages,
+                exclude=sv_exclude_classes, parse_options=parse_options,
+                compilation_unit=sv_compilation_unit,
+                allow_empty=bool(auto_values and (auto_values.declarations or auto_values.constants or auto_values.callables)))
         requested_ids = sorted({
             class_id for item in python_ancestors.values()
             for class_id in item.get("mirror_base_ids", [])
             if class_id not in explicit_ids
-        })
+        } | (set(selected_ids) - explicit_ids))
         if requested_ids:
             value_annotations = _source_value_annotations(python_modules)
             sv_context = discover_sv_class_declarations(
                 sv_source_files, requested_ids,
                 lambda actual, *, where: _source_semantic_type_declaration(
-                    actual, where=where, value_annotations=value_annotations),
+                    actual, where=where, value_annotations=value_annotations, value_exports=auto_values),
                 parse_options=parse_options, compilation_unit=sv_compilation_unit,
                 existing=sv_classes,
                 python_context=python_ancestors.values(),
+                member_patterns=sv_member_targets,
+                exclude_member_patterns=sv_exclude_members,
+                value_exports=auto_values,
             )
+            for declaration in sv_context:
+                if declaration['canonical_id'] in selected_ids:
+                    declaration['constructor']['initiator'] = 'python'
+                    sv_classes.append(declaration)
+            sv_context = [item for item in sv_context if item['canonical_id'] not in selected_ids]
     classes.extend(sv_classes)
-    if sv_source_files:
+    if sv_source_files and (classes or sv_context):
         source_declarations = [*classes, *sv_context]
         _enrich_native_handle_fields(source_declarations, sv_source_files, parse_options=parse_options,
                                      compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
@@ -974,10 +1080,24 @@ def manifest_from_declarations(
     return parse_manifest(
         {
             "schema_uri": SCHEMA_URI,
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": ('2.6.0' if (auto_values and any((item.source_scope or {}).get('kind') == 'instance'
+                                            for item in (*auto_values.declarations.values(), *auto_values.constants.values()))) or any((item.get('source_scope') or {}).get('kind') == 'instance' for cls in classes
+                                           for item in (*cls.get('base_lineage', []), cls)) else
+                               '2.5.0' if any(item.get('source_scope') is not None for cls in classes
+                                             for item in (*cls.get('base_lineage', []), cls)) else
+                               '2.4.0' if auto_values and any(item.source_scope is not None for item in
+                               (*auto_values.declarations.values(), *auto_values.constants.values())) else
+                               '2.3.0' if auto_values and auto_values.callables else
+                               '2.2.0' if auto_values and auto_values.constants else
+                               '2.1.0' if auto_values and auto_values.declarations else SCHEMA_VERSION),
             "generator_abi_version": GENERATOR_ABI_VERSION,
             "required_runtime_capabilities": required_capabilities,
             "classes": classes,
+            **({'value_types': [item.as_dict() for item in auto_values.declarations.values()]}
+               if auto_values and auto_values.declarations else {}),
+            **({'constants': [item.as_dict() for item in auto_values.constants.values()]}
+               if auto_values and auto_values.constants else {}),
+            **({'callables': list(auto_values.callables.values())} if auto_values and auto_values.callables else {}),
         }
     )
 
@@ -1032,12 +1152,14 @@ def _validate_source_value_schema(actual, schema, *, where):
 
 
 def _source_semantic_type_declaration(actual: Any, *, where: str,
-                                      value_annotations=None) -> dict[str, Any]:
+                                      value_annotations=None, value_exports=None) -> dict[str, Any]:
     def annotation(source):
         original = source
         source = source.canonicalType
         if source.kind.name in {"EnumType", "PackedStructType", "UnpackedStructType"}:
             name = original.lexicalPath
+            if value_exports is not None:
+                return value_exports.annotation(original, where=where)
             candidates = (value_annotations or {}).get(name, ()) or (value_annotations or {}).get(
                 name.rsplit("::", 1)[-1], ())
             if not candidates:
@@ -1099,14 +1221,26 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
         binding = _source_scalar_type_declaration(str(source), where=where)
         return svtypes.type_spec_from_identity(binding["svtypes"], location=where)
 
-    result = _svtypes_binding(annotation(actual), where=where)
+    selected_annotation = annotation(actual)
+    result = _svtypes_binding(selected_annotation, where=where)
     if actual.canonicalType.kind.name in {"ScalarType", "PredefinedIntegerType", "FloatingType"}:
         result["sv"] = str(actual.canonicalType)
     elif actual.kind.name == "TypeAlias" and actual.canonicalType.kind.name in {
         "QueueType", "DynamicArrayType", "FixedSizeUnpackedArrayType", "AssociativeArrayType",
         "EnumType", "PackedStructType", "UnpackedStructType",
     }:
-        result["sv"] = actual.lexicalPath
+        from .sv_scan import _semantic_class_selector, _unit_scope
+        selector = _semantic_class_selector(actual)
+        unit = _unit_scope(selector)
+        result["sv"] = '$unit::' + unit[1] if unit is not None else actual.lexicalPath
+    if (value_exports is not None and value_exports.current_instance is not None
+            and (actual.kind.name == 'TypeAlias' or actual.canonicalType.kind.name in {'EnumType', 'PackedStructType'})):
+        symbol, scope = value_exports.source_symbol(actual)
+        if scope is not None and scope['kind'] == 'instance':
+            from .value_exports import value_key
+            if value_key(symbol, scope) not in value_exports.declarations:
+                value_exports._add(symbol, selected_annotation, scope)
+            result['sv'] = symbol
     return result
 
 
@@ -1315,7 +1449,8 @@ def _enrich_native_handle_fields(classes: list[dict[str, Any]], paths: Iterable[
             visit(base)
         if declaration.get("language") != "sv":
             return
-        fact = facts.get(declaration.get("symbol"))
+        from .sv_scan import _declaration_source_symbol
+        fact = facts.get(_declaration_source_symbol(declaration))
         if fact is None:
             return  # Interface-only source inputs remain valid.
         fields = []
@@ -1428,6 +1563,8 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
         "symbol": cls.symbol,
         "methods": [],
     }
+    if cls.source_scope is not None:
+        declaration['source_scope'] = cls.source_scope
 
     def handle_declaration(handle: Any) -> dict[str, Any]:
         result = {
@@ -1561,9 +1698,20 @@ def manifest_dict(manifest: Manifest) -> dict[str, Any]:
     }
     if manifest.discovery_provenance is not None:
         result['discovery_provenance'] = manifest.discovery_provenance.as_dict()
+    if manifest.value_types:
+        result['value_types'] = [value.as_dict() for value in manifest.value_types]
+    if manifest.constants:
+        result['constants'] = [value.as_dict() for value in manifest.constants]
+    if manifest.callables:
+        from .package_exports import callable_owners
+        methods = {method['canonical_id']: method for owner in callable_owners(manifest)
+                   for method in _class_declaration(owner)['methods']}
+        result['callables'] = [{'symbol': item.symbol, 'method': methods[item.method.canonical_id]}
+                               for item in manifest.callables]
     return result
 
 
+@with_value_types
 def enrich_virtual_interface_manifest(
     manifest: Manifest, *, sv_source_files: Iterable[Path],
     sv_predefines: Mapping[str, str | None] | None = None,
@@ -1587,11 +1735,15 @@ def enrich_virtual_interface_manifest(
         return manifest
     parse_options = _source_parse_options(sv_predefines, sv_undefines, sv_include_dirs,
                                           discover_proxies=True)
+    if not manifest.classes and not manifest.callables:
+        return manifest
     declaration = manifest_dict(manifest)
-    _enrich_native_handle_fields(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
-    normalize_sv_handle_types(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
+    if manifest.classes:
+        _enrich_native_handle_fields(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
+        normalize_sv_handle_types(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
     _enrich_virtual_interface_handles(
-        declaration["classes"], scan_sv_virtual_interfaces(paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
+        [*declaration['classes'], {'methods': [item['method'] for item in declaration.get('callables', [])]}],
+        scan_sv_virtual_interfaces(paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
     )
     # The input object has already passed file-backed provenance validation.
     # Enrichment is an in-memory derivative, not a new discovery certification.

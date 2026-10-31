@@ -236,8 +236,17 @@ def test_component_constructor_uses_standard_uvm_signature():
     binding = bridge.split('function void bind_python_test(', 1)[1].split('endfunction', 1)[0]
     assert 'callbacks = new(canonical_id);' in binding
     factory = source.split('virtual function uvm_component create_component(', 1)[1].split('endfunction', 1)[0]
-    assert factory.index('instance = new(name, parent);') < factory.index('instance.bind_python_test(')
-    assert factory.index('instance.bind_python_test(') < factory.index('return instance;')
+    assert factory.index('test_component = new(name, parent);') < factory.index('test_component.bind_python_test(')
+    assert factory.index('test_component.bind_python_test(') < factory.index('return test_component;')
+
+
+def test_factory_parses_with_standard_systemverilog_keywords():
+    pyslang = pytest.importorskip("pyslang")
+    source = (Path(__file__).parents[2] / 'sv/uvmx_factory.sv').read_text(encoding='utf-8')
+    # Syntax-only check: the real UVM header/types are supplied by the project build.
+    source = '`define uvm_fatal(ID, MSG) $fatal(1, MSG);\n' + source
+    tree = pyslang.syntax.SyntaxTree.fromText(source)
+    assert not tree.diagnostics, pyslang.DiagnosticEngine.reportAll(tree.sourceManager, tree.diagnostics)
 
 
 def test_aggregate_entry_includes_imported_tests_and_custom_bases(tmp_path, monkeypatch):

@@ -24,6 +24,9 @@ milestone 编号组织。建议先运行[寄存器小项目](register_lab/README
 | 跨边界传输 transaction | [Typed bus testbench](milestone_7_sv_typed_helpers/README.zh-CN.md) | SvTypes 模型、生成的 SV helper、请求/响应与 monitor channel |
 | 在既有 SV testbench 中采用 SVX | [既有 SV 环境](milestone_5_existing_env/README.zh-CN.md) | 驱动和监控保留在 SV；场景和检查策略移至 Python |
 | 在构建中使用生成类型 | [CLI 工作流](milestone_6_cli_workflow/README.zh-CN.md) | `svx svtypes-gen` 和 CLI 定位命令 |
+| 不写声明 JSON，直接使用已有 SV 声明 | [直接导出](sv_export/README.zh-CN.md) | 复用 filelist，自动发现签名和继承链，类、值类型/常量、包函数/task、output/inout、opaque/VIF handle 与 Python 虚覆盖 |
+| 使用 package 内的嵌套 SV 类 | [嵌套类导出](sv_scoped/README.zh-CN.md) | 保持原类型身份，Python 自然嵌套名字，不分配外层对象，同名类、字段/task 与虚方法回调 |
+| 使用没有 package 的 SV 类 | [编译单元类](sv_scoped/README.zh-CN.md#无-package-的类) | 直接从源码发现，保留原单元归属、继承字段与 Python 虚方法覆盖 |
 | 在 Python 中派生 SV class | [跨语言继承](cross_language_inheritance/README.zh-CN.md) | manifest 校验、生成镜像、Python 构造、显式 SV handle 交接与 Python timed override |
 | 在 SV 中派生 Python class | [Python 所有的继承](python_owned_inheritance/README.zh-CN.md) | Python 发起构造、SV factory 注册与跨语言 `super()` |
 | 传递任意 SV class 或 virtual interface | [外部 handle](foreign_handles/README.zh-CN.md) | 不透明 class `RemoteRef`、生成的 VIF view、静态 modport 访问与 handle 身份 |

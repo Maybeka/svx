@@ -67,10 +67,10 @@ class uvmx_test_wrapper#(type BASE = uvm_test) extends uvm_object_wrapper;
     return factory_name;
   endfunction
   virtual function uvm_component create_component(string name, uvm_component parent);
-    uvmx_test_bridge#(BASE) instance;
-    instance = new(name, parent);
-    instance.bind_python_test(canonical_id, factory_name, this);
-    return instance;
+    uvmx_test_bridge#(BASE) test_component;
+    test_component = new(name, parent);
+    test_component.bind_python_test(canonical_id, factory_name, this);
+    return test_component;
   endfunction
 endclass
 

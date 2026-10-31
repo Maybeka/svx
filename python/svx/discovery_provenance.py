@@ -58,8 +58,22 @@ def _configuration(value) -> bool:
         return False
     paths = {'sv_declarations', 'sv_sources', 'sv_dependencies', 'python_sources', 'sv_include_dirs'}
     names = {'python_modules', 'sv_undefines'}
-    if set(value) - paths - names - {'sv_predefines', 'source_mode', 'python_selections', 'python_namespaces', 'sv_build'}:
+    if set(value) - paths - names - {'sv_predefines', 'source_mode', 'python_selections', 'python_namespaces', 'sv_build', 'sv_selection', 'sv_elaboration'}:
         return False
+    elaboration = value.get('sv_elaboration', 'all')
+    if not isinstance(elaboration, str) or elaboration not in {'all', 'packages'}:
+        return False
+    selection = value.get('sv_selection')
+    if selection is not None:
+        if (not isinstance(selection, dict)
+                or not {'classes', 'packages', 'exclude_classes', 'recursive_packages'} <= set(selection)
+                or set(selection) - {'classes', 'packages', 'exclude_classes', 'recursive_packages', 'members', 'exclude_members', 'types', 'exclude_types', 'constants', 'exclude_constants', 'callables', 'exclude_callables'}
+                or not isinstance(selection['recursive_packages'], bool)):
+            return False
+        for key in ('classes', 'packages', 'exclude_classes', 'members', 'exclude_members', 'types', 'exclude_types', 'constants', 'exclude_constants', 'callables', 'exclude_callables'):
+            if (not isinstance(selection.get(key, []), list)
+                    or any(not isinstance(item, str) or not item for item in selection.get(key, []))):
+                return False
     selections = value.get('python_selections', [])
     if (not isinstance(selections, list) or any(
             not isinstance(item, dict) or set(item) != {'module', 'path'}
@@ -218,8 +232,9 @@ def validate_discovery_provenance(data: dict, manifest_path: Path | None, *,
         from .sv_source_options import _source_dependencies
         from .sv_library_search import library_search
         from .compile_config import CompileConfiguration
+        from .sv_frontend import source_elaboration
         context = imported if 'sv_build' in configuration else CompileConfiguration([], [], {}, [], [])
-        with library_search(context):
+        with library_search(context), source_elaboration(configuration.get('sv_elaboration', 'all')):
             selected = _source_dependencies(
                 [root / name for name in configuration['sv_sources']],
                 predefines=configuration.get('sv_predefines', {}),

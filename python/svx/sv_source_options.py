@@ -63,12 +63,21 @@ def _source_parse_options(predefines, undefines, include_dirs=(), *, discover_pr
 def _source_dependencies(paths, *, predefines=None, undefines=(), include_dirs=(),
                          compilation_unit=False):
     from .sv_scan import _parse_sources, _pyslang
+    from .source_selection import observed_dependencies
 
     sources = [Path(path).resolve() for path in paths]
-    dependencies = set(sources)
     if not sources:
-        return dependencies
+        return set()
+    if not isinstance(undefines, str):
+        undefines = tuple(undefines)
+    if not isinstance(include_dirs, (str, bytes, os.PathLike)):
+        include_dirs = tuple(include_dirs)
     options = _source_parse_options(predefines, undefines, include_dirs, discover_proxies=True)
+    observed = observed_dependencies(sources, predefines=predefines, undefines=undefines,
+                                    include_dirs=include_dirs, compilation_unit=compilation_unit)
+    if observed is not None:
+        return observed
+    dependencies = set(sources)
     for _, tree in _parse_sources(_pyslang(), sources, parse_options=options,
                                   compilation_unit=compilation_unit):
         manager = tree.sourceManager

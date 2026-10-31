@@ -23,6 +23,7 @@ class CompileConfiguration:
     ignored: list[list[str]] | None = None
     library_dirs: list[Path] = field(default_factory=list)
     library_extensions: list[str] = field(default_factory=list)
+    top_modules: list[str] = field(default_factory=list)
 
     def as_dict(self, root: Path) -> dict:
         relative = lambda path: Path(os.path.relpath(path, root)).as_posix()
@@ -34,6 +35,8 @@ class CompileConfiguration:
         if self.library_dirs or self.library_extensions:
             data.update(library_dirs=[relative(p) for p in self.library_dirs],
                         library_extensions=self.library_extensions)
+        if self.top_modules:
+            data['top_modules'] = self.top_modules
         return data
 
 
@@ -155,6 +158,12 @@ def import_compile_configuration(recipe: dict, root: Path | None = None) -> Comp
                 result.shared = True
             elif item in {'--separate-units', '-sfcu'}:
                 result.shared = False
+            elif item in {'-top', '--top-module'} or item.startswith(('-top=', '--top-module=')):
+                top = argument() if '=' not in item else item.split('=', 1)[1]
+                if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', top):
+                    raise SVXInheritanceError(f'unsupported build top name: {top!r}')
+                if top not in result.top_modules:
+                    result.top_modules.append(top)
             elif item == '-v':
                 source(path(argument(), base))
             elif item == '-y':
@@ -176,7 +185,7 @@ def import_compile_configuration(recipe: dict, root: Path | None = None) -> Comp
             elif item in {'-sverilog', '-sv', '-full64', '-licqueue', '-lca', '-dpi_lrm_task',
                           '-deraceclockdata', '-q', '-quiet'}:
                 result.ignored.append([item])
-            elif item in {'-o', '-l', '-top', '-CFLAGS', '-LDFLAGS', '-Xcflags', '-assert'}:
+            elif item in {'-o', '-l', '-CFLAGS', '-LDFLAGS', '-Xcflags', '-assert'}:
                 result.ignored.append([item, argument()])
             elif item == '-xlrm':
                 value = argument()

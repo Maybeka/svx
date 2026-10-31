@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from types import SimpleNamespace
@@ -20,6 +22,136 @@ from .inheritance import (
 )
 from .sv_scan import _pyslang, _source_class_name, _python_proxy_id
 from .sv_source_options import _source_parse_options
+
+
+def emit_sv_export_bridge(manifest: Manifest, *, metadata=None) -> str:
+    """Make direct-export registration explicit across separately analyzed units."""
+    from .sv_scan import _check_source_diagnostics
+
+    bridge = emit_sv_mirrors(manifest)
+    tree = _pyslang().SyntaxTree.fromText(bridge)
+    _check_source_diagnostics(tree, 'generated export bridge')
+    roots = [tree.root] if hasattr(tree.root, 'header') else getattr(tree.root, 'members', ())
+    registrations = []
+    for package in roots:
+        if str(package.kind) != 'SyntaxKind.PackageDeclaration':
+            continue
+        for member in package.members:
+            if type(member).__name__ != 'DataDeclarationSyntax':
+                continue
+            for declarator in member.declarators:
+                expression = getattr(getattr(declarator, 'initializer', None), 'expr', None)
+                if expression is not None and str(expression.kind) == 'SyntaxKind.NewClassExpression':
+                    registrations.append(f'    {package.header.name.valueText}::{declarator.name.valueText} = {str(expression).strip()};')
+    if not registrations:
+        return bridge
+    if metadata is not None:
+        metadata['systemverilog_startup'] = 'svx_exports_pkg::initialize'
+    return bridge + '\n'.join([
+        '', '// Explicit direct-export startup; call after svx_init and before Python entry.',
+        'package svx_exports_pkg;',
+        '  function automatic void initialize();',
+        '    static bit initialized = 0;',
+        '    if (initialized) return;',
+        *registrations,
+        '    initialized = 1;',
+        '  endfunction',
+        'endpackage : svx_exports_pkg', ''])
+
+
+def integrated_source_paths(sources, *, compilation_unit=False):
+    """Deterministic output names; ordinal prefixes preserve original input order."""
+    if compilation_unit or len(sources) == 1:
+        return ('source.sv',)
+    return tuple(f'units/{index:06d}_{re.sub(r"[^A-Za-z0-9_]", "_", Path(name).stem)}.sv'
+                 for index, name in enumerate(sources))
+
+
+def emit_integrated_sources(manifest: Manifest, sources: Mapping[str, str], *,
+                            compilation_unit=False, startup_metadata=None, **options) -> dict[str, str]:
+    """Preserve independent compilation units instead of forcing a shared unit."""
+    if any(source.source_scope is not None for source in _all_manifest_classes(manifest)):
+        from .unit_exports import emit_unit_integrated_sources
+        return emit_unit_integrated_sources(manifest, sources, compilation_unit=compilation_unit,
+                                            startup_metadata=startup_metadata, **options)
+    paths = integrated_source_paths(sources, compilation_unit=compilation_unit)
+    if compilation_unit or len(sources) <= 1:
+        return {'source.sv': emit_integrated_source(manifest, sources, startup_metadata=startup_metadata, **options)}
+    if not all(source.language == 'sv' for source in manifest.classes) or any(
+            plan.steps for plan in projection_plans(manifest)):
+        raise SVXInheritanceError(
+            'independent-unit integration of alternating cross-language lineage '
+            'needs owner-local record/bridge placement; this layout remains unfinished')
+    from pyslang import SourceManager
+    from pyslang.ast import Compilation
+    from .sv_frontend import elaborate_sources
+    from .sv_library_search import load_libraries
+    from .sv_scan import _check_source_diagnostics, _lookup_sv_symbol
+
+    syntax = _pyslang()
+    parse_options = _source_parse_options(**options, discover_proxies=True)
+    manager = SourceManager()
+    trees = []
+    buffers = {}
+    for filename, source in sources.items():
+        _join_source_units({filename: source})
+        buffer = manager.assignText(filename, source)
+        buffers[filename] = buffer.id
+        tree = syntax.SyntaxTree.fromBuffers([buffer], manager, options=parse_options)
+        _check_source_diagnostics(tree, filename)
+        trees.append((Path(filename), tree))
+    compilation = Compilation()
+    validation_trees = tuple(tree for _, tree in load_libraries(
+        trees, tuple(map(Path, sources)), manager, parse_options, False))
+    for tree in validation_trees:
+        compilation.addSyntaxTree(tree)
+    compilation = elaborate_sources(compilation)
+    for target in manifest.classes:
+        actual = _lookup_sv_symbol(compilation, target.symbol)
+        if actual is None or not getattr(actual, 'canonicalType', None) or not actual.canonicalType.isClass:
+            raise SVXInheritanceError(f'source units lack required class declaration {target.symbol}')
+    emitted = {}
+    anchor = None
+    for index, (_, tree) in enumerate(trees):
+        roots = [tree.root] if hasattr(tree.root, 'header') else getattr(tree.root, 'members', ())
+        if any(str(node.kind) == 'SyntaxKind.PackageDeclaration' for node in roots):
+            anchor = index
+    for index, (output, (filename, source), (_, tree)) in enumerate(zip(paths, sources.items(), trees)):
+        if index == anchor:
+            emitted[output] = emit_integrated_source(
+                manifest, {filename: source}, validation_sources=validation_trees,
+                startup_metadata=startup_metadata, **options)
+            continue
+        expanded = _inline_active_source_includes(tree, source, root_buffer=buffers[filename])
+        emitted[output] = ('// Generated by svx inheritance-gen. Do not edit.\n'
+                           + _join_source_units({filename: expanded}))
+    if anchor is None:
+        # Selected packages can come solely from original -y libraries. Preserve
+        # those lookup inputs; the bridge must still precede its top-level users.
+        emitted[paths[-1]] = ('// Generated by svx inheritance-gen. Do not edit.\n'
+                              + emit_sv_export_bridge(manifest, metadata=startup_metadata) + '\n' + emitted[paths[-1]])
+    return emitted
+
+
+def emit_integrated_source(manifest: Manifest, sources: Mapping[str, str], *, startup_metadata=None, **options) -> str:
+    """Own record placement together with source-copy and bridge placement."""
+    plans = projection_plans(manifest)
+    if all(source.language == 'sv' for source in manifest.classes) and not any(plan.steps for plan in plans):
+        return _emit_staged_source_unit(
+            manifest, _join_source_units(sources), portions=(),
+            construction_plan=_sv_root_construction_plan,
+            projection_emitter=_emit_planned_sv_root_sv_projection,
+            source_units=sources, complete_sv_bridge=True, startup_metadata=startup_metadata, **options)
+    if manifest.value_types or manifest.callables:
+        raise SVXInheritanceError(
+            'alternating source-managed lineage with automatic value/package-call '
+            'exports needs owner-scoped record placement; this layout remains unfinished')
+    from .inheritance import _manifest_sv_record_types
+    records = ['// Generated by svx inheritance-gen. Do not edit.',
+               'package svx_call_records_pkg;', '  import svtypes_pkg::*;']
+    records.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    records.append('endpackage : svx_call_records_pkg')
+    return '\n'.join(records) + '\n' + _emit_source_units(manifest, sources, **options)
 
 
 def _emit_sv_root_source_unit(manifest: Manifest, source: str, *, predefines=None, undefines=(), include_dirs=()) -> str:
@@ -90,10 +222,10 @@ def _emit_source_units(manifest: Manifest, sources: Mapping[str, str], *, predef
         predefines=predefines, undefines=undefines, include_dirs=include_dirs)
 
 
-def _inline_active_source_includes(tree, source: str, *, root_buffer=None) -> str:
+def _inline_active_source_includes(tree, source: str, *, root_buffer=None, insertions=None) -> str:
     """Copy parser-selected physical includes without changing their source files."""
     directives = tree.getIncludeDirectives()
-    if not directives:
+    if not directives and not insertions:
         return source
     from pyslang import SourceRange
 
@@ -115,16 +247,19 @@ def _inline_active_source_includes(tree, source: str, *, root_buffer=None) -> st
             raise SVXInheritanceError('recursive source include expansion')
         raw = manager.getSourceText(buffer).removesuffix('\0').encode('utf-8')
         boundary = len(raw)
-        for span, child in sorted(includes.get(buffer, ()), key=lambda item: item[0].start.offset, reverse=True):
+        edits = [(offset, offset, text) for offset, text in (insertions or {}).get(buffer, ())]
+        for span, child in includes.get(buffer, ()):
             start, end = span.start.offset, span.end.offset
-            if start > end or end > boundary:
-                raise SVXInheritanceError('overlapping source include anchors')
             filename = manager.getRawFileName(child)
             parent = str(manager.getFileName(span.end))
             line = manager.getLineNumber(span.end)
             text = ('\n`line 1 ' + json.dumps(filename, ensure_ascii=False) + ' 0\n' +
                     expand(child, (*active, buffer)) + '\n`line ' + str(line) + ' ' +
                     json.dumps(parent, ensure_ascii=False) + ' 0\n')
+            edits.append((start, end, text))
+        for start, end, text in sorted(edits, key=lambda item: (item[0], item[1]), reverse=True):
+            if start < 0 or start > end or end > boundary:
+                raise SVXInheritanceError('overlapping source include or insertion anchors')
             raw = raw[:start] + text.encode('utf-8') + raw[end:]
             boundary = start
         return raw.decode('utf-8')
@@ -134,7 +269,8 @@ def _inline_active_source_includes(tree, source: str, *, root_buffer=None) -> st
 
 def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, construction_plan, projection_emitter,
                              source_units: Mapping[str, str] | None = None,
-                             preserve_locations: bool = True, predefines=None, undefines=(), include_dirs=()) -> str:
+                             preserve_locations: bool = True, predefines=None, undefines=(), include_dirs=(),
+                             complete_sv_bridge=False, validation_sources=None, startup_metadata=None) -> str:
     """Insert minimal bridges into a parsed source copy, preserving public aliases.
 
     Participating SV declarations belong to one compilation unit, optionally
@@ -233,6 +369,30 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
         return start.offset, end.offset
 
     roots = [tree.root] if hasattr(tree.root, 'header') else list(tree.root.members)
+    if complete_sv_bridge:
+        from pyslang.ast import Compilation
+        from pyslang.syntax import SyntaxKind
+        from .sv_frontend import elaborate_sources
+        from .sv_scan import _lookup_sv_symbol
+
+        original_packages = [node for node in roots if node.kind == SyntaxKind.PackageDeclaration]
+        if not original_packages:
+            raise SVXInheritanceError('source integration requires a source package anchor')
+        compilation = Compilation()
+        for original_tree in validation_sources if validation_sources is not None else (tree,):
+            compilation.addSyntaxTree(original_tree)
+        compilation = elaborate_sources(compilation)
+        for target in manifest.classes:
+            actual = _lookup_sv_symbol(compilation, target.symbol)
+            if actual is None or not getattr(actual, 'canonicalType', None) or not actual.canonicalType.isClass:
+                raise SVXInheritanceError(f'source unit lacks required class declaration {target.symbol}')
+        location = max(original_packages, key=lambda node: node.sourceRange.end.offset).sourceRange.end
+        _, offset = direct_span(SourceRange(location, location))
+        bridge = ('\n' + generated_location('bridges') + emit_sv_export_bridge(manifest, metadata=startup_metadata)
+                  + '\n' + restore_location(location))
+        raw = source.encode('utf-8')
+        return ('// Generated by svx inheritance-gen. Do not edit.\n' +
+                (raw[:offset] + bridge.encode('utf-8') + raw[offset:]).decode('utf-8'))
     classes = {}
     proxy_markers = {}
     proxy_anchors = {}

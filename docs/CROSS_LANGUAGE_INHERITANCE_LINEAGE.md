@@ -395,6 +395,12 @@ parameterized SV types must have resolved arguments; unresolved templates and
 arbitrary inheritance graphs are not promised by accepted ancestor metadata.
 Protected members use legal derived gateways; local members are not exposed.
 
+Ancestors need not share the target class's package. For an unqualified base
+introduced by a package import, discovery uses semantic name lookup, including
+explicit imports, wildcard imports and package re-exports. Named class typedefs
+retain their own declared identities. Supply the complete source dependency
+context; an unresolved or ambiguous import is not resolved by guessing a package.
+
 Closed specializations keep one canonical class identity across all targets and
 ancestor entries. Ordered type arguments carry concrete SvTypes bindings; value
 arguments carry an SV type and normalized literal. Source expressions can be

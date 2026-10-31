@@ -51,30 +51,35 @@ It inherits the actual upstream initialization, constraints, sequencer behavior
 and transaction services. Its extra methods expose a register read result and
 owned monitor observations; they do not implement a second UART agent.
 
-[`generate.py`](generate.py) declares only the methods this example consumes.
-All value and handle encodings are derived from public SvTypes APIs. Generate
-into a separate build directory, using your development SVX/SvTypes installation:
-
-```sh
-python examples/opentitan_uart/generate.py "$UART_GENERATED"
-```
-
-Prefer exporting the original compiler invocation from the existing build:
+Export the original compiler invocation from the existing build:
 `compiler-input.json` contains exactly `directory` and `arguments`, with the
 compiler executable as argv[0]. Reuse it rather than listing UVM, UART and RTL
 dependencies, definitions and include paths again:
 
 ```sh
 svx compile-config --sv-build-command "$UART_BUILD_COMMAND"
-python examples/opentitan_uart/generate.py "$UART_GENERATED" \
-  --sv-build-command "$UART_BUILD_COMMAND"
+svx export --class uart_svx_bridge_pkg::UartSequence \
+  --member body process_tx process_rx uart_init dut_shutdown \
+    spinwait_txidle spinwait_rxidle send_tx_byte send_rx_byte read_rx \
+    observed_count observed_item parity_enabled parity_odd \
+    item_data item_frame item_identity same_item make_item set_item_data \
+  --sv-build-command "$UART_BUILD_COMMAND" \
+  --sv-source examples/opentitan_uart/uart_bridge.sv --out "$UART_GENERATED"
 ```
 
-The script appends this example's `uart_bridge.sv` automatically. Repeat the same
-command with `--check` for a read-only gate. Retain the original compiler
+The CLI discovers the 20 selected signatures and complete 11-ancestor lineage
+from source, including evaluated native class type parameters. There is no
+declarations JSON or artificial Python target. Only UartSequence is an export
+target; imports and native class handles do not request exporting all of UVM.
+Repeat the same export command with `--check` for a read-only gate. Retain the original compiler
 environment to locate implicit UVM sources. See [build input import](../../docs/SVX_BUILD_INPUTS.md)
 for the format and support limits. Resolving this selected boundary's dependency
 context does not select the entire upstream class tree for generation.
+
+[`generate.py`](generate.py) retains an explicitly maintained contract snapshot
+for inspecting the example without upstream sources. It uses the same backend,
+but is not required by direct source export. Do not mix snapshot and discovered
+outputs in one generated directory.
 
 Original `-y` / `+libext+` options remain ordered search context: SVX selects
 specific files for missing design units instead of expanding the directory.
@@ -241,11 +246,8 @@ manifest target or generated bridge is introduced. After building, the new modul
 can be added using only Python source changes. This case selector belongs to this
 project; it is not registration of a new `+UVM_TESTNAME`.
 
-Check the existing generated contract without rewriting it:
-
-```sh
-python examples/opentitan_uart/generate.py "$UART_GENERATED" --check
-```
+Check the existing generated contract without rewriting it by repeating the
+section 2 export command with `--check` and the same original build inputs.
 
 ## Verification And Iteration
 
