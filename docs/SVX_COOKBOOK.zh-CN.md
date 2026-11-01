@@ -636,6 +636,132 @@ svx.Inout(value)。完整代码和3ns验证见
 
 ### 9.1 SV 基类由 Python 派生
 
+#### 从原工程 Filelist 到运行 Python 用例
+
+这条路线不需要手写 manifest、declarations JSON 或 Mirror stub。先完成
+[运行环境准备](../examples/RUNNING_EXAMPLES.zh-CN.md#1-准备开发环境)，确保生成工具、
+原生运行库及仿真器内嵌 Python 使用兼容的同一解释器。
+
+**第一步：保留原工程的编译上下文。** 在原来执行工程编译命令的目录运行 SVX，
+保留同样的环境变量。以下命令在 SVX 仓库根目录可直接执行；design.f 就是本例的
+原始 filelist，不需要再维护一份导出专用源码列表。
+
+```sh
+svx inspect -f examples/sv_export/design.f \
+  --name 'export_driver_pkg::*' --kind class type
+svx export --package export_driver_pkg \
+  -f examples/sv_export/design.f \
+  --sv-elaboration packages --incremental \
+  --out examples/sv_export/generated
+```
+
+实际工程把 filelist、package 和输出目录替换即可，例如：
+
+```sh
+svx export --package driver_pkg -f sim/project.f \
+  +define+ENABLE_DRIVER +incdir+tb/include \
+  --sv-elaboration packages --incremental --out generated/svx
+```
+
+只有原编译命令确实包含的额外宏和 include 选项才需要补写，不要为了套用示例
+引入新宏。嵌套 filelist、源码顺序、宏、include 与 -y/+libext 库搜索沿用原工程。
+packages 模式跳过 DUT 实例展开，但仍解析显式列出的 RTL；不要将它理解成自动
+删除 DUT 源码。按 package 导出自有声明，import 用于依赖解析，不会自动导出
+被 import 包的所有内容；需要扩大目标范围时才加 --recursive-packages。
+
+**第二步：在 Python 中使用生成的真实类。** 本例 Driver 的构造参数是 seed，
+status() 返回 count+1，advance() 是耗时 2ns 的 task。创建一个可导入的
+my_tests 包（目录内放空的 __init__.py），在 my_tests/package_smoke.py 中写：
+
+```python
+import svx
+from svtypes import Int
+from svx_mirror.export_driver_pkg import Driver, Mode
+
+
+@svx.export(name="package_smoke.run")
+def run():
+    driver = Driver(Int(10))
+    assert driver.count.value == 10
+    assert driver.status() == 11
+    previous, total = svx.Output(), svx.Inout(5)
+    driver.advance(Int(20), previous, total)
+    assert previous.value == 10 and total.value == 25
+    driver.count.value = 30
+    assert driver.status() == 31
+    assert driver.echo_mode(Mode.ACTIVE) == Mode.ACTIVE
+    svx.display("PACKAGE_SMOKE_PASS")
+```
+
+调用是同步的，不写 async/await。Driver() 创建对应的 SV 对象，字段 .value
+访问真实 SV 存储；task 返回时仿真时间已推进。包间类型仍保持自己的模块路径，
+例如本例依赖的类型位于 svx_mirror.export_base_pkg，而不是全部摊平到一个模块。
+
+**第三步：加入启动顶层，保持原工程编译流程。** 在工程根目录创建
+tb_package_smoke.sv：
+
+```systemverilog
+`include "sv/svx_pkg.sv"
+`include "examples/sv_export/generated/mirrors.sv"
+
+module tb_package_smoke;
+  import svx_pkg::*;
+  initial begin
+    svx_init();
+    svx_exports_pkg::initialize();
+    svx_load("my_tests.package_smoke");
+    svx_start("package_smoke.run");
+    $finish;
+  end
+  final begin
+    svx_shutdown();
+  end
+endmodule
+```
+
+沿用原工程的仿真构建命令，输入按以下顺序组织：
+
+| 输入 | 本例的具体设置 |
+| --- | --- |
+| 原工程源码 | 原来的 -f examples/sv_export/design.f，先于启动顶层分析 |
+| 新增顶层 | tb_package_smoke.sv，选择 tb_package_smoke 为仿真顶层 |
+| include 路径 | SVX 仓库根目录与工程根目录；本例两者相同 |
+| 生成桥接 | 顶层已 include mirrors.sv，不要再次独立编译 |
+| 运行库 package | 顶层已 include svx_pkg.sv；若原工程已编译它，删掉此 include |
+| 原生库 | 按已有 DPI 加载配置使用 svx libs 查询到的运行库 |
+
+可查询实际安装的集成输入，不需要猜测库文件位置：
+
+```sh
+svx compile-flags
+SVX_LIB_DIR="$PWD/build" svx libs
+export PYTHONPATH="$PWD/examples/sv_export/generated/python:$PWD${PYTHONPATH:+:$PYTHONPATH}"
+```
+
+PYTHONPATH 必须传给实际仿真进程，而不只是生成工具。此处 shell 示例用于 POSIX
+终端；Windows 设置等价的进程环境变量，路径列表分隔符使用分号。工程自己的
+编译与启动命令不由 SVX 替代。若改为 generated/svx 输出目录，需同时修改顶层
+include 和 Python 路径。成功时在 2ns 出现 PACKAGE_SMOKE_PASS，且没有异常或
+fatal；仅看进程退出码不能判定测试通过。
+
+**第四步：按改动类型迭代。** 只改普通 Python 用例时，直接重新运行现有仿真
+二进制；修改导出的 SV 声明时，重新执行第一步导出，再编译受影响的 SV。
+检查源码与生成物是否一致，使用同样输入追加 --check：
+
+```sh
+svx export --package export_driver_pkg \
+  -f examples/sv_export/design.f \
+  --sv-elaboration packages --incremental \
+  --out examples/sv_export/generated --check
+```
+
+检查不改写产物。未变化输入经验证后可复用；依赖变化则完整解析。注册入口
+svx_exports_pkg::initialize() 必须在加载 Python 用例之前调用；找不到模块时先
+检查仿真进程的 Python 路径，不要通过复制生成类或删掉注册步骤绕过问题。
+仓库已有的 [entry.py](../examples/sv_export/entry.py) 和
+[tb.sv](../examples/sv_export/tb.sv) 还验证 Python 子类覆盖后传回 SV 基类句柄，
+其完整运行结果见[示例说明](../examples/sv_export/README.zh-CN.md#编译和运行)。
+
 若已有 SV package 类，先用最短的直接导出路线：
 
 ```sh
