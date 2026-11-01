@@ -355,8 +355,12 @@ ordinary operation and refreshes a valid local entry on success. --check always
 remains read-only, including the cache itself; a cold check does not create one.
 The CLI reports whether reuse occurred and why it selected the full path.
 This is whole-export no-op reuse: a changed dependency currently reruns the full
-frontend. It is not per-compilation-unit AST reuse or changed-unit-only parsing;
-those finer-grained incremental mechanisms remain unfinished.
+frontend. Per-compilation-unit AST reuse and changed-unit-only parsing are not
+provided. SVX deliberately retains a fresh full frontend after dependency changes
+rather than maintaining a modified parser or reusing potentially stale source
+buffers. The existing unchanged-result cache and command-local syntax sharing
+remain supported. Reconsider finer-grained reuse only when measured project
+refresh costs justify the additional parser and process-lifetime complexity.
 
 The current direct selectors cover package classes, concrete supported
 specializations, enums, packed structs, value typedefs and package functions/tasks.
