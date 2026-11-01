@@ -128,6 +128,121 @@ for that SystemVerilog construct. SVX retains the declared return prototype;
 it does not silently replace it with an output parameter. This requirement is
 separate from the supported output/inout container path.
 
+## Native Source Owners
+
+Direct source export also handles native class references declared outside a
+package: compilation-unit classes and classes owned by concrete module,
+interface, program, or active generate instances. Select the API class with the
+ordinary --class selector; a class used only as a handle remains unmapped.
+For example, exporting tb.agent.Owner does not also export tb.agent.Item merely
+because Owner has an Item member or an echo(Item) method.
+
+The native class stays in its original scope. Generated endpoints retain that
+actual native type; Python receives the same SvTypes RemoteRef values used for
+package handles. Each concrete owner has its own target identity, including
+distinct instances with equal parameters. Constructor inputs, static factories,
+function/task parameters and returns, scalar fields, queues, and nested
+string-keyed associative-array queues are qualified in these owner layouts.
+Whole-value and addressed field updates preserve nulls, repeated references,
+empty subcontainers, and sibling values. Unknown nested element IDs fail before
+the native field is assigned. Python virtual overrides may receive and return
+the same references through an original SV base handle.
+
+The [shared SV test declarations](../tests/integration/scoped_handle_types.sv)
+cover Owner and Consumer APIs without making Item a generation target.
+Use the generated compile order/source replacements and the same explicit
+svx_exports.initialize() startup described in the
+[source export workflow](SVX_GENERATION_WORKFLOW.md#compilation-unit-classes).
+Internal adapter names reversibly escape separators and underscores so distinct
+types such as a_b::C and a::b_C cannot alias each other. Container deduplication
+uses the target and SvTypes type identity, never that generated identifier.
+Names also omit the duplicate leaf target inside the container suffix to keep
+identifiers compact. These helpers are not public type names; regenerate them
+with the CLI rather than hardcoding their spellings. Public mirror names,
+target IDs, and wire schemas are unaffected.
+
+Cross-owner native class type bindings and alternating cross-language owner
+lineages still need additional placement support. Owner-local VIF support is
+described below; package handle/VIF support is unchanged.
+This handle-binding boundary is distinct from the supported
+[lexically visible SV base classes](SVX_GENERATION_WORKFLOW.md#lexically-visible-sv-ancestors).
+
+## Owner-Local Virtual Interfaces
+
+Compilation-unit/module/interface/program/generate-owned API classes may also
+declare native VIF constructor parameters, fields, function/task parameters,
+returns, and output/inout formals. The interface type and modport come from the
+original SV declaration; no separate mapping list or bind name is needed.
+Selecting the class uses the same CLI/source replacement/startup workflow.
+
+One generic typed endpoint registry is shared per static VIF type, even when
+different owner instances or API classes return or consume the handle. Passing
+the same interface through another owner therefore preserves its RemoteRef
+identity. It never allocates a replacement interface instance. Native fields
+still store their actual VIF values; Python field access uses RemoteRef values,
+while method results decode to the existing restricted views. Queue fields
+support whole-value and addressed reference updates with validation before
+assignment. Modport directions and imported methods remain the sole authority:
+for the [test interface](../tests/integration/scoped_bus_if.sv), read_ready and
+write_data are available, while write_ready and read_data are not.
+
+VIF dispatch records are emitted independently of consumer-class records, so a
+class may retain its own native enum fields in qualified named-value layouts.
+Generate-owned scalar enum fields also have native qualification, including
+their combination with structural-typedef VIF operations. Local typed enum
+conversion delegates to the public SvTypes bit packer without passing the
+generate-local enum as an external generic type argument. Original field storage
+and wire identity remain unchanged. Same-owner enum/packed-struct containers
+also have native qualification in the separate
+[generate runtime project](../examples/sv_scoped/README.md#generate-runtime-values).
+VIF source generation alone is not evidence for every type combination. Native
+value types used by the interface's own operations have the separate scope below.
+Shared records precede generic
+endpoint definitions; nested class types used as bind type arguments receive
+source-local aliases without moving the original type or changing its identity.
+Repeated instances of one source definition share identical generated aliases.
+
+Owner-local VIF operations accept supported builtin/structural value signatures,
+including typedefs resolved from the original interface's semantic scope. This
+includes supported bit/logic, signed integer, real/string and fixed/dynamic/
+queue/associative-array layouts. Imported aliases do not require another export
+target or handwritten type metadata. Shared adapters use equivalent structural
+temporaries, retaining the original VIF static type, SvTypes type identity and
+encoding, parameter order/direction and modport restrictions. They do not move
+the original typedef or replace its native storage. See the
+[typedef operation fixture](../tests/integration/scoped_alias_bus_if.sv).
+
+Package-defined enum and packed-struct types in VIF signals and operations are
+also discovered automatically, including enum queues and packed-struct fixed/
+dynamic arrays and string-keyed maps. Function/task calls preserve input,
+output and inout parameters, native enum identity and struct X/Z data. A caller
+uses the discovered public types and the ordinary output holders, for example:
+
+```python
+import svx
+from svx_mirror.scoped_nominal_bus_types_pkg import Mode
+
+bus = Owner.get_bus(0)  # Owner is the previously imported API mirror.
+previous, changed = svx.Output(), svx.Inout(Mode.IDLE)
+result = bus.echo_mode(Mode.ACTIVE, previous, changed)
+assert result == changed.value == Mode.ACTIVE
+```
+
+The shared endpoint and its call-record class carry explicit native type
+parameters. Records retain SvTypes packers and descriptors; they do not replace
+the enum/struct with a different public wire type or infer native types from a
+runtime VIF value. The same static VIF retains one endpoint specialization when
+passed among different API classes or owners. See the
+[nominal operation fixture](../tests/integration/scoped_nominal_bus_if.sv).
+
+Interface-local nominal types and native class/VIF handle arguments of these
+operations still need additional owner-aware binding and are diagnosed rather
+than silently omitted or encoded as ordinary values. This restriction concerns
+the interface's own operations, not enum fields in its consuming API class.
+See the
+[SV class fixture](../tests/integration/scoped_vif_classes.svh) for the native
+field/constructor/call declarations.
+
 ## Virtual Interface Handles
 
 A VIF uses the same identity transport, but has a generated Python view after
@@ -146,8 +261,11 @@ tasks, and functions visible through `bus_if.master`; for `virtual bus_if`,
 they are the interface's full public surface. Users do not supply a second
 bind name or an independent member whitelist.
 
-The generator obtains the interface, modport, and member facts from the
-SystemVerilog source using pyslang. Member value types remain SvTypes
+The generator obtains interface/modport visibility from the SystemVerilog source
+using pyslang, then resolves exposed member value types in the static native
+interface scope through the same handle-type analysis used for class exports.
+The same path applies when only a package callable carries the VIF, and when
+generation enriches a handwritten manifest. Member value types remain SvTypes
 contracts: a generated VIF member is emitted only when its formal or signal
 type has a concrete supported SvTypes mapping. Unsupported member types fail
 generation with the source member and type in the diagnostic; SVX never

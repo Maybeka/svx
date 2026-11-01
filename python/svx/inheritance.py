@@ -2070,28 +2070,38 @@ def _emit_sv_root_sv_packages(manifest: Manifest, *, has_call_records: bool,
                                    has_call_records=has_call_records, has_external_handles=has_external_handles)
 
 
-def _emit_deferred_python_class(source: ForeignClass, text: str, loader: str) -> list[str]:
+def _emit_deferred_python_class(source: ForeignClass, text: str, loader: str, *, value_namespace=False) -> list[str]:
     declaration_lines = text.rstrip().splitlines()
     class_index = next(index for index, line in enumerate(declaration_lines)
                        if line.startswith(f'class {source.name}('))
     # A source import can reenter after its earlier class is already available.
+    condition = (f'isinstance(globals().get({source.name!r}), type)' if value_namespace
+                 else f'{source.name!r} in globals()')
     declaration_lines[class_index:class_index] = [
-        f'if {source.name!r} in globals():', f'    return globals()[{source.name!r}]',
+        f'if {condition}:', f'    return globals()[{source.name!r}]',
     ]
-    return [f'def {loader}():',
-            f'    if {source.name!r} in globals(): return globals()[{source.name!r}]',
+    return [f'def {loader}(' + (f'_namespace=globals().get({source.name!r})' if value_namespace else '') + '):',
+            f'    if {condition}: return globals()[{source.name!r}]',
+            *([f'    globals()[{source.name!r}] = _namespace'] if value_namespace else []),
             *('    ' + line if line else '' for line in declaration_lines),
             f'    {source.name}.__qualname__ = {source.name!r}',
             f'    globals()[{source.name!r}] = {source.name}', f'    return {source.name}', '']
 
 
-def _emit_deferred_python_footer(deferred: dict[str, str]) -> list[str]:
+def _emit_deferred_python_footer(deferred: dict[str, str], *, chain: bool = False) -> list[str]:
     if not deferred:
         return []
-    lines = ['def __getattr__(name):']
+    lines = [('def __getattr__(name, _previous=globals().get("__getattr__")):'
+              if chain else 'def __getattr__(name):')]
     for name, loader in deferred.items():
         lines.extend([f'    if name == {name!r}:', f'        return {loader}()'])
-    lines.extend(['    raise AttributeError(name)', '', 'def _svx_finalize_generated_types():'])
+    if chain:
+        lines.extend(['    if _previous is not None:', '        return _previous(name)'])
+    lines.extend(['    raise AttributeError(name)', '',
+                  ('def _svx_finalize_generated_types(_previous=globals().get("_svx_finalize_generated_types")):'
+                   if chain else 'def _svx_finalize_generated_types():')])
+    if chain:
+        lines.extend(['    if _previous is not None:', '        _previous()'])
     for name in deferred:
         lines.append(f'    if {name!r} not in globals(): __getattr__({name!r})')
     return [*lines, '']
@@ -2119,7 +2129,13 @@ def _emit_sv_root_artifacts(manifest: Manifest, *, source_managed_layout: bool =
                       if plan.lineage[0].language == 'sv' or not plan.steps}
         base_manifest = replace(manifest, classes=tuple(source for source in manifest.classes
                                                         if source.canonical_id in sv_targets))
-    emitted = emit_python_mirrors(base_manifest, register_sv_subclasses=False, include_sv_ancestor_members=True,
+    boundary_ids = {source.canonical_id for source in _sv_root_artifact_portions(manifest)}
+    independent_ids = frozenset(source.canonical_id for source in base_manifest.classes
+                                if source.language == 'sv' and not projection_plan(source).steps
+                                and source.canonical_id not in boundary_ids)
+    emitted = emit_python_mirrors(base_manifest,
+                                 register_sv_subclasses=independent_ids,
+                                 include_sv_ancestor_members=True,
                                  separate_package_layout=not source_managed_layout,
                                  reserve_direct_receiver=frozenset(
                                      _sv_root_construction_plan(source, manifest=manifest).bridge_root.canonical_id
@@ -2220,7 +2236,8 @@ def _emit_sv_root_artifacts(manifest: Manifest, *, source_managed_layout: bool =
         for depth in range(1, len(parts)):
             emitted.setdefault(PurePosixPath(*parts[:depth], '__init__.py'), _generated_python_init(manifest, 'staged SV-root package'))
         emitted[PurePosixPath(*parts).with_suffix('.py')] = '\n'.join(lines)
-    return emitted
+    from .package_mirrors import preserve_package_inheritance
+    return preserve_package_inheritance(manifest, emitted, staged=True)
 
 
 def _python_static_request_parameter_list(method: Method) -> str:
@@ -2259,7 +2276,7 @@ def _vif_view_class_name(binding: HandleBinding) -> str:
 
 
 @with_value_types
-def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = True,
+def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool | frozenset[str] = True,
                         include_sv_ancestor_members: bool = True,
                         separate_package_layout: bool = True,
                         reserve_direct_receiver: bool | frozenset[str] = False) -> dict[PurePosixPath, str]:
@@ -2447,6 +2464,9 @@ def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = Tr
             lines.append(f"_register_python_static_source({source.canonical_id!r}, {source.symbol!r}, {methods!r})")
         seen: set[str] = set()
         for source in sorted(sources, key=lambda item: item.canonical_id):
+            register_subclasses = (register_sv_subclasses is True
+                                   or isinstance(register_sv_subclasses, frozenset)
+                                   and source.canonical_id in register_sv_subclasses)
             if source.canonical_id in seen:
                 continue
             seen.add(source.canonical_id)
@@ -2476,7 +2496,7 @@ def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = Tr
             # its subclasses must not alter the SV construction selector.
             # Alternating mirrors register only direct Python extensions.
             subclass_registration = [] if (
-                not register_sv_subclasses or source.canonical_id in field_mirrors and source.constructor is None
+                not register_subclasses or source.canonical_id in field_mirrors and source.constructor is None
             ) else [
                 "    def __init_subclass__(cls, **kwargs):",
                 "        super().__init_subclass__(**kwargs)",
@@ -2578,7 +2598,7 @@ def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = Tr
                 ])
             for portion, method in surface_methods.values():
                 lines.extend(_emit_python_bridge_method(method, portion.canonical_id))
-            if not register_sv_subclasses:
+            if not register_subclasses:
                 lines.extend(['', f'register_python_subclass({source.canonical_id!r}, {mirror_name})'])
             lines.append(f"_register_source_mirror_implementation({source.canonical_id!r}, {mirror_name})")
             lines.append("")
@@ -2664,7 +2684,8 @@ def emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool = Tr
         for depth in range(1, len(parts) + 1):
             emitted.setdefault(PurePosixPath(*parts[:depth], '__init__.py'),
                                _generated_python_init(manifest, 'instance-bound mirror package'))
-    return merge_callable_sources(manifest, emitted)
+    from .package_mirrors import preserve_package_inheritance
+    return preserve_package_inheritance(manifest, merge_callable_sources(manifest, emitted))
 
 
 def _emit_python_vif_views(manifest: Manifest) -> dict[PurePosixPath, str]:
@@ -2797,16 +2818,18 @@ def _sv_return_type(method: Method, *, qualified: bool = True) -> str:
 def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
     """Return one compatible static endpoint description per RemoteRef target."""
 
-    bindings: dict[str, HandleBinding] = {}
+    bindings: dict[tuple[str, str], HandleBinding] = {}
 
     def add(binding: HandleBinding) -> None:
         if binding.collection_binding is not None:
             add(replace(binding, collection_binding=None))
-            bindings.setdefault(_handle_adapter_name(binding), replace(binding, operations=()))
+            key = (binding.target_type_name, binding.collection_binding.unified_type_name)
+            bindings.setdefault(key, replace(binding, operations=()))
             return
-        previous = bindings.get(binding.target_type_name)
+        key = (binding.target_type_name, '')
+        previous = bindings.get(key)
         if previous is None:
-            bindings[binding.target_type_name] = binding
+            bindings[key] = binding
             return
         if (previous.kind, previous.sv_type) != (binding.kind, binding.sv_type):
             raise SVXInheritanceError(
@@ -2822,7 +2845,7 @@ def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
                     "one virtual-interface operation must have one declaration: "
                     f"{item.method.canonical_id!r}"
                 )
-        bindings[binding.target_type_name] = HandleBinding(
+        bindings[key] = HandleBinding(
             kind=previous.kind,
             target_type_name=previous.target_type_name,
             sv_type=previous.sv_type,
@@ -2846,12 +2869,25 @@ def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
     return tuple(bindings[key] for key in sorted(bindings))
 
 
-def _handle_adapter_name(binding: HandleBinding) -> str:
-    stem = re.sub(r"[^A-Za-z0-9_]", "_", binding.target_type_name).strip("_")
+def _handle_adapter_stem(binding: HandleBinding) -> str:
+    # Escape underscores too: flattening punctuation would conflate a_b::C and a::b_C.
+    escapes = {'_': 'u', ':': 'c', '/': 's', '-': 'h', '.': 'd', '[': 'l', ']': 'r'}
+    stem = ''.join(char if char.isascii() and char.isalnum()
+                   else '_' + escapes.get(char, f'x{ord(char):x}_')
+                   for char in binding.target_type_name)
     if binding.collection_binding is not None:
-        stem += "_" + "".join(char if char.isascii() and char.isalnum() else f"_x{ord(char):x}_"
-                              for char in binding.collection_binding.unified_type_name)
+        # The target is already in the prefix; repeating its escaped URI in
+        # every container layer can exceed native compiler identifier limits.
+        collection = binding.collection_binding.unified_type_name.replace(
+            f'svtypes.RemoteRef[target={binding.target_type_name}]', 'SVXHandle')
+        stem += "_C_" + "".join(char if char.isascii() and char.isalnum() else f"_x{ord(char):x}_"
+                              for char in collection)
     return "SVXExternal_" + stem
+
+
+def _handle_adapter_name(binding: HandleBinding) -> str:
+    from .native_handles import generic_handle_reference
+    return generic_handle_reference(binding, _handle_adapter_stem(binding))
 
 
 def _sv_handle_value_type(binding: HandleBinding) -> str:
@@ -2862,7 +2898,13 @@ def _sv_handle_value_type(binding: HandleBinding) -> str:
     codec = _codec_from_spec(value.runtime_spec())
     if value.sv != svtypes.sv_type_expression(codec):
         return value.sv
-    return f"svx_external_handles_pkg::{_handle_adapter_name(binding)}::native_type"
+    from .native_handles import uses_generic_handle
+    prefix = '' if uses_generic_handle(binding) else 'svx_external_handles_pkg::'
+    return f"{prefix}{_handle_adapter_name(binding)}::native_type"
+
+
+def _handle_nested_type(binding, member):
+    return f'{_handle_adapter_name(binding)}::{member}'
 
 
 def _handle_collection_shape(binding: HandleBinding):
@@ -2903,13 +2945,18 @@ def _sv_native_handle_collection_typedefs(binding: HandleBinding, prefix: str):
     return declarations, f'{prefix}_{root[0]}'
 
 
-def _emit_sv_handle_collection_adapter(binding: HandleBinding, name: str) -> list[str]:
+def _emit_sv_handle_collection_adapter(binding: HandleBinding, name: str, *, native_type_parameter=None,
+                                       native_value_parameters=()) -> list[str]:
     """Convert a collection recursively while retaining scalar endpoint identity."""
     scalar = replace(binding, collection_binding=None)
     adapter = _handle_adapter_name(scalar)
+    if native_type_parameter is not None:
+        adapter += '#(' + ', '.join((native_type_parameter, *native_value_parameters)) + ')'
     nodes, root = _handle_collection_shape(binding)
     native_typedefs, native_root = _sv_native_handle_collection_typedefs(binding, 'native')
-    lines = [f'  class {name};']
+    parameters = (' #(' + ', '.join('type ' + item for item in (native_type_parameter, *native_value_parameters)) + ')'
+                  if native_type_parameter is not None else '')
+    lines = [f'  class {name}{parameters};']
     lines.extend('    ' + declaration for _, declaration in native_typedefs)
     for index, kind, dimension, child in nodes:
         wire = 'remote_ref' if child is None else f'wire_{child[0]}'
@@ -2966,7 +3013,9 @@ def _emit_sv_handle_collection_adapter(binding: HandleBinding, name: str) -> lis
 def _emit_sv_external_handle_adapters(manifest: Manifest, *,
                                       package_name: str | None = 'svx_external_handles_pkg',
                                       bindings: tuple[HandleBinding, ...] | None = None,
-                                      adapter_names: Mapping[str, str] | None = None) -> list[str]:
+                                      adapter_names: Mapping[str, str] | None = None,
+                                      native_type_parameter=None, import_call_records=True,
+                                      native_call_records=None) -> list[str]:
     """Emit typed SV endpoints for every external class or VIF RemoteRef."""
 
     bindings = _manifest_handle_bindings(manifest) if bindings is None else bindings
@@ -2978,22 +3027,34 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
         *([f"package {package_name};"] if package_name is not None else []),
         "  import svx_pkg::*;",
         "  import svtypes_pkg::*;",
-        "  import svx_call_records_pkg::*;",
+        *(["  import svx_call_records_pkg::*;"] if native_type_parameter is None and import_call_records else []),
     ]
     for binding in sorted(bindings, key=lambda item: item.collection_binding is not None):
         name = (adapter_names or {}).get(binding.target_type_name, _handle_adapter_name(binding))
+        record_scope = (native_call_records or {}).get(binding.target_type_name)
         if binding.collection_binding is not None:
-            lines.extend(_emit_sv_handle_collection_adapter(binding, _handle_adapter_name(binding)))
+            lines.extend(_emit_sv_handle_collection_adapter(binding, _handle_adapter_name(binding),
+                native_type_parameter=native_type_parameter,
+                native_value_parameters=record_scope['parameters'] if record_scope is not None else ()))
             continue
+        type_parameters = ((native_type_parameter,) if native_type_parameter is not None else ())
+        if record_scope is not None:
+            type_parameters += record_scope['parameters']
+        parameters = ' #(' + ', '.join('type ' + item for item in type_parameters) + ')' if type_parameters else ''
+        arguments = '#(' + ', '.join(type_parameters) + ')' if type_parameters else ''
+        endpoint = name + 'Endpoint' + arguments
         target = json.dumps(binding.target_type_name)
         endpoint_interfaces = "svx_external_handle, svx_dispatchable, svx_function_dispatchable" if binding.operations else "svx_external_handle"
         lines.extend(
             [
                 "",
                 f"  // {binding.kind}: {binding.sv_type} <-> RemoteRef[{binding.target_type_name}].",
-                f"  class {name}Endpoint implements {endpoint_interfaces};",
+                f"  class {name}Endpoint{parameters} implements {endpoint_interfaces};",
                 f"    {binding.sv_type} value;",
                 "    longint unsigned object_id;",
+                *([f"    typedef {record_scope['name']}#({', '.join(record_scope['parameters'])}) SVXNativeRecords;",
+                   *(f'    typedef SVXNativeRecords::{alias} {alias};' for alias in record_scope['aliases'])]
+                  if record_scope is not None else []),
                 "",
                 f"    function new({binding.sv_type} value);",
                 "      this.value = value;",
@@ -3040,9 +3101,9 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
             [
                 f"  endclass : {name}Endpoint",
                 "",
-                f"  class {name} implements svx_session_resource;",
-                f"    static {name}Endpoint endpoints[$];",
-                f"    static {name} session_resource = new();",
+                f"  class {name}{parameters} implements svx_session_resource;",
+                f"    static {endpoint} endpoints[$];",
+                f"    static {name}{arguments} session_resource = new();",
                 "",
                 "    virtual function void clear_session();",
                 "      endpoints.delete();",
@@ -3050,7 +3111,7 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
                 "",
                 f"    static function remote_ref encode({binding.sv_type} value);",
                 "      longint unsigned object_id;",
-                f"      {name}Endpoint endpoint;",
+                f"      {endpoint} endpoint;",
                 "      remote_ref reference;",
                 "      svx_external_handle_registry::register_resource(session_resource);",
                 "      // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.",
@@ -3080,7 +3141,7 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
                 "",
                 f"    static function bit decode(input remote_ref reference, output {binding.sv_type} value, output string error);",
                 "      svx_external_handle raw;",
-                f"      {name}Endpoint endpoint;",
+                f"      {endpoint} endpoint;",
                 "      value = null;",
                 "      error = \"\";",
                 "      // Resolve this session-scoped RemoteRef back to the declared static SV type.",
@@ -3196,6 +3257,9 @@ def _manifest_sv_record_types(manifest: Manifest) -> list[type]:
             if response:
                 records.append(_sv_record_type(method.canonical_id, "response", response))
     for binding in _manifest_handle_bindings(manifest):
+        from .native_handles import uses_bound_call_records
+        if uses_bound_call_records(binding):
+            continue
         for operation in binding.operations:
             method = operation.method
             request = tuple(
@@ -3223,8 +3287,9 @@ def _manifest_sv_collection_typedefs(manifest: Manifest) -> list[str]:
             bindings.extend(parameter.type_binding for parameter in cls.constructor.parameters
                             if parameter.handle is None)
         methods.extend(cls.methods)
+    from .native_handles import uses_bound_call_records
     methods.extend(operation.method for handle in _manifest_handle_bindings(manifest)
-                   for operation in handle.operations)
+                   if not uses_bound_call_records(handle) for operation in handle.operations)
     for method in methods:
         bindings.extend(parameter.type_binding for parameter in method.parameters if parameter.handle is None)
         if method.return_type is not None and method.return_handle is None:
@@ -3538,8 +3603,8 @@ def _emit_sv_handle_field_dispatch_cases(cls: ForeignClass, field: Field) -> lis
     adapter = _handle_adapter_name(field.handle)
     import svtypes
     packer = svtypes.sv_packer_expression(_codec_from_spec(field.type_binding.runtime_spec()))
-    wire_type = (f'{adapter}::wire_type' if field.handle.collection_binding is not None
-                 else field.type_binding.sv)
+    wire_type = (_handle_nested_type(field.handle, 'wire_type') if field.handle.collection_binding is not None
+                 else 'svtypes_pkg::remote_ref')
     read = [
         f"{wire_type} field_wire;",
         f"field_wire = {adapter}::encode(this.{field.name});",
@@ -3607,8 +3672,8 @@ def _emit_sv_handle_sequence_mutation(binding, codec, node, expression, field_id
     child = node[3]
     child_codec = svtypes.FieldDescriptor(codec).resolve_path(svtypes.FieldPath().index(0)).codec
     adapter = _handle_adapter_name(binding if child is not None else replace(binding, collection_binding=None))
-    native = f'{adapter}::native_{child[0]}' if child is not None else binding.sv_type
-    wire = f'{adapter}::wire_{child[0]}' if child is not None else 'remote_ref'
+    native = _handle_nested_type(binding, f'native_{child[0]}') if child is not None else binding.sv_type
+    wire = _handle_nested_type(binding, f'wire_{child[0]}') if child is not None else 'remote_ref'
     suffix = f'_{child[0]}' if child is not None else ''
     packer = svtypes.sv_packer_expression(child_codec)
     queue = isinstance(codec, svtypes.Queue)
@@ -3682,8 +3747,8 @@ def _emit_sv_deep_handle_field_access(binding, codec, node, expression, field_id
         packer = svtypes.sv_packer_expression(codec)
         adapter = _handle_adapter_name(binding if node is not None else
                                        replace(binding, collection_binding=None))
-        wire = f'{adapter}::wire_{node[0]}' if node is not None else 'remote_ref'
-        native = f'{adapter}::native_{node[0]}' if node is not None else binding.sv_type
+        wire = _handle_nested_type(binding, f'wire_{node[0]}') if node is not None else 'remote_ref'
+        native = _handle_nested_type(binding, f'native_{node[0]}') if node is not None else binding.sv_type
         suffix = f'_{node[0]}' if node is not None else ''
         success = [line.strip() for line in _emit_sv_field_operation_success()]
         lines = [f'if (operation.path_kind.size() == {depth}) begin',
@@ -5420,7 +5485,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             if data['schema']['type_name'] != value.module + '.' + value.qualname:
                 continue
             if data['schema']['kind'] == 'enum':
-                lines.append(f'  typedef {value.symbol} {native_value_name(value.symbol)};')
+                lines.append(f'  typedef {value.native_reference} {native_value_name(value.symbol)};')
             elif data['schema']['kind'] == 'struct':
                 import svtypes
                 model = svtypes.type_spec_from_identity(data['svtypes'], location=value.symbol)
@@ -5428,8 +5493,10 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
         for record_type in record_types:
             lines.extend(["", record_type.to_sv_obj(1)])
         lines.extend(["endpackage : svx_call_records_pkg", ""])
-    external_handle_bindings = _manifest_handle_bindings(manifest)
-    lines.extend(_emit_sv_external_handle_adapters(manifest))
+    from .native_handles import uses_generic_handle
+    external_handle_bindings = tuple(binding for binding in _manifest_handle_bindings(manifest)
+                                     if not uses_generic_handle(binding))
+    lines.extend(_emit_sv_external_handle_adapters(manifest, bindings=external_handle_bindings))
     lines.extend(emit_sv_package_callables(manifest, has_records=has_call_package,
                                           has_handles=bool(external_handle_bindings)))
     record_import = ["  import svx_call_records_pkg::*;"] if has_call_package else []

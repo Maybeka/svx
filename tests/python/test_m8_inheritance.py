@@ -413,7 +413,9 @@ def test_generated_external_handle_adapters_preserve_sv_formal_types(
 
     manifest = parse_manifest(data)
     text = emit_sv_mirrors(manifest)
-    adapter = "SVXExternal_" + target.replace(":", "_").replace("/", "_").replace("-", "_")
+    from svx.inheritance import _handle_adapter_stem, _manifest_handle_bindings
+    adapter = _handle_adapter_stem(next(binding for binding in _manifest_handle_bindings(manifest)
+                                        if binding.target_type_name == target))
     assert "package svx_external_handles_pkg;" in text
     assert f"class {adapter} implements svx_session_resource;" in text
     assert f"function remote_ref encode({sv_type} value);" in text
@@ -1846,8 +1848,8 @@ def test_constructor_handle_generation_preserves_native_types_and_decodes_both_f
     model = parse_manifest(handle_manifest())
     sv = emit_sv_mirrors(model)
     assert "input external_handle_test_pkg::Packet packet, input virtual external_bus_if.master vif" in sv
-    packet_adapter = "SVXExternal_sv___external_handle_test_pkg_Packet"
-    vif_adapter = "SVXExternal_sv_vif___external_bus_if_master"
+    packet_adapter = "SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket"
+    vif_adapter = "SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smaster"
     assert f"request_value.packet = {packet_adapter}::encode(packet);" in sv
     assert f"request_value.vif = {vif_adapter}::encode(vif);" in sv
     assert sv.count(f"if (!{packet_adapter}::decode(constructor_request.packet, packet, error))") == 2

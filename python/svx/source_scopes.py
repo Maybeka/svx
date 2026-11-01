@@ -160,6 +160,8 @@ def native_scope_insertions(compilation, entries, *, manager=None, reachable_buf
     """Anchor local adapters and capture parent guards before lexical children."""
     manager = manager or compilation.sourceManager
     anchored = {}
+    generated_names = set()
+    lexical_declarations = set()
 
     def anchor(location, text, name):
         if not manager.isFileLoc(location):
@@ -194,8 +196,24 @@ def native_scope_insertions(compilation, entries, *, manager=None, reachable_buf
     for path, items in entries.items():
         scopes = native_scope_chain(compilation, path)
         for entry in items:
+            identity = (path, entry['name'])
+            if identity in generated_names:
+                raise SVXInheritanceError(f'duplicate generated local bridge name at {path}: {entry["name"]}')
+            generated_names.add(identity)
             if scopes[-1].lookupName(entry['name']) is not None:
                 raise SVXInheritanceError(f'generated local bridge name collides with original design at {path}')
+            if entry.get('lexical_declaration'):
+                leaf = scopes[-1]
+                node = leaf.definition.syntax if leaf.kind.name == 'InstanceBody' else leaf.syntax
+                token = getattr(node, 'endmodule' if leaf.kind.name == 'InstanceBody' else 'end', None)
+                if token is None or token.isMissing:
+                    raise SVXInheritanceError('lexical adapter declarations require a native scope ending')
+                declaration = (token.location.buffer, token.location.offset, entry['name'], entry['text'])
+                if declaration in lexical_declarations:
+                    continue
+                lexical_declarations.add(declaration)
+                anchor(token.location, entry['text'], entry['name'])
+                continue
             previous = None
             if guarded:
                 for depth, (parent, child) in enumerate(zip(scopes, scopes[1:])):

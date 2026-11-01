@@ -56,7 +56,8 @@ def discovery_contract_digest(data: dict) -> str:
 def _configuration(value) -> bool:
     if not isinstance(value, dict):
         return False
-    paths = {'sv_declarations', 'sv_sources', 'sv_dependencies', 'python_sources', 'sv_include_dirs'}
+    paths = {'sv_declarations', 'sv_sources', 'sv_dependencies', 'python_sources', 'sv_include_dirs',
+             'sv_excluded_sources'}
     names = {'python_modules', 'sv_undefines'}
     if set(value) - paths - names - {'sv_predefines', 'source_mode', 'python_selections', 'python_namespaces', 'sv_build', 'sv_selection', 'sv_elaboration'}:
         return False
@@ -205,7 +206,22 @@ def validate_discovery_provenance(data: dict, manifest_path: Path | None, *,
             raise SVXInheritanceError(f'duplicate or generated discovery source: {path}')
         seen.add(path)
         sources.append((path, item['sha256']))
-    for path, digest in sources:
+    configuration = record['configuration']
+    expected = None
+    if configuration.get('sv_sources'):
+        if 'sv_dependencies' not in configuration:
+            raise SVXInheritanceError(
+                'discovery SV dependency inventory is missing; rerun inheritance-manifest')
+        expected = [(root / name).resolve() for name in configuration['sv_dependencies']]
+        if len(expected) != len(set(expected)) or not set(expected) <= {path for path, _ in sources}:
+            raise SVXInheritanceError(f'invalid discovery SV dependency inventory: {evidence}')
+    # With no Python selection callbacks, a fresh dependency replay below can
+    # certify SV bytes and lookup decisions together instead of reading twice.
+    replay_bytes = expected is not None and not any(configuration.get(key) for key in
+        ('python_modules', 'python_selections', 'python_namespaces'))
+    sv_paths = set(expected or ())
+
+    def verify_source(path, digest):
         try:
             current = hashlib.sha256(path.read_bytes()).hexdigest()
         except OSError as error:
@@ -215,7 +231,10 @@ def validate_discovery_provenance(data: dict, manifest_path: Path | None, *,
         if current != digest:
             raise SVXInheritanceError(
                 f'discovery source changed: {path}; rerun inheritance-manifest')
-    configuration = record['configuration']
+
+    for path, digest in sources:
+        if not replay_bytes or path not in sv_paths:
+            verify_source(path, digest)
     if 'sv_build' in configuration:
         from .compile_config import replay_build_record
         imported = replay_build_record(configuration['sv_build'], root)
@@ -223,24 +242,29 @@ def validate_discovery_provenance(data: dict, manifest_path: Path | None, *,
             raise SVXInheritanceError('imported build input inventory is missing')
     _validate_python_selections(configuration, root, {path for path, _ in sources})
     if configuration.get('sv_sources'):
-        if 'sv_dependencies' not in configuration:
-            raise SVXInheritanceError(
-                'discovery SV dependency inventory is missing; rerun inheritance-manifest')
-        expected = [(root / name).resolve() for name in configuration['sv_dependencies']]
-        if len(expected) != len(set(expected)) or not set(expected) <= {path for path, _ in sources}:
-            raise SVXInheritanceError(f'invalid discovery SV dependency inventory: {evidence}')
         from .sv_source_options import _source_dependencies
         from .sv_library_search import library_search
         from .compile_config import CompileConfiguration
         from .sv_frontend import source_elaboration
         context = imported if 'sv_build' in configuration else CompileConfiguration([], [], {}, [], [])
         with library_search(context), source_elaboration(configuration.get('sv_elaboration', 'all')):
-            selected = _source_dependencies(
-                [root / name for name in configuration['sv_sources']],
-                predefines=configuration.get('sv_predefines', {}),
-                undefines=configuration.get('sv_undefines', []),
-                include_dirs=[root / name for name in configuration.get('sv_include_dirs', [])],
-                compilation_unit=configuration.get('source_mode') == 'shared-compilation-unit')
+            paths = [root / name for name in configuration['sv_sources']]
+            options = dict(predefines=configuration.get('sv_predefines', {}),
+                           undefines=configuration.get('sv_undefines', []),
+                           include_dirs=[root / name for name in configuration.get('sv_include_dirs', [])],
+                           compilation_unit=configuration.get('source_mode') == 'shared-compilation-unit')
+            certified = None
+            if replay_bytes:
+                from .source_selection import validated_selection_fingerprints
+                certified = validated_selection_fingerprints(paths, **options)
+                for path, digest in sources:
+                    if path in sv_paths:
+                        if certified is None or path not in certified:
+                            verify_source(path, digest)
+                        elif certified[path] != digest:
+                            raise SVXInheritanceError(
+                                f'discovery source changed: {path}; rerun inheritance-manifest')
+            selected = set(certified) if certified is not None else _source_dependencies(paths, **options)
         if selected != set(expected):
             added = ', '.join(str(path) for path in sorted(selected - set(expected)))
             removed = ', '.join(str(path) for path in sorted(set(expected) - selected))

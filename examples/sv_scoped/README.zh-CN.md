@@ -284,6 +284,33 @@ GENERATE_CLASSES_PYTHON_PASS 和 GENERATE_CLASSES_NATIVE_PASS。普通源码 CLI
 --check、原生仿真已远端通过，涵盖模块、接口和匿名 generate 块变体。
 尚未完成的源码布局见[权威流程](../../docs/SVX_GENERATION_WORKFLOW.md#generate-owned-classes)。
 
+### Generate 内的复合值
+
+源码：[SV 工程](generate_runtime_values.sv)、[Python 场景](generate_runtime_values.py)、
+[原始 filelist](generate_runtime_values.f)。
+
+```sh
+svx export --class 'tb_generate_runtime_values.*.lane[0].Driver' \
+  -f examples/sv_scoped/generate_runtime_values.f --out .tmp/generate-runtime-values
+```
+
+仅选择 Driver 即可自动收集它的类内 enum、packed struct 及必要容器别名，不需要
+声明 JSON 或额外列出类型。Python 从各自 owner 模块取得 Driver.Mode 和
+Driver.Payload；原有8/13位 SV 类、变量和作用域保持原位。按上文编译 artifact
+给出的替换源码与启动单元，不同时编译原文件。
+
+场景检查 enum/struct 字段、enum 队列、struct 定长/动态数组、字符串关联数组和
+嵌套关联数组队列的整值与局部修改。原始 SV getter 验证写入和未修改的兄弟元素，
+包括 X/Z 的保留。每个 owner 执行一个耗时1ns的 output/inout task。
+PythonDriver 覆盖 enum、struct、数组虚方法，再通过既有
+publish_object/SVX_GET_OBJECT 显式交接，由 SV 使用原 Driver 句柄回调同一实例，
+其中包含 Python super() 调用。
+
+原始 filelist 导出、只读检查、编译和运行均已在远端通过。2ns 时应出现
+GENERATE_RUNTIME_VALUES_PYTHON_PASS 和 GENERATE_RUNTIME_VALUES_NATIVE_PASS。
+这些布局的通过不代表任意 owner 参数化或跨 owner 类型依赖都已完成，完整边界见
+[权威流程](../../docs/SVX_GENERATION_WORKFLOW.md#generate-owned-classes)。
+
 ## Program 作用域内的类
 
 源码：[program](program_classes.sv)、[顶层](tb_program_classes.sv)、

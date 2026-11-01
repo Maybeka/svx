@@ -2,6 +2,8 @@
 
 [中文](RESULTS.zh-CN.md)
 
+## Original Qualification
+
 Upstream revision: `724f378edf920eb5bc536a0d136158963c44186b`.
 Qualification date: 2026-10-25.
 The upstream working tree remains unchanged. Results distinguish unmodified
@@ -128,6 +130,28 @@ modified. This qualifies the integrated UART class/handle boundary; nested
 enum/struct and package callable/VIF integration is separately checked by the
 direct-export examples. It does not qualify unfinished non-package instance
 bindings or alternating-lineage automatic-record placement.
+
+On 2026-11-01 the same original inputs were exported again after original-tree
+reuse was added to source-copy generation. The complete source copy and bridges
+were rebuilt with original compiler options, implicit libraries and DPI linkage;
+seed1 mixed, Python-owned and retained-SV modes pass with zero runtime UVM
+warnings/errors/fatals. These are separate from the original baseline counts.
+
+Three paired export+check comparisons with raw syntax reuse enabled/disabled
+produce byte-identical SV/Python, artifact and provenance files. Extra original
+buffer parsing in the source-copy stage drops from2batches per pair to0, but
+elapsed workflow time does not show a stable improvement. Initial parsing and
+expanded/generated-text parsing remain.
+
+A subsequent three-pair comparison kept the same syntax reuse in both modes
+and changed only build-input bookkeeping: ordered source lists now use
+set-based duplicate checks, and absent source exclusions do not trigger another
+path-matching pass. Median full export+check time was19.586s before and19.061s
+after (~2.7% lower); all three pairs produced identical outputs. These serial
+fresh-process measurements use warm OS caches and time the CLI calls, excluding
+interpreter/import startup and native compilation. Filelists, environment
+expansion, source existence and dependency contents are still revalidated;
+this is not persistent configuration caching or changed-unit parsing.
 
 ## Incremental Export Qualification
 

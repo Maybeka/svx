@@ -9,6 +9,64 @@ from svx.compile_config import import_compile_configuration, replay_build_record
 from svx.errors import SVXInheritanceError
 
 
+def test_large_filelist_keeps_order_with_linear_duplicate_checks(tmp_path, monkeypatch):
+    count = 512
+    sources = [tmp_path / f'unit_{index}.sv' for index in range(count)]
+    for source in sources:
+        source.write_text('', encoding='utf-8')
+    filelist = tmp_path / 'project.f'
+    filelist.write_text('\n'.join(source.name for source in sources), encoding='utf-8')
+    comparisons = []
+    original = Path.__eq__
+    def compare(left, right):
+        if left.suffix == '.sv' and isinstance(right, Path) and right.suffix == '.sv':
+            comparisons.append(None)
+        return original(left, right)
+    monkeypatch.setattr(Path, '__eq__', compare)
+    config = import_compile_configuration(dict(directory=str(tmp_path), filelists=['project.f']))
+    assert len(comparisons) < count * 4
+    assert config.sources == sources
+    assert config.inputs == [filelist]
+
+
+def test_duplicate_sources_remain_rejected_across_nested_filelists(tmp_path):
+    (tmp_path / 'source.sv').write_text('', encoding='utf-8')
+    (tmp_path / 'nested.f').write_text('./source.sv', encoding='utf-8')
+    (tmp_path / 'project.f').write_text('source.sv -f nested.f', encoding='utf-8')
+    with pytest.raises(SVXInheritanceError, match='duplicate build source'):
+        import_compile_configuration(dict(directory=str(tmp_path), filelists=['project.f']))
+
+
+def test_repeated_build_input_preserves_first_position_and_replays_macros(tmp_path):
+    (tmp_path / 'settings.f').write_text('-DMODE=first', encoding='utf-8')
+    (tmp_path / 'project.f').write_text('-f settings.f -DMODE=second -f settings.f', encoding='utf-8')
+    config = import_compile_configuration(dict(directory=str(tmp_path), filelists=['project.f']))
+    assert config.inputs == [tmp_path / 'project.f', tmp_path / 'settings.f']
+    assert config.defines == {'MODE': 'first'}
+
+
+def test_no_exclusions_do_not_resolve_imported_sources_again(tmp_path, monkeypatch):
+    from svx.cli import _sv_macro_config, build_parser
+    sources = [tmp_path / f'unit_{index}.sv' for index in range(3)]
+    for source in sources:
+        source.write_text('', encoding='utf-8')
+    filelist = tmp_path / 'project.f'
+    filelist.write_text('\n'.join(source.name for source in sources), encoding='utf-8')
+    resolutions = []
+    original = Path.resolve
+    def resolve(path, *args, **kwargs):
+        if path.suffix == '.sv':
+            resolutions.append(path)
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(Path, 'resolve', resolve)
+    args = build_parser().parse_args(['compile-config', '-f', str(filelist),
+                                    '--sv-build-directory', str(tmp_path)])
+    _sv_macro_config(args)
+    assert resolutions == sources
+    assert args.sv_source == list(map(str, sources))
+    assert args._excluded_sv_sources == []
+
+
 @pytest.mark.parametrize('flag', ['-top', '--top-module', '-top=', '--top-module='])
 def test_import_preserves_original_top_selection(tmp_path, flag):
     source = tmp_path / 'design.sv'

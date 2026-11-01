@@ -1117,7 +1117,7 @@ package svx_external_handles_pkg;
   import svx_call_records_pkg::*;
 
   // virtual_interface: virtual example_bus_if.master <-> RemoteRef[sv-vif://example_bus_if/master].
-  class SVXExternal_sv_vif___example_bus_if_masterEndpoint implements svx_external_handle, svx_dispatchable, svx_function_dispatchable;
+  class SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smasterEndpoint implements svx_external_handle, svx_dispatchable, svx_function_dispatchable;
     virtual example_bus_if.master value;
     longint unsigned object_id;
 
@@ -1224,11 +1224,11 @@ package svx_external_handles_pkg;
         end
       endcase
     endfunction
-  endclass : SVXExternal_sv_vif___example_bus_if_masterEndpoint
+  endclass : SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smasterEndpoint
 
-  class SVXExternal_sv_vif___example_bus_if_master implements svx_session_resource;
-    static SVXExternal_sv_vif___example_bus_if_masterEndpoint endpoints[$];
-    static SVXExternal_sv_vif___example_bus_if_master session_resource = new();
+  class SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster implements svx_session_resource;
+    static SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smasterEndpoint endpoints[$];
+    static SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster session_resource = new();
 
     virtual function void clear_session();
       endpoints.delete();
@@ -1236,7 +1236,7 @@ package svx_external_handles_pkg;
 
     static function remote_ref encode(virtual example_bus_if.master value);
       longint unsigned object_id;
-      SVXExternal_sv_vif___example_bus_if_masterEndpoint endpoint;
+      SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smasterEndpoint endpoint;
       remote_ref reference;
       svx_external_handle_registry::register_resource(session_resource);
       // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
@@ -1262,7 +1262,7 @@ package svx_external_handles_pkg;
 
     static function bit decode(input remote_ref reference, output virtual example_bus_if.master value, output string error);
       svx_external_handle raw;
-      SVXExternal_sv_vif___example_bus_if_masterEndpoint endpoint;
+      SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smasterEndpoint endpoint;
       value = null;
       error = "";
       // Resolve this session-scoped RemoteRef back to the declared static SV type.
@@ -1279,10 +1279,10 @@ package svx_external_handles_pkg;
       value = endpoint.value;
       return 1;
     endfunction
-  endclass : SVXExternal_sv_vif___example_bus_if_master
+  endclass : SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster
 
   // sv_class: example_packet_pkg::Packet <-> RemoteRef[sv://example_packet_pkg/Packet].
-  class SVXExternal_sv___example_packet_pkg_PacketEndpoint implements svx_external_handle;
+  class SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint implements svx_external_handle;
     example_packet_pkg::Packet value;
     longint unsigned object_id;
 
@@ -1293,11 +1293,11 @@ package svx_external_handles_pkg;
     virtual function string svx_external_target_type();
       return "sv://example_packet_pkg/Packet";
     endfunction
-  endclass : SVXExternal_sv___example_packet_pkg_PacketEndpoint
+  endclass : SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint
 
-  class SVXExternal_sv___example_packet_pkg_Packet implements svx_session_resource;
-    static SVXExternal_sv___example_packet_pkg_PacketEndpoint endpoints[$];
-    static SVXExternal_sv___example_packet_pkg_Packet session_resource = new();
+  class SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket implements svx_session_resource;
+    static SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint endpoints[$];
+    static SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket session_resource = new();
 
     virtual function void clear_session();
       endpoints.delete();
@@ -1305,7 +1305,7 @@ package svx_external_handles_pkg;
 
     static function remote_ref encode(example_packet_pkg::Packet value);
       longint unsigned object_id;
-      SVXExternal_sv___example_packet_pkg_PacketEndpoint endpoint;
+      SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint endpoint;
       remote_ref reference;
       svx_external_handle_registry::register_resource(session_resource);
       // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
@@ -1330,7 +1330,7 @@ package svx_external_handles_pkg;
 
     static function bit decode(input remote_ref reference, output example_packet_pkg::Packet value, output string error);
       svx_external_handle raw;
-      SVXExternal_sv___example_packet_pkg_PacketEndpoint endpoint;
+      SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint endpoint;
       value = null;
       error = "";
       // Resolve this session-scoped RemoteRef back to the declared static SV type.
@@ -1347,7 +1347,7 @@ package svx_external_handles_pkg;
       value = endpoint.value;
       return 1;
     endfunction
-  endclass : SVXExternal_sv___example_packet_pkg_Packet
+  endclass : SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket
 endpackage : svx_external_handles_pkg
 
 
@@ -1383,7 +1383,7 @@ package svx_proxy_python_api;
       example_packet_pkg::Packet result;
       // Pack declared input values through the generated SvTypes request record.
       request_value = new();
-      request_value.packet = SVXExternal_sv___example_packet_pkg_Packet::encode(packet);
+      request_value.packet = SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket::encode(packet);
       request_value.pack(bytes);
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
@@ -1401,7 +1401,7 @@ package svx_proxy_python_api;
       offset = 0;
       response_value = new();
       response_value.unpack(bytes, offset);
-      if (!SVXExternal_sv___example_packet_pkg_Packet::decode(response_value.svx_return_value, result, error)) begin
+      if (!SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket::decode(response_value.svx_return_value, result, error)) begin
         $fatal(2, "SVX inheritance callback py://examples/foreign_handles/HandlePortal#retain_packet returned invalid handle result: %s", error);
       end
       svx_require_unpacked_all("py://examples/foreign_handles/HandlePortal#retain_packet", "inheritance response", "call response", offset, bytes.size());
@@ -1420,7 +1420,7 @@ package svx_proxy_python_api;
       virtual example_bus_if.master result;
       // Pack declared input values through the generated SvTypes request record.
       request_value = new();
-      request_value.bus = SVXExternal_sv_vif___example_bus_if_master::encode(bus);
+      request_value.bus = SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster::encode(bus);
       request_value.pack(bytes);
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
@@ -1438,7 +1438,7 @@ package svx_proxy_python_api;
       offset = 0;
       response_value = new();
       response_value.unpack(bytes, offset);
-      if (!SVXExternal_sv_vif___example_bus_if_master::decode(response_value.svx_return_value, result, error)) begin
+      if (!SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster::decode(response_value.svx_return_value, result, error)) begin
         $fatal(2, "SVX inheritance callback py://examples/foreign_handles/HandlePortal#exercise_bus returned invalid handle result: %s", error);
       end
       svx_require_unpacked_all("py://examples/foreign_handles/HandlePortal#exercise_bus", "inheritance response", "call response", offset, bytes.size());
@@ -1461,7 +1461,7 @@ package svx_proxy_python_api;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv___example_packet_pkg_Packet::decode(request_value.packet, packet, error)) begin
+          if (!SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket::decode(request_value.packet, packet, error)) begin
             ok = 0;
             response = null;
             return;
@@ -1470,7 +1470,7 @@ package svx_proxy_python_api;
           result = retain_packet(packet);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv___example_packet_pkg_Packet::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -1485,7 +1485,7 @@ package svx_proxy_python_api;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv_vif___example_bus_if_master::decode(request_value.bus, bus, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster::decode(request_value.bus, bus, error)) begin
             ok = 0;
             response = null;
             return;
@@ -1494,7 +1494,7 @@ package svx_proxy_python_api;
           result = exercise_bus(bus);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv_vif___example_bus_if_master::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -1523,7 +1523,7 @@ package svx_proxy_python_api;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv___example_packet_pkg_Packet::decode(request_value.packet, packet, error)) begin
+          if (!SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket::decode(request_value.packet, packet, error)) begin
             ok = 0;
             response = null;
             return;
@@ -1532,7 +1532,7 @@ package svx_proxy_python_api;
           result = retain_packet(packet);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv___example_packet_pkg_Packet::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -1547,7 +1547,7 @@ package svx_proxy_python_api;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv_vif___example_bus_if_master::decode(request_value.bus, bus, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster::decode(request_value.bus, bus, error)) begin
             ok = 0;
             response = null;
             return;
@@ -1556,7 +1556,7 @@ package svx_proxy_python_api;
           result = exercise_bus(bus);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv_vif___example_bus_if_master::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";

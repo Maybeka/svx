@@ -322,6 +322,37 @@ containers, including an unnamed generate-block variant. See the
 [workflow](../../docs/SVX_GENERATION_WORKFLOW.md#generate-owned-classes) for
 remaining source-placement layouts.
 
+### Generate Runtime Values
+
+Sources: [SV project](generate_runtime_values.sv),
+[Python](generate_runtime_values.py), [original filelist](generate_runtime_values.f).
+
+```sh
+svx export --class 'tb_generate_runtime_values.*.lane[0].Driver' \
+  -f examples/sv_scoped/generate_runtime_values.f --out .tmp/generate-runtime-values
+```
+
+Only Driver is selected. Its class-owned enum, packed struct and necessary
+container aliases are discovered automatically; no declaration JSON or separate
+type selection is needed. Python obtains the types as Driver.Mode and
+Driver.Payload in each generated owner module. The original8/13bit native
+classes, variables and source scopes stay in place. Compile the artifact's
+replacement sources and startup unit as above.
+
+The Python scenario checks live enum/struct fields, whole and local writes to
+enum queues, struct fixed/dynamic arrays, string-indexed maps and nested
+map-of-queue fields. Original SV getter methods verify the updates and unchanged
+siblings, including preserved X/Z. A1ns output/inout task runs for each owner.
+PythonDriver overrides enum, struct and array virtual methods; the existing
+explicit publish_object/SVX_GET_OBJECT handoff lets SV call the same instance
+through its original Driver handle, including Python super() calls.
+
+The complete original-filelist export/check/build/run passed remotely. Expect
+GENERATE_RUNTIME_VALUES_PYTHON_PASS and GENERATE_RUNTIME_VALUES_NATIVE_PASS at2ns.
+These qualified layouts do not imply support for every owner parameterization
+or cross-owner type dependency; see the
+[workflow](../../docs/SVX_GENERATION_WORKFLOW.md#generate-owned-classes).
+
 ## Program-Owned Classes
 
 Sources: [program](program_classes.sv), [top](tb_program_classes.sv),

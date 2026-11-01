@@ -177,6 +177,58 @@ endpackage''', encoding='utf-8')
     assert enriched.callables[0].method.return_handle.operations
 
 
+@pytest.mark.parametrize('integrated', [False, True])
+def test_callable_vif_aliases_discover_and_regenerate_without_class_targets(tmp_path, integrated):
+    source = tmp_path / 'aliases.sv'
+    source.write_text((Path(__file__).resolve().parents[1] / 'integration/scoped_alias_bus_if.sv').read_text(encoding='utf-8') + '''
+package api;
+  function automatic virtual scoped_bus_if.master echo(virtual scoped_bus_if.master value);
+    return value;
+  endfunction
+endpackage
+''', encoding='utf-8')
+    output = tmp_path / 'generated'
+    args = ['export', '--callable', 'api::echo', '--sv-source', str(source), '--out', str(output)]
+    if integrated:
+        args.append('--integrated')
+    main(args, out=io.StringIO())
+    main([*args, '--check'], out=io.StringIO())
+    data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
+    assert not data['classes']
+    raw = data['callables'][0]['method']
+    operations = raw['return_handle']['operations']
+    assert {item['method']['name'] for item in operations} >= {'append_data', 'echo_pair', 'echo_map', 'offset'}
+    raw['return_handle'].pop('operations')
+    raw['parameters'][0]['handle'].pop('operations')
+    data.pop('discovery_provenance')
+    enriched = enrich_virtual_interface_manifest(parse_manifest(data), sv_source_files=[source])
+    assert enriched.callables[0].method.return_handle.operations
+
+
+@pytest.mark.parametrize('type_name', ['Item', 'Items'])
+def test_vif_native_handle_values_are_not_mistaken_for_structural_aliases(tmp_path, type_name):
+    source = tmp_path / 'handles.sv'
+    source.write_text('''package types;
+  class Item; endclass
+  typedef Item Items[$];
+endpackage
+interface bus_if;
+  import types::*;
+  function automatic void consume(input ''' + type_name + ''' value); endfunction
+  modport view(import consume);
+endinterface
+package api;
+  function automatic virtual bus_if.view echo(virtual bus_if.view value);
+    return value;
+  endfunction
+endpackage''', encoding='utf-8')
+    output = tmp_path / 'generated'
+    with pytest.raises(SVXInheritanceError, match='consume.value.*native handle binding'):
+        main(['export', '--callable', 'api::echo', '--sv-source', str(source),
+              '--out', str(output)], out=io.StringIO())
+    assert not (output / 'inheritance.json').exists()
+
+
 def test_callable_aliases_do_not_shadow_user_formals(tmp_path):
     path = tmp_path / 'names.sv'
     path.write_text('''package p;

@@ -57,7 +57,10 @@ def _source_parse_options(predefines, undefines, include_dirs=(), *, discover_pr
     # Recognize opaque legacy protected regions, never interpret their payload as SV.
     # A selected declaration hidden in one still cannot be resolved or generated.
     lexer.enableLegacyProtect = True
-    return Bag([options, lexer])
+    result = Bag([options, lexer])
+    from .source_selection import remember_parse_options
+    remember_parse_options(result, predefines, names, directories, discover_proxies)
+    return result
 
 
 def _source_dependencies(paths, *, predefines=None, undefines=(), include_dirs=(),
@@ -65,7 +68,7 @@ def _source_dependencies(paths, *, predefines=None, undefines=(), include_dirs=(
     from .sv_scan import _parse_sources, _pyslang
     from .source_selection import observed_dependencies
 
-    sources = [Path(path).resolve() for path in paths]
+    sources = list(map(Path, paths))
     if not sources:
         return set()
     if not isinstance(undefines, str):
@@ -77,7 +80,7 @@ def _source_dependencies(paths, *, predefines=None, undefines=(), include_dirs=(
                                     include_dirs=include_dirs, compilation_unit=compilation_unit)
     if observed is not None:
         return observed
-    dependencies = set(sources)
+    dependencies = {path.resolve() for path in sources}
     for _, tree in _parse_sources(_pyslang(), sources, parse_options=options,
                                   compilation_unit=compilation_unit):
         manager = tree.sourceManager

@@ -24,6 +24,12 @@ def value_key(symbol, scope=None):
     return symbol.replace('$unit::', f'$unit[{scope["index"]}]::', 1) if scope is not None else symbol
 
 
+def native_value_reference(symbol, default_class_owners=()):
+    parts = symbol.split('::')
+    return '::'.join(part + ('#()' if '::'.join(parts[:index + 1]) in default_class_owners else '')
+                     for index, part in enumerate(parts))
+
+
 def native_value_name(symbol, source_scope=None):
     parts = symbol.split('::')
     if source_scope is not None and source_scope['kind'] == 'instance':
@@ -49,6 +55,11 @@ class ValueExport:
     identity_json: str
     schema_json: str
     source_scope_json: str | None = field(default=None, kw_only=True)
+    default_class_owners: tuple[str, ...] = field(default=(), kw_only=True)
+
+    @property
+    def native_reference(self):
+        return native_value_reference(self.symbol, self.default_class_owners)
 
     @property
     def source_scope(self):
@@ -75,6 +86,7 @@ class ValueExport:
     def as_dict(self):
         return {'symbol': self.symbol, 'svtypes': json.loads(self.identity_json),
                 'schema': json.loads(self.schema_json),
+                **({'default_class_owners': list(self.default_class_owners)} if self.default_class_owners else {}),
                 **({'source_scope': self.source_scope} if self.source_scope is not None else {})}
 
 
@@ -91,7 +103,7 @@ class ConstantExport(ValueExport):
 def parse_constant_exports(items):
     if not isinstance(items, list):
         raise SVXInheritanceError('root.constants must be a list')
-    if any(not isinstance(item, dict) or set(item) - {'source_scope'} != {'symbol', 'svtypes', 'schema', 'data', 'encoding_descriptor'}
+    if any(not isinstance(item, dict) or set(item) - {'source_scope', 'default_class_owners'} != {'symbol', 'svtypes', 'schema', 'data', 'encoding_descriptor'}
            for item in items):
         raise SVXInheritanceError('constant export requires symbol, public SvTypes identity/schema/encoding descriptor and encoded data')
     declarations = parse_value_exports([{key: value for key, value in item.items()
@@ -119,7 +131,8 @@ def parse_constant_exports(items):
         result.append(ConstantExport(declaration.symbol, declaration.identity_json,
                                      declaration.schema_json, data.hex(),
                                      json.dumps(item['encoding_descriptor'], sort_keys=True),
-                                     source_scope_json=declaration.source_scope_json))
+                                     source_scope_json=declaration.source_scope_json,
+                                     default_class_owners=declaration.default_class_owners))
     return tuple(result)
 
 
@@ -128,7 +141,7 @@ def parse_value_exports(items):
         raise SVXInheritanceError('root.value_types must be a list')
     result, seen = [], set()
     for item in items:
-        if not isinstance(item, dict) or set(item) - {'source_scope'} != {'symbol', 'svtypes', 'schema'}:
+        if not isinstance(item, dict) or set(item) - {'source_scope', 'default_class_owners'} != {'symbol', 'svtypes', 'schema'}:
             raise SVXInheritanceError('value export requires symbol, public SvTypes identity and schema')
         symbol = item['symbol']
         scope = item.get('source_scope')
@@ -153,11 +166,18 @@ def parse_value_exports(items):
         if key in seen:
             raise SVXInheritanceError(f'duplicate value export: {symbol}')
         seen.add(key)
+        owners = item.get('default_class_owners', [])
+        if (not isinstance(owners, list) or any(not isinstance(owner, str) or
+                len(owner.split('::')) < 2 or not symbol.startswith(owner + '::') or
+                not all(_identifier(part) for part in owner.split('::')) for owner in owners)
+                or len(owners) != len(set(owners))):
+            raise SVXInheritanceError(f'invalid default class owners for {symbol!r}')
         if not isinstance(item['svtypes'], dict) or not isinstance(item['schema'], dict):
             raise SVXInheritanceError(f'{symbol} requires public SvTypes identity/schema objects')
         result.append(ValueExport(symbol, json.dumps(item['svtypes'], sort_keys=True),
                                   json.dumps(item['schema'], sort_keys=True),
-                                  source_scope_json=json.dumps(scope, sort_keys=True) if scope is not None else None))
+                                  source_scope_json=json.dumps(scope, sort_keys=True) if scope is not None else None,
+                                  default_class_owners=tuple(owners)))
     return tuple(result)
 
 
@@ -185,6 +205,8 @@ def _schema_annotation(schema, named):
         return factory[shape, svtypes.Signed if schema['signed'] else svtypes.Unsigned]
     if kind == 'string':
         return svtypes.String
+    if kind == 'remote_ref':
+        return svtypes.RemoteRef[schema['target_type_name']]
     if kind == 'real':
         return svtypes.ShortReal if schema['format'] == 'ieee754-binary32' else svtypes.Real
     if kind in {'array', 'dyn_array', 'queue'}:
@@ -307,9 +329,8 @@ def merge_value_sources(manifest, sources, header):
         groups.setdefault(declaration.module, []).append(declaration)
     for constant in manifest.constants:
         groups.setdefault(constant.module, [])
-    all_names = {part for item in manifest.value_types for part in item.qualname.split('.')}
+    all_names = {part for item in (*manifest.value_types, *manifest.constants) for part in item.qualname.split('.')}
     all_names.update(item.name for item in manifest.classes)
-    all_names.update(item.name for item in manifest.constants)
     types_name = '_svx_types'
     while types_name in all_names:
         types_name += '_'
@@ -326,9 +347,10 @@ def merge_value_sources(manifest, sources, header):
     while sys_name in all_names:
         sys_name += '_'
     for module, declarations in groups.items():
+        constants = [item for item in manifest.constants if item.module == module]
         lines = [f'import svtypes as {types_name}', f'import sys as {sys_name}',
                  f'{module_name} = {sys_name}.modules[__name__]', '']
-        nested = [item for item in declarations if '.' in item.qualname]
+        nested = [item for item in (*declarations, *constants) if '.' in item.qualname]
         namespace_name = '_svx_value_namespace'
         while namespace_name in all_names:
             namespace_name += '_'
@@ -373,6 +395,8 @@ def merge_value_sources(manifest, sources, header):
                 return f'{types_name}{factory}[{shape!r}, {types_name}.{"Signed" if schema["signed"] else "Unsigned"}]'
             if kind == 'string':
                 return types_name + '.String'
+            if kind == 'remote_ref':
+                return f'{types_name}.RemoteRef[{schema["target_type_name"]!r}]'
             if kind == 'real':
                 return types_name + ('.ShortReal' if schema['format'] == 'ieee754-binary32' else '.Real')
             if kind in {'array', 'dyn_array', 'queue'}:
@@ -383,15 +407,18 @@ def merge_value_sources(manifest, sources, header):
                 return f'{types_name}.AssocArray[{expression(schema["key"])}, {expression(schema["value"])}]'
             raise SVXInheritanceError(f'cannot render value schema kind {kind!r}')
 
-        for declaration in declarations:
-            data = declaration.as_dict()
-            schema, name = data['schema'], declaration.qualname
-            class_name = native_value_name(declaration.symbol, declaration.source_scope) if '.' in name else name
+        def ensure_namespace(name):
             for depth in range(1, len(name.split('.'))):
                 prefix = '.'.join(name.split('.')[:depth])
                 if prefix not in available:
                     lines.append(f'{prefix} = {namespace_name}()')
                     available.add(prefix)
+
+        for declaration in declarations:
+            data = declaration.as_dict()
+            schema, name = data['schema'], declaration.qualname
+            class_name = native_value_name(declaration.symbol, declaration.source_scope) if '.' in name else name
+            ensure_namespace(name)
             lines.append(f'# Native value type: {declaration.symbol}')
             if schema['type_name'] == module + '.' + name and schema['kind'] == 'enum':
                 base = f'{types_name}.Bit[{schema["width"]}, {types_name}.{"Signed" if schema["signed"] else "Unsigned"}]'
@@ -411,14 +438,14 @@ def merge_value_sources(manifest, sources, header):
                 lines.append(f'{name} = {class_name}')
             available.add(name)
             lines.append('')
-        constants = [item for item in manifest.constants if item.module == module]
         for constant in constants:
+            ensure_namespace(constant.qualname)
             descriptor = json.loads(constant.encoding_json)
             lines.extend([f'# Native compile-time constant: {constant.symbol}',
                 f'{codec_name} = {expression(json.loads(constant.schema_json))}()',
                 f'if {types_name}.encoding_descriptor({codec_name}).to_dict() != {descriptor!r}:',
                 f'    raise {builtins_name}.RuntimeError({("SvTypes encoding changed for " + constant.symbol + "; regenerate SV exports")!r})',
-                f'{constant.name} = {codec_name}.unpack('
+                f'{constant.qualname} = {codec_name}.unpack('
                 f'{builtins_name}.bytes.fromhex({constant.data_hex!r}))[0]', ''])
         generated_modules = set(groups)
         imports = [f'import {value_implementation_module(owner) if owner in generated_modules else owner} as {alias}'
@@ -457,7 +484,7 @@ def publish_scoped_values(manifest, sources):
     import ast
 
     grouped = {}
-    for item in manifest.value_types:
+    for item in (*manifest.value_types, *manifest.constants):
         if '.' in item.qualname:
             grouped.setdefault(item.module, []).append(item)
     for module, declarations in grouped.items():
@@ -478,8 +505,17 @@ def publish_scoped_values(manifest, sources):
 
         helper = private('_svx_scoped_values')
         namespace = private('_svx_value_namespace')
+        constant_descriptor = private('_svx_constant_snapshot')
+        constant_names = {item.qualname for item in manifest.constants if item.module == module}
         imports = [f'import {value_implementation_module(module)} as {helper}',
                    f'from types import SimpleNamespace as {namespace}']
+        if constant_names:
+            imports.extend([
+                   f'class {constant_descriptor}:',
+                   '    def __init__(self, value):',
+                   '        self.value = value',
+                   '    def __get__(self, instance, owner=None):',
+                   '        return self.value'])
         def bindings(selected):
             lines, available = [], set()
             for item in selected:
@@ -492,7 +528,11 @@ def publish_scoped_values(manifest, sources):
                     lines.extend(['try:', f'    {prefix}', f'except {error}:',
                                   f'    {prefix} = {namespace}()'])
                     available.add(prefix)
-                lines.append(f'{item.qualname} = {helper}.{item.qualname}')
+                value = f'{helper}.{item.qualname}'
+                if item.qualname in constant_names:
+                    owner = '.'.join(parts[:-1])
+                    value = f'({constant_descriptor}({value}) if isinstance({owner}, type) else {value})'
+                lines.append(f'{item.qualname} = {value}')
             return lines
         # Contracts import public type identities eagerly. Bind before registration,
         # then reattach whenever an actual mirror replaces an owner namespace.

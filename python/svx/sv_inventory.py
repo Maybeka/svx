@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 
 from .sv_scan import _parse_sources, _pyslang, _token_text
+from .sv_selection import package_import_names
 
 
 _SCOPES = {
@@ -84,6 +85,12 @@ def _availability(kind, scopes, ancestors, node):
         if kind == 'type' or kind == 'constant' and not any(scope['kind'] == 'class' for scope in scopes):
             return 'requires-instance', 'Select a concrete owner path for type or compile-time value snapshots; runtime class-field/method use still requires owner-local transport.'
         return 'owner-bridge-pending', 'Export needs an instance/owner-bound bridge; not implemented yet.'
+    if kind == 'constant' and any(scope['kind'] == 'class' for scope in scopes):
+        if any(_kind(owner) == 'ClassDeclaration' and owner.parameters is not None for owner in ancestors):
+            if scopes[0]['kind'] == 'compilation_unit':
+                return 'owner-bridge-pending', 'Parameterized $unit class constants still need specialization-aware ownership.'
+            return 'requires-specialization', 'Semantic discovery uses complete SV defaults or a concrete class typedef alias; it never invents missing parameter arguments.'
+        return 'selectable', 'Ordinary class parameter/localparam snapshots retain the class namespace; concrete schemas still require semantic validation.'
     if scopes[0]['kind'] == 'compilation_unit':
         if kind == 'class':
             return 'selectable', '$unit class export retains lexical nesting, owner-local source copies and an explicit startup module; signatures still require semantic validation.'
@@ -92,8 +99,6 @@ def _availability(kind, scopes, ancestors, node):
                 return 'selectable', 'Class-owned $unit type snapshots and same-unit nominal runtime signatures are supported; concrete schemas still require semantic validation.'
             return 'selectable', 'Standalone $unit values and same-unit root nominal runtime types are supported; concrete schemas still require semantic validation.'
         return 'owner-bridge-pending', 'Export needs a bridge in the original compilation unit; not implemented yet.'
-    if kind == 'constant' and any(scope['kind'] == 'class' for scope in scopes):
-        return 'member-only', 'Standalone selection of class parameters is not implemented.'
     return 'selectable', 'Scope can be selected; concrete types, signatures and visibility still require semantic validation.'
 
 
@@ -105,6 +110,7 @@ def declaration_inventory(paths, *, parse_options=None, compilation_unit=False,
     Included declarations retain their physical origin and compilation-unit key.
     """
     syntax = _pyslang()
+    from pyslang.ast import VisitAction
     declarations = []
     dependencies = set()
     units = []
@@ -147,10 +153,7 @@ def declaration_inventory(paths, *, parse_options=None, compilation_unit=False,
                     'compilation_unit_index': unit_index,
                     'export_status': status, 'reason': reason}
             if kind == 'package':
-                imports = []
-                node.visit(lookup_table={syntax.SyntaxKind.PackageImportItem:
-                    lambda value: imports.append(_token_text(value.package))})
-                item['imports'] = list(dict.fromkeys(imports))
+                item['imports'] = list(package_import_names(node))
             if (not kinds or kind in kinds) and (not names or any(
                     fnmatchcase(symbol, pattern) or fnmatchcase(name, pattern) for pattern in names)):
                 declarations.append(item)
@@ -167,8 +170,9 @@ def declaration_inventory(paths, *, parse_options=None, compilation_unit=False,
                     add(node, 'constant', _token_text(getattr(declarator, 'name', '')))
             elif kind in {'FunctionDeclaration', 'TaskDeclaration'}:
                 if any(_kind(owner) == 'ClassDeclaration' for owner in _ancestors(node)):
-                    return
+                    return VisitAction.Skip
                 add(node, 'callable', _token_text(node.prototype.name))
+                return VisitAction.Skip
 
         tree.root.visit(lookup_table={getattr(syntax.SyntaxKind, name): visit for name in (
             'PackageDeclaration', 'ClassDeclaration', 'TypedefDeclaration',

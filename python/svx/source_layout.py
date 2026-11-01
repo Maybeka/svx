@@ -24,30 +24,25 @@ from .sv_scan import _pyslang, _source_class_name, _python_proxy_id
 from .sv_source_options import _source_parse_options
 
 
-def emit_sv_export_bridge(manifest: Manifest, *, metadata=None) -> str:
-    """Make direct-export registration explicit across separately analyzed units."""
-    from .sv_scan import _check_source_diagnostics
-
-    bridge = emit_sv_mirrors(manifest)
-    tree = _pyslang().SyntaxTree.fromText(bridge)
-    _check_source_diagnostics(tree, 'generated export bridge')
-    roots = [tree.root] if hasattr(tree.root, 'header') else getattr(tree.root, 'members', ())
+def _startup_registrations(package, *, owner=None):
+    """Select only generated package-level factory/dispatcher initializers."""
     registrations = []
-    for package in roots:
-        if str(package.kind) != 'SyntaxKind.PackageDeclaration':
+    for member in package.members:
+        if type(member).__name__ != 'DataDeclarationSyntax':
             continue
-        for member in package.members:
-            if type(member).__name__ != 'DataDeclarationSyntax':
-                continue
-            for declarator in member.declarators:
-                expression = getattr(getattr(declarator, 'initializer', None), 'expr', None)
-                if expression is not None and str(expression.kind) == 'SyntaxKind.NewClassExpression':
-                    registrations.append(f'    {package.header.name.valueText}::{declarator.name.valueText} = {str(expression).strip()};')
+        for declarator in member.declarators:
+            expression = getattr(getattr(declarator, 'initializer', None), 'expr', None)
+            if expression is not None and str(expression.kind) == 'SyntaxKind.NewClassExpression':
+                registrations.append(f'    {owner or package.header.name.valueText}::{declarator.name.valueText} = {str(expression).strip()};')
+    return registrations
+
+
+def _export_startup_source(registrations, metadata):
     if not registrations:
-        return bridge
+        return ''
     if metadata is not None:
         metadata['systemverilog_startup'] = 'svx_exports_pkg::initialize'
-    return bridge + '\n'.join([
+    return '\n'.join([
         '', '// Explicit direct-export startup; call after svx_init and before Python entry.',
         'package svx_exports_pkg;',
         '  function automatic void initialize();',
@@ -57,6 +52,20 @@ def emit_sv_export_bridge(manifest: Manifest, *, metadata=None) -> str:
         '    initialized = 1;',
         '  endfunction',
         'endpackage : svx_exports_pkg', ''])
+
+
+def emit_sv_export_bridge(manifest: Manifest, *, metadata=None) -> str:
+    """Make direct-export registration explicit across separately analyzed units."""
+    from .sv_scan import _check_source_diagnostics
+
+    bridge = emit_sv_mirrors(manifest)
+    tree = _pyslang().SyntaxTree.fromText(bridge)
+    _check_source_diagnostics(tree, 'generated export bridge')
+    roots = [tree.root] if hasattr(tree.root, 'header') else getattr(tree.root, 'members', ())
+    registrations = [entry for package in roots
+                     if str(package.kind) == 'SyntaxKind.PackageDeclaration'
+                     for entry in _startup_registrations(package)]
+    return bridge + _export_startup_source(registrations, metadata)
 
 
 def integrated_source_paths(sources, *, compilation_unit=False):
@@ -77,8 +86,7 @@ def emit_integrated_sources(manifest: Manifest, sources: Mapping[str, str], *,
     paths = integrated_source_paths(sources, compilation_unit=compilation_unit)
     if compilation_unit or len(sources) <= 1:
         return {'source.sv': emit_integrated_source(manifest, sources, startup_metadata=startup_metadata, **options)}
-    if not all(source.language == 'sv' for source in manifest.classes) or any(
-            plan.steps for plan in projection_plans(manifest)):
+    if any(plan.steps for plan in projection_plans(manifest)):
         raise SVXInheritanceError(
             'independent-unit integration of alternating cross-language lineage '
             'needs owner-local record/bridge placement; this layout remains unfinished')
@@ -90,23 +98,33 @@ def emit_integrated_sources(manifest: Manifest, sources: Mapping[str, str], *,
 
     syntax = _pyslang()
     parse_options = _source_parse_options(**options, discover_proxies=True)
-    manager = SourceManager()
-    trees = []
-    buffers = {}
-    for filename, source in sources.items():
-        _join_source_units({filename: source})
-        buffer = manager.assignText(filename, source)
-        buffers[filename] = buffer.id
-        tree = syntax.SyntaxTree.fromBuffers([buffer], manager, options=parse_options)
-        _check_source_diagnostics(tree, filename)
-        trees.append((Path(filename), tree))
+    from .source_selection import borrow_source_copy_syntax
+    borrowed = borrow_source_copy_syntax(sources, parse_options, False)
+    if borrowed is not None:
+        snapshot, buffers = borrowed
+        manager, trees = snapshot.source_manager, snapshot.root_trees
+        validation_trees = (*[tree for _, tree in trees],
+                            *[tree for _, tree in snapshot.trees if tree.isLibraryUnit])
+    else:
+        manager = SourceManager()
+        trees = []
+        buffers = {}
+        for filename, source in sources.items():
+            _join_source_units({filename: source})
+            buffer = manager.assignText(filename, source)
+            buffers[filename] = buffer.id
+            tree = syntax.SyntaxTree.fromBuffers([buffer], manager, options=parse_options)
+            _check_source_diagnostics(tree, filename)
+            trees.append((Path(filename), tree))
+        validation_trees = tuple(tree for _, tree in load_libraries(
+            trees, tuple(map(Path, sources)), manager, parse_options, False))
     compilation = Compilation()
-    validation_trees = tuple(tree for _, tree in load_libraries(
-        trees, tuple(map(Path, sources)), manager, parse_options, False))
     for tree in validation_trees:
         compilation.addSyntaxTree(tree)
     compilation = elaborate_sources(compilation)
     for target in manifest.classes:
+        if target.language != 'sv':
+            continue
         actual = _lookup_sv_symbol(compilation, target.symbol)
         if actual is None or not getattr(actual, 'canonicalType', None) or not actual.canonicalType.isClass:
             raise SVXInheritanceError(f'source units lack required class declaration {target.symbol}')
@@ -136,7 +154,7 @@ def emit_integrated_sources(manifest: Manifest, sources: Mapping[str, str], *,
 def emit_integrated_source(manifest: Manifest, sources: Mapping[str, str], *, startup_metadata=None, **options) -> str:
     """Own record placement together with source-copy and bridge placement."""
     plans = projection_plans(manifest)
-    if all(source.language == 'sv' for source in manifest.classes) and not any(plan.steps for plan in plans):
+    if not any(plan.steps for plan in plans):
         return _emit_staged_source_unit(
             manifest, _join_source_units(sources), portions=(),
             construction_plan=_sv_root_construction_plan,
@@ -151,7 +169,8 @@ def emit_integrated_source(manifest: Manifest, sources: Mapping[str, str], *, st
                'package svx_call_records_pkg;', '  import svtypes_pkg::*;']
     records.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
     records.append('endpackage : svx_call_records_pkg')
-    return '\n'.join(records) + '\n' + _emit_source_units(manifest, sources, **options)
+    return '\n'.join(records) + '\n' + _emit_source_units(
+        manifest, sources, startup_metadata=startup_metadata, **options)
 
 
 def _emit_sv_root_source_unit(manifest: Manifest, source: str, *, predefines=None, undefines=(), include_dirs=()) -> str:
@@ -200,7 +219,7 @@ def _emit_python_root_source_units(manifest: Manifest, sources: Mapping[str, str
                                    predefines=predefines, undefines=undefines, include_dirs=include_dirs)
 
 
-def _emit_source_units(manifest: Manifest, sources: Mapping[str, str], *, predefines=None, undefines=(), include_dirs=()) -> str:
+def _emit_source_units(manifest: Manifest, sources: Mapping[str, str], *, predefines=None, undefines=(), include_dirs=(), startup_metadata=None) -> str:
     """Integrate both logical root languages in one ordered source unit."""
     sv_portions = _sv_root_artifact_portions(manifest)
     python_portions = _python_root_artifact_portions(manifest)
@@ -218,7 +237,7 @@ def _emit_source_units(manifest: Manifest, sources: Mapping[str, str], *, predef
     return _emit_staged_source_unit(
         manifest, _join_source_units(sources), portions=(*sv_portions, *python_portions),
         construction_plan=construction_plan, projection_emitter=projection_emitter,
-        source_units=sources, preserve_locations=True,
+        source_units=sources, preserve_locations=True, startup_metadata=startup_metadata,
         predefines=predefines, undefines=undefines, include_dirs=include_dirs)
 
 
@@ -303,12 +322,22 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
     else:
         # Physical buffer paths control relative includes; `line only controls
         # logical diagnostics. Parse all buffers together to retain macro state.
-        manager = SourceManager()
-        buffers = {filename: manager.assignText(filename, text)
-                   for filename, text in source_units.items()}
-        tree = check(syntax.SyntaxTree.fromBuffers(list(buffers.values()), manager, options=options))
+        from .source_selection import borrow_source_copy_syntax
+        borrowed = borrow_source_copy_syntax(source_units, options, len(source_units) > 1)
+        if borrowed is None and len(source_units) == 1:
+            borrowed = borrow_source_copy_syntax(source_units, options, True)
+        if borrowed is not None:
+            snapshot, buffers = borrowed
+            manager = snapshot.source_manager
+            tree = check(snapshot.root_trees[0][1])
+        else:
+            manager = SourceManager()
+            assigned = {filename: manager.assignText(filename, text)
+                        for filename, text in source_units.items()}
+            tree = check(syntax.SyntaxTree.fromBuffers(list(assigned.values()), manager, options=options))
+            buffers = {filename: buffer.id for filename, buffer in assigned.items()}
         expanded = _join_source_units({
-            filename: _inline_active_source_includes(tree, text, root_buffer=buffers[filename].id)
+            filename: _inline_active_source_includes(tree, text, root_buffer=buffers[filename])
             for filename, text in source_units.items()})
     if source_units is not None or expanded != source:
         source = expanded
@@ -383,6 +412,8 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
             compilation.addSyntaxTree(original_tree)
         compilation = elaborate_sources(compilation)
         for target in manifest.classes:
+            if target.language != 'sv':
+                continue
             actual = _lookup_sv_symbol(compilation, target.symbol)
             if actual is None or not getattr(actual, 'canonicalType', None) or not actual.canonicalType.isClass:
                 raise SVXInheritanceError(f'source unit lacks required class declaration {target.symbol}')
@@ -440,7 +471,9 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
                     raise SVXInheritanceError(f'duplicate source class {symbol}')
                 classes[symbol] = (package, member)
 
-    independent = tuple(plan.lineage[-1] for plan in projection_plans(manifest) if not plan.steps)
+    portion_ids = {portion.canonical_id for portion in portions}
+    independent = tuple(plan.lineage[-1] for plan in projection_plans(manifest)
+                        if not plan.steps and plan.target_class_id not in portion_ids)
     if not portions and not independent:
         raise SVXInheritanceError('source integration requires a cross-language target of the selected root language')
     if not packages:
@@ -520,7 +553,8 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
     endpoint_references = {}
     source_endpoint_references = {}
     endpoint_names = {}
-    bindings = _manifest_handle_bindings(manifest)
+    from .native_handles import uses_generic_handle
+    bindings = tuple(binding for binding in _manifest_handle_bindings(manifest) if not uses_generic_handle(binding))
     consumers = {}
     for portion in portions:
         context = replace(portion, base_lineage=plans[portion.canonical_id].ancestors)
@@ -604,6 +638,7 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
         return raw.decode('utf-8').removeprefix(prefix).removesuffix('\nendpackage').splitlines()
 
     static_owners = set()
+    startup_registrations = []
     for portion in sorted(portions, key=lambda item: (len(plans[item.canonical_id].ancestors), item.canonical_id)):
         plan = plans[portion.canonical_id]
         package, node, position = anchors[portion.canonical_id]
@@ -645,6 +680,9 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
                 dispatcher_name=private[helper + '_static_dispatch'],
                 instance_name=private[helper + '_static_instance']))
         body = qualify_endpoint_calls(body)
+        generated = parse('package _svx_startup_probe;\n' + '\n'.join(body) + '\nendpackage')
+        generated_package = generated.root if hasattr(generated.root, 'header') else generated.root.members[0]
+        startup_registrations.extend(_startup_registrations(generated_package, owner=package))
         start, end = direct_span(node.sourceRange)
         offset = end if position == 'after' else start
         imports = '  import svx_pkg::*;\n  import svtypes_pkg::*;\n  import svx_call_records_pkg::*;\n'
@@ -786,6 +824,7 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
             package = str(node.header.name).strip()
             if package in {'svx_call_records_pkg', 'svx_external_handles_pkg'}:
                 continue
+            startup_registrations.extend(_startup_registrations(node))
             members = []
             for member in node.members:
                 start, end = member.sourceRange.start.offset, member.sourceRange.end.offset
@@ -830,6 +869,10 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
                         '// Public bridge declarations and type aliases.',
                         f'package {package};', *body, f'endpackage : {package}']
         edits.append((location.offset, location.offset, '\n'.join(declarations) + '\n' + restore_location(location)))
+    startup = _export_startup_source(startup_registrations, startup_metadata)
+    if startup:
+        edits.append((final_location.offset, final_location.offset,
+                      '\n' + generated_location('startup') + startup + restore_location(final_location)))
     raw = source.encode('utf-8')
     boundary = len(raw) + 1
     ordered = sorted(enumerate(edits), key=lambda item: (item[1][0], item[1][1], item[0]), reverse=True)

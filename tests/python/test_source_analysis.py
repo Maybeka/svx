@@ -32,7 +32,7 @@ def test_raw_syntax_shared_across_semantic_consumers(tmp_path, shared):
     assert analysis.parse_seconds > 0
 
 
-def test_cli_generation_enrichment_shares_one_parse_but_not_discovery_state(tmp_path, monkeypatch):
+def test_cli_generation_reuses_verified_syntax_but_not_discovery_semantics(tmp_path, monkeypatch):
     from io import StringIO
     from svx.cli import main
     from tests.python.test_semantic_handle_discovery import source_file
@@ -52,10 +52,13 @@ def test_cli_generation_enrichment_shares_one_parse_but_not_discovery_state(tmp_
     assert len(sessions) == 2
     discovery, generation = sessions
     assert generation is not discovery
-    assert generation.source_manager is not discovery.source_manager
-    assert generation.parse_batches == 1 and generation.syntax_reuses >= 3
+    assert generation.source_manager is discovery.source_manager
+    assert generation.parse_batches == 0 and generation.syntax_reuses >= 3
+    assert discovery.parse_batches == 0
+    assert discovery.class_fact_builds > 0 and generation.class_fact_reuses > 0
+    assert not set(map(id, generation.compilations.values())) & set(map(id, discovery.compilations.values()))
     assert main(args + ['--check'], out=StringIO()) == 0
-    assert len(sessions) == 4 and sessions[-1].parse_batches == 1
+    assert len(sessions) == 4 and sessions[-1].parse_batches == 0
     assert sessions[-1].source_manager is not generation.source_manager
     assert frontend._analysis.get() is None
 
@@ -100,6 +103,21 @@ def test_explicit_foreign_manager_is_not_replaced(tmp_path):
         trees = tuple(_parse_sources(_pyslang(), [source], manager))
         assert trees[0][1].sourceManager is manager
         assert analysis.parse_batches == 0
+
+
+def test_class_fact_reuse_is_immutable_and_result_dictionaries_are_independent(tmp_path):
+    from dataclasses import FrozenInstanceError
+
+    source = tmp_path / 'source.sv'
+    source.write_text('package p; class Base; int first; endclass endpackage')
+    with frontend.source_analysis() as analysis:
+        first = scan_sv_sources([source])
+        fact = first.pop('p::Base')
+        with pytest.raises(FrozenInstanceError):
+            fact.symbol = 'other'
+        second = scan_sv_sources([source])
+        assert second['p::Base'] is fact
+        assert analysis.class_fact_builds == 1 and analysis.class_fact_reuses == 1
 
 
 def test_proxy_context_is_applied_after_raw_syntax_reuse(tmp_path, monkeypatch):
@@ -171,7 +189,7 @@ def test_semantic_reuse_preserves_library_top_selection():
         assert analysis.semantic_builds == 2 and analysis.semantic_reuses == 1
 
 
-def test_cli_shares_discovery_but_not_source_revalidation(tmp_path, monkeypatch):
+def test_cli_discovery_borrows_verified_syntax_without_leaking_analysis(tmp_path, monkeypatch):
     import io
     import svx.cli as cli
     from tests.python.test_manifest_input_stability import args_for
@@ -192,6 +210,6 @@ def test_cli_shares_discovery_but_not_source_revalidation(tmp_path, monkeypatch)
             yield state
     monkeypatch.setattr(frontend, 'source_analysis', observed)
     assert cli.main(args + ['--sv-source', str(source)], out=io.StringIO()) == 0
-    assert len(scopes) == 1 and scopes[0].parse_batches == 1
+    assert len(scopes) == 1 and scopes[0].parse_batches == 0
     assert scopes[0].syntax_reuses >= 4
     assert frontend._analysis.get() is None

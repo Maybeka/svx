@@ -285,6 +285,14 @@ API; private generated/native bridges remain private.
 
 ## Stable CLI
 
+All subcommands accept --config FILE and --config-parser PYTHON together. The
+trusted parser defines svx_args(config_path: pathlib.Path, argv: list[str]) and
+returns a sequence of argument strings for that subcommand. All tokens after
+the --config-parser script path are passed only to the parser; direct SVX
+options and --config files must precede that boundary. See
+[Project Configuration Adapters](SVX_GENERATION_WORKFLOW.md#project-configuration-adapters)
+for ordered composition, explicit-option precedence and path handling.
+
 Expected SVX declaration and filesystem errors are printed to stderr with a
 nonzero exit status (2). Place `--debug` before the subcommand to retain their
 Python traceback, for example `svx --debug inheritance-gen ...`. Unexpected
@@ -318,6 +326,12 @@ implementation exceptions are not suppressed.
   `--exclude-type` excludes optional value targets. Package selection includes
   owned classes, supported value typedefs and parameter/localparam snapshots.
   `--constant` selects these compile-time constants independently;
+  ordinary class declarations retain their nesting, for example
+  --constant 'pkg::Limits::*' publishes svx_mirror.pkg.Limits.WIDTH. Constants-only
+  owners are namespaces; selected mirrors receive those attributes directly.
+  Package class templates use complete SV defaults or existing closed typedef
+  aliases; inherited constants can be selected through derived names. Necessary
+  specialized value types are discovered for classes and package functions alike.
   `--exclude-constant` excludes snapshots. Required signature/constant value types are
   discovered automatically, not duplicated in Python by the user.
   `--callable` selects package functions/tasks; `--exclude-callable` excludes them.
@@ -329,9 +343,29 @@ implementation exceptions are not suppressed.
   value typedefs likewise accept --type pkg::Outer::Packet and publish
   svx_mirror.pkg.Outer.Packet as a real SvTypes declaration; see the workflow
   for supported layouts and unfinished non-package instance bindings.
+  Native class handles also work for compilation-unit/module/interface/program/
+  generate-owned API classes, retaining concrete-owner identity without making
+  referenced classes export targets. See
+  [source-owner handles](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#native-source-owners)
+  for the qualified constructor/member/container/callback scope and remaining gaps.
+  Distinct native handle targets retain separate adapters and collection bindings
+  even when package/class spellings would collide after underscore flattening.
+  Source-owner VIF constructor/field/method bindings reuse shared typed endpoints
+  across owners. Signal access remains restricted by the declared modport;
+  supported structural typedefs in VIF members resolve from the native source
+  scope without additional declaration metadata, including callable-only exports.
+  Package-defined enum/packed-struct VIF signals and operations also resolve
+  automatically, with native type binding for input/output/inout and supported
+  containers. Interface-local nominal types still need additional binding.
+  Qualified operation types and remaining bindings are defined in
+  [owner-local VIFs](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#owner-local-virtual-interfaces).
   `--sv-elaboration packages` skips design-instance elaboration and DUT-only
   hierarchy-instantiation library requests while retaining explicit source
   preprocessing and package/VIF dependencies. Default all is unchanged.
+  `--exclude-source FILE` removes an exact explicit parse root, preserving the
+  original build recipe and retained source order. Shared compilation units reject
+  removal; include/library dependencies are not disabled. `compile-config` reports
+  `excluded_parse_inputs`. See the workflow for path and freshness rules.
   `--integrated` emits original source copies and the existing bridges instead
   of mirrors.sv. Single/shared-unit inputs use sv/source.sv; independent direct
   SV inputs use ordered sv/units/*.sv replacements. The artifact describes
@@ -675,8 +709,20 @@ in svx_mirror_instance.<encoded-owner>.classes. Source discovery emits schema2.6
 These values support type declarations and compile-time snapshots. Classes
 automatically collect same-owner value dependencies for live fields, constructors
 and method transport; module/interface/program runtime paths are qualified.
-Generate-owned nominal runtime combinations and cross-owner dependencies remain
-unfinished. See [Instance-Owned Values](SVX_GENERATION_WORKFLOW.md#instance-owned-values).
+Supported lexically visible SV ancestors also contribute their needed value
+declarations. Selecting both base and derived classes preserves their Python
+inheritance without allocating another native base object; exact selectors
+discover required ancestor owners in the same semantic compilation. See
+[Lexically Visible SV Ancestors](SVX_GENERATION_WORKFLOW.md#lexically-visible-sv-ancestors)
+for the qualified scopes and name-shadowing boundary.
+Generate-owned scalar enum constructors, live fields and function/task/static
+transport are also qualified, with output/inout and Python virtual callbacks.
+Same-owner generate enum/packed-struct fields and containers also support the
+qualified whole/addressed storage and call workflows; see
+[Generate Runtime Values](../examples/sv_scoped/README.md#generate-runtime-values).
+Other cross-owner native dependencies, owner type parameters and specialization-aware
+named-value combinations remain unfinished. See
+[Instance-Owned Values](SVX_GENERATION_WORKFLOW.md#instance-owned-values).
 Their format, source-selection checks, caching boundaries and publication rules
 are specified in [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md).
 `load_manifest(path)` and `inheritance-gen` validate evidence before materializing

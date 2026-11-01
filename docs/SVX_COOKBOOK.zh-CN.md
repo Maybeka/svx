@@ -612,6 +612,17 @@ svx export --type export_driver_pkg::Mode export_driver_pkg::Packet \
 把输出的 python/ 放入导入路径，即可从 svx_mirror.export_driver_pkg 导入 Mode、
 Packet。它们是普通 SvTypes Enum/SvStruct 声明，可直接 pack/unpack；纯类型使用
 不需要 SVX 原生运行库。选择 SV 类时，其方法和字段依赖的值类型会自动带入。
+普通类内的 parameter/localparam 也可单独选择，例如
+`--constant 'export_driver_pkg::Driver::*'`，随后访问 `Driver.DEFAULT_SEED`。
+未选择类时 Driver 只是值命名空间；同时选择类或按 package 导出时，常量会挂到
+实际镜像类上。它们是编译期快照，修改 Python 的快照不影响 SV 原值。
+代码与命令见[类内常量示例](../examples/sv_export/README.zh-CN.md)。
+参数化类沿用 SV 的完整默认参数或工程中已有的具体 typedef 别名，不必补写类型
+JSON；通过派生类名也可选择继承常量。实际特化的 enum/packed struct 会作为必要
+依赖自动生成，既可用于类镜像，也可只用于包函数；
+[具体类型别名示例](../examples/sv_export/README.zh-CN.md#具体类类型别名)
+展示 9/70 位、等价别名、四态 task 数据和虚方法 super() 的完整代码。
+
 编译期参数也可单独导出，例如 --constant 'export_driver_pkg::*'，把上述
 命令中的 --type 及目标替换为该选项即可。生成后可导入 COUNT、FLAGS、
 DEFAULT_PACKET；它们是 SV 求值结果的类型化快照，不是运行期变量访问。
@@ -632,6 +643,11 @@ svx inspect -f examples/sv_export/design.f --kind class type
 svx export --class export_driver_pkg::Driver \
   -f examples/sv_export/design.f --out examples/sv_export/generated
 ```
+
+大型工程可用 --config 和 --config-parser 将工程自定义配置转换成同一套 CLI
+参数，不必维护很长的命令。[可运行配置示例](../examples/sv_export/README.zh-CN.md#生成)
+提供 JSON 文件和 Python 解析器；接口与路径规则统一见
+[配置适配器](SVX_GENERATION_WORKFLOW.md#project-configuration-adapters)。
 
 不熟悉工程时，先用 inspect 查看声明及其所属作用域；加 --name '包名::*'
 筛选，或加 --json 查看源码位置和导出限制。它不会生成文件，也不会展开 DUT
@@ -661,6 +677,50 @@ Outer.LocalPacket 的跨语言往返与局部字段写入，保留未修改字�
 显式源码、宏和 include，只跳过设计实例展开与 DUT 实例化触发的 RTL 库加载，
 包 import 和 VIF 依赖仍按原顺序解析。显式列出的 RTL 仍会解析和校验语法，
 不要把它当作忽略错误或增量缓存开关。手工分步发现/生成时，两步使用同一选项。
+如果原 filelist 采用独立编译单元，且某个显式 RTL 文件确实不参与导出 API，
+可以加 `--exclude-source rtl/datapath.sv`，不必另建 filelist。路径相对当前目录，
+可重复指定；先用 `compile-config` 查看 `excluded_parse_inputs` 和保留的源码顺序。
+它只排除解析入口，不禁止 include 或必要的库依赖加载，也不会修改原仿真构建。
+共享编译单元会拒绝排除；误删 API 所需的基类或包会报错，不会补空类型。
+详细语义与增量校验规则见[直接导出规则](SVX_GENERATION_WORKFLOW.md#direct-sv-export)。
+API 类引用的其他 SV 类不必一起导出：即使类位于编译单元、module、interface、
+program 或 generate 中，成员和方法签名中的原生类 handle 也使用 SvTypes
+RemoteRef 传递，保留实际对象身份和所属实例。它不是该类的可调用镜像；需要访问
+对象自身的方法时再显式导出该类。队列和嵌套关联数组队列的字段局部操作同样适用。
+完整范围与待完成的 VIF/跨 owner 绑定见
+[原生作用域 handle](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#native-source-owners)。
+实例内的 API 类也可接收和保存 VIF，由原始声明确定 interface 和 modport，不必
+再提供 bind 名称。不同组件之间传递同一个 interface 时保留同一引用身份，Python
+调用仍使用 `read_ready()`、`write_data()` 或已导入的 task/function；不会额外开放
+modport 未授权的方向。VIF 成员使用的结构型 typedef 会从接口原生作用域解析，
+无需另列导出目标或编写类型 JSON；可参考[typedef 接口声明](../tests/integration/scoped_alias_bus_if.sv)。
+VIF 信号和操作也支持自动发现 package 定义的 enum、packed struct，以及相应的
+队列、定长/动态数组和字符串键关联数组；input/output/inout 保持原型，struct 的
+X/Z 数据不会被转换为两态值。生成器显式绑定原生类型，不从运行时 VIF 值猜测类型，
+用户仍使用发现的 `svx_mirror.<package>` 类型及 `svx.Output()`、`svx.Inout()`。
+可参考[名义类型接口声明](../tests/integration/scoped_nominal_bus_if.sv)。
+API 类自身的 enum 字段不影响 VIF 传递。接口本地名义类型和操作中的原生 handle 等
+类型绑定边界见[owner-local VIF](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#owner-local-virtual-interfaces)。
+generate 中的标量 enum 构造参数、字段和方法值同样无需额外类型 JSON，原始类型与
+字段保持原位；已验证有符号9/70位值及显式对象交接后的虚方法回调。
+[完整复合值示例](../examples/sv_scoped/README.zh-CN.md#generate-内的复合值)
+进一步展示类内 enum/packed struct、定长/动态数组、队列、关联数组及嵌套容器的
+整值与局部修改，使用原始 SV getter 核实 X/Z、兄弟元素和空容器保持不变。
+
+普通 SV 继承也会保留：例如 module 内的 `Driver` 继承同一编译单元的 `SharedBase`，
+或 generate 内的类继承外层 module 的类。需要在 Python 中使用
+`isinstance(driver, SharedBase)` 时，把基类也列为导出目标；生成的派生类会继承
+对应基类镜像，但 `Driver(...)` 仍只分配一个完整的原生 Driver 对象。
+只选择派生类时，完整 `base_lineage`、继承成员及必要值类型仍会被分析，不会额外
+生成未请求的基类镜像或工厂。精确类路径也会按需解析外层祖先，无需扩大为全工程
+通配选择。完整范围、命名遮蔽边界及代码见
+[可见 SV 祖先](SVX_GENERATION_WORKFLOW.md#lexically-visible-sv-ancestors)。
+只从原始 filelist 选择 Driver 即可；不需要另写类型 JSON 或导出未使用的中间别名。
+完整范围与剩余 owner 组合见[generate 类](SVX_GENERATION_WORKFLOW.md#generate-owned-classes)。
+不同 package 的类 handle 可以同时出现在同一个 API 中，即使名称组合容易混淆，
+例如 `a_b::C` 与 `a::b_C`；它们的标量与队列使用不同的静态目标身份，用户无需
+指定内部适配器名。可查看[双类型回归声明](../tests/integration/handle_name_collision.sv)
+及[对应 Python 调用](../tests/integration/handle_name_collision.py)。
 直接 SV 导出也可加 --integrated。单输入或共享编译单元生成 generated/sv/source.sv，
 多个独立编译单元则分别生成 generated/sv/units/*.sv；按 artifact 中的
 source_replacements 和 systemverilog_compile_order 替换原文件，不要强行合并
@@ -944,6 +1004,14 @@ X/Z，二态 codec 遇到 X/Z 仍报错。它表示“最近通知的值”，�
 参数形式与路径解释见[编译配置导入](SVX_BUILD_INPUTS.md)。
 真实工程演示见 [UART 迁移教程](../examples/opentitan_uart/README.zh-CN.md)。
 `-y` / `+libext` 按需选取库文件，不枚举目录下所有文件。
+清单与目标选择会复用同一语法树的 package import 信息；函数内部的 import
+仍参与依赖收集，但函数局部类型不会作为可导出的公开类型。
+源码副本模式也复用已校验的原始语法树；源码文本、编译单元分组或依赖选择不匹配
+时仍重新解析。它不跳过变更检查，也不意味着展开后的源码和生成代码无需解析。
+一次校验可以合并依赖证明与源码摘要检查，避免同一阶段重复读取；后续校验仍重新
+检查当前内容，不靠文件时间戳判断有效性。具体边界见
+[解析复用规则](SVX_GENERATION_WORKFLOW.md#frontend-scope-and-cost)。
+UART 教程已验证 `--integrated` 的实际编译及三种运行模式，接入差异见教程第2节。
 
 ### 日常修改与只读验收分开
 

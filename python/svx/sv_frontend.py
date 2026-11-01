@@ -1,7 +1,8 @@
-"""Command-scoped syntax ownership for source-stable discovery operations.
+"""Phase-local semantic analysis over command-owned, verified source syntax.
 
-This is not a persistent cache. The CLI's independent before/after input
-observations remain outside this scope and must not reuse its syntax trees.
+The dependency observer can supply immutable raw trees after fresh content and
+lookup validation. Semantic graphs remain local to each analysis scope; no AST
+or source manager is retained by the observation context after the command.
 """
 
 from contextlib import contextmanager
@@ -106,11 +107,15 @@ class SourceAnalysis:
     semantic_builds: int = 0
     semantic_reuses: int = 0
     semantic_seconds: float = 0.0
+    class_fact_tables: dict = field(default_factory=dict)
+    class_fact_builds: int = 0
+    class_fact_reuses: int = 0
+    package_imports: dict = field(default_factory=dict)
 
 
 @contextmanager
 def source_analysis():
-    """Share raw trees only within one externally revalidated operation."""
+    """Own phase-local consumers, borrowing verified command syntax when safe."""
     from pyslang import SourceManager
 
     state = SourceAnalysis(SourceManager())

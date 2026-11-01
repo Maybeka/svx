@@ -95,6 +95,19 @@ and `$UART_GENERATED` to the include search path; add
 top-level modules. The source includes the bridge before generated `mirrors.sv`.
 Build/load the matching native SVX runtime as described in the
 [integration guide](../../docs/SVX_USER_MANUAL.md).
+For the direct source-export command above, call the reported
+`svx_exports_pkg::initialize()` after `svx_init()` and before `svx_load()` in that
+top to explicitly register generated factories and dispatchers.
+
+Alternatively add `--integrated` to the same export command. Replace original
+inputs using `source_replacements` and `systemverilog_compile_order` from
+artifacts.json, with the SvTypes/SVX runtime packages compiled first. Do not also
+compile the original list or a separate bridge/mirrors file. Remove the four
+leading duplicate includes from the migration top, retaining its test package
+and registration module, and use the same initialize call. Preserve original
+implicit library options and DPI linkage even when library source text appears
+in the expanded copy. This mode has been rebuilt and verified in mixed, Python
+and retained-SV modes; see [results](RESULTS.md).
 
 Preserve the original build's access, assertion, language and instrumentation
 options. Extend that build rather than reconstructing its RTL file list by hand.

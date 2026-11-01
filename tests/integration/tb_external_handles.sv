@@ -84,27 +84,27 @@ module tb;
     returned_vif.write(8'ha6);
     if (bus.read() != 8'ha6) $fatal(1, "virtual interface handle did not round trip");
 
-    null_reference = SVXExternal_sv___external_handle_test_pkg_Packet::encode(null);
-    if (!SVXExternal_sv___external_handle_test_pkg_Packet::decode(null_reference, returned_packet, error))
+    null_reference = SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::encode(null);
+    if (!SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::decode(null_reference, returned_packet, error))
       $fatal(1, "null handle decode failed");
     if (returned_packet != null) $fatal(1, "null handle became non-null");
-    old_reference = SVXExternal_sv___external_handle_test_pkg_Packet::encode(source);
+    old_reference = SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::encode(source);
     wrong_reference = new("sv://other/Packet", old_reference.object_number);
-    if (SVXExternal_sv___external_handle_test_pkg_Packet::decode(wrong_reference, returned_packet, error))
+    if (SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::decode(wrong_reference, returned_packet, error))
       $fatal(1, "wrong target accepted");
     svx_external_handle_registry::clear();
-    if (SVXExternal_sv___external_handle_test_pkg_Packet::endpoints.size() != 0)
+    if (SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::endpoints.size() != 0)
       $fatal(1, "shutdown retained generated endpoints");
-    if (SVXExternal_sv___external_handle_test_pkg_Packet::decode(old_reference, returned_packet, error))
+    if (SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::decode(old_reference, returned_packet, error))
       $fatal(1, "stale handle accepted");
-    new_reference = SVXExternal_sv___external_handle_test_pkg_Packet::encode(source);
+    new_reference = SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::encode(source);
     if (new_reference.object_number == old_reference.object_number)
       $fatal(1, "new session reused stale id");
-    if (!SVXExternal_sv___external_handle_test_pkg_Packet::decode(new_reference, returned_packet, error))
+    if (!SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::decode(new_reference, returned_packet, error))
       $fatal(1, "retained SV handle could not be encoded in new session");
     if (returned_packet != source) $fatal(1, "new session changed handle identity");
     svx_shutdown();
-    if (SVXExternal_sv___external_handle_test_pkg_Packet::endpoints.size() != 0)
+    if (SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::endpoints.size() != 0)
       $fatal(1, "shutdown retained generated endpoints");
     $display("EXTERNAL_HANDLES_PASS");
     $finish;

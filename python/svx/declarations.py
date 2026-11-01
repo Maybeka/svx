@@ -972,9 +972,6 @@ def manifest_from_declarations(
         interface_facts = (scan_sv_virtual_interfaces(sv_source_files, parse_options=parse_options,
                                                     compilation_unit=sv_compilation_unit)
                            if class_analysis or auto_values and auto_values.callables else {})
-        if auto_values and auto_values.callables:
-            _enrich_virtual_interface_handles([{'methods': [item['method'] for item in auto_values.callables.values()]}],
-                                             interface_facts)
         _enrich_python_source_handles([*classes, *python_ancestors.values()], source_facts, interface_facts)
         explicit_ids = {item["canonical_id"] for item in sv_classes}
         selected_ids = ()
@@ -1010,15 +1007,20 @@ def manifest_from_declarations(
                     sv_classes.append(declaration)
             sv_context = [item for item in sv_context if item['canonical_id'] not in selected_ids]
     classes.extend(sv_classes)
-    if sv_source_files and (classes or sv_context):
+    callable_context = ([{'language': 'python', 'symbol': 'SVXCallableContext',
+                         'methods': [item['method'] for item in auto_values.callables.values()]}]
+                        if auto_values and auto_values.callables else [])
+    if sv_source_files and (classes or sv_context or callable_context):
         source_declarations = [*classes, *sv_context]
         _enrich_native_handle_fields(source_declarations, sv_source_files, parse_options=parse_options,
                                      compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
-        normalize_sv_handle_types(source_declarations, sv_source_files, parse_options=parse_options,
-                                  compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
+        normalize_sv_handle_types([*source_declarations, *callable_context], sv_source_files, parse_options=parse_options,
+            compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values(),
+            vif_enricher=_semantic_vif_enricher(interface_facts,
+                value_annotations=_source_value_annotations(python_modules), value_exports=auto_values))
         validate_sv_declarations([*sv_classes, *sv_context], sv_source_files, parse_options=parse_options,
                                  compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
-        _enrich_virtual_interface_handles(source_declarations, interface_facts)
+        _enrich_virtual_interface_handles([*source_declarations, *callable_context], interface_facts)
     declared_by_id = {**{item["canonical_id"]: item for item in sv_context}, **python_ancestors, **{
         item.get("canonical_id"): item
         for item in classes
@@ -1080,7 +1082,9 @@ def manifest_from_declarations(
     return parse_manifest(
         {
             "schema_uri": SCHEMA_URI,
-            "schema_version": ('2.6.0' if (auto_values and any((item.source_scope or {}).get('kind') == 'instance'
+            "schema_version": ('2.7.0' if auto_values and any(item.default_class_owners for item in
+                                           (*auto_values.declarations.values(), *auto_values.constants.values())) else
+                               '2.6.0' if (auto_values and any((item.source_scope or {}).get('kind') == 'instance'
                                             for item in (*auto_values.declarations.values(), *auto_values.constants.values()))) or any((item.get('source_scope') or {}).get('kind') == 'instance' for cls in classes
                                            for item in (*cls.get('base_lineage', []), cls)) else
                                '2.5.0' if any(item.get('source_scope') is not None for cls in classes
@@ -1173,7 +1177,7 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
             _validate_source_value_schema(source, svtypes.schema_descriptor(candidate).schema, where=where)
             return candidate
         from .sv_scan import _source_handle_metadata
-        handle = _source_handle_metadata(original, where=where)
+        handle = _source_handle_metadata(original, where=where, value_exports=value_exports)
         if handle is not None:
             return svtypes.RemoteRef[handle["target_type_name"]]
         kind = source.kind.name
@@ -1233,6 +1237,10 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
         selector = _semantic_class_selector(actual)
         unit = _unit_scope(selector)
         result["sv"] = '$unit::' + unit[1] if unit is not None else actual.lexicalPath
+        if value_exports is not None:
+            symbol, scope = value_exports.source_symbol(actual)
+            if scope is None or scope['kind'] == 'compilation_unit':
+                result['sv'] = value_exports.native_reference(actual)
     if (value_exports is not None and value_exports.current_instance is not None
             and (actual.kind.name == 'TypeAlias' or actual.canonicalType.kind.name in {'EnumType', 'PackedStructType'})):
         symbol, scope = value_exports.source_symbol(actual)
@@ -1298,6 +1306,7 @@ def _vif_operations(
     target_type_name: str,
     fact: SVVirtualInterfaceFact,
     modport: str | None,
+    *, native_scope=None, type_binding=None,
 ) -> list[dict[str, Any]]:
     if modport is not None and modport not in fact.modports:
         raise SVXInheritanceError(
@@ -1313,14 +1322,39 @@ def _vif_operations(
             for item in items
         }
     operations: list[dict[str, Any]] = []
+    def member_type(member, *, parameter=None, where):
+        if native_scope is None:
+            return _vif_type_declaration(parameter.sv_type if parameter is not None else member.sv_type, where=where)
+        actual = native_scope.lookupName(member.name)
+        if actual is None:
+            raise SVXInheritanceError(f'{where} was not resolved in the static interface type')
+        if parameter is not None:
+            actual = next((argument.type for argument in actual.arguments if argument.name == parameter.name), None)
+        else:
+            actual = actual.type if member.kind == 'signal' else actual.returnType
+        if actual is None or actual.isError:
+            raise SVXInheritanceError(f'{where} has an unresolved type; supply its source dependencies')
+        element = actual.canonicalType
+        while element.isArray:
+            element = element.arrayElementType.canonicalType
+        if element.isClass or element.isVirtualInterface:
+            raise SVXInheritanceError(
+                f'{where} requires native handle binding inside a VIF operation; this layout remains unfinished')
+        # Keep published builtin identities (width versus singleton dimensions).
+        spelling = parameter.sv_type if parameter is not None else member.sv_type
+        try:
+            return _vif_type_declaration(spelling, where=where)
+        except SVXInheritanceError:
+            return type_binding(actual, where=where)
+
     for member in fact.members:
         direction = directions.get(member.name)
         if direction is None:
             continue
         if member.kind == "signal":
             assert member.sv_type is not None
-            binding = _vif_type_declaration(
-                member.sv_type,
+            binding = member_type(
+                member,
                 where=f"virtual interface {fact.symbol}.{member.name}",
             )
             if direction in {"input", "inout"}:
@@ -1367,8 +1401,8 @@ def _vif_operations(
             parameters.append(
                 {
                     "name": parameter.name,
-                    "type": _vif_type_declaration(
-                        parameter.sv_type,
+                    "type": member_type(
+                        member, parameter=parameter,
                         where=f"virtual interface {fact.symbol}.{member.name}.{parameter.name}",
                     ),
                     "direction": parameter.direction,
@@ -1377,8 +1411,8 @@ def _vif_operations(
         return_type: Any = "void"
         if member.kind == "function" and member.sv_type != "void":
             assert member.sv_type is not None
-            return_type = _vif_type_declaration(
-                member.sv_type,
+            return_type = member_type(
+                member,
                 where=f"virtual interface {fact.symbol}.{member.name} return",
             )
         operations.append(
@@ -1495,38 +1529,56 @@ def _enrich_native_handle_fields(classes: list[dict[str, Any]], paths: Iterable[
                 field["handle"] = handle
 
 
+def _semantic_vif_enricher(facts, *, value_annotations=None, value_exports=None):
+    operations = {}
+    def binding(actual, *, where):
+        return _source_semantic_type_declaration(actual, where=where,
+            value_annotations=value_annotations, value_exports=value_exports)
+    def enrich(handle, scope):
+        if handle.get('operations'):
+            return
+        target = handle['target_type_name']
+        if target not in operations:
+            _enrich_vif_handle(handle, facts, native_scope=scope, type_binding=binding)
+            operations[target] = copy.deepcopy(handle['operations'])
+        else:
+            handle['operations'] = copy.deepcopy(operations[target])
+    return enrich
+
+
+def _enrich_vif_handle(handle, facts, *, native_scope=None, type_binding=None):
+    if not isinstance(handle, dict) or handle.get("kind") != "virtual_interface":
+        return
+    if handle.get("operations"):
+        return
+    sv_type = handle.get("sv_type")
+    target = handle.get("target_type_name")
+    if not isinstance(sv_type, str) or not isinstance(target, str):
+        return
+    match = re.fullmatch(r"virtual\s+([A-Za-z_$][A-Za-z0-9_$:]*)((?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)", sv_type)
+    if match is None:
+        raise SVXInheritanceError(
+            f"virtual interface handle type {sv_type!r} is not a supported static VIF declaration"
+        )
+    interface_name, modport_suffix = match.groups()
+    modport = modport_suffix[1:] if modport_suffix else None
+    fact = facts.get(interface_name)
+    if fact is None:
+        raise SVXInheritanceError(f"virtual interface {interface_name} was not found in scanned SV sources")
+    expected_target = f"sv-vif://{interface_name}/{modport or 'full'}"
+    if target != expected_target:
+        raise SVXInheritanceError(f"virtual interface target {target!r} must be {expected_target!r}")
+    handle["operations"] = _vif_operations(target, fact, modport, native_scope=native_scope,
+                                           type_binding=type_binding)
+
+
 def _enrich_virtual_interface_handles(
     classes: list[dict[str, Any]], facts: dict[str, SVVirtualInterfaceFact]
 ) -> None:
     """Attach generated VIF operations to handle metadata in-place."""
 
-    def enrich_handle(handle: object) -> None:
-        if not isinstance(handle, dict) or handle.get("kind") != "virtual_interface":
-            return
-        if handle.get("operations"):
-            return
-        sv_type = handle.get("sv_type")
-        target = handle.get("target_type_name")
-        if not isinstance(sv_type, str) or not isinstance(target, str):
-            return
-        match = re.fullmatch(r"virtual\s+([A-Za-z_$][A-Za-z0-9_$:]*)((?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)", sv_type)
-        if match is None:
-            raise SVXInheritanceError(
-                f"virtual interface handle type {sv_type!r} is not a supported static VIF declaration"
-            )
-        interface_name, modport_suffix = match.groups()
-        modport = modport_suffix[1:] if modport_suffix else None
-        fact = facts.get(interface_name)
-        if fact is None:
-            raise SVXInheritanceError(
-                f"virtual interface {interface_name} was not found in scanned SV sources"
-            )
-        expected_target = f"sv-vif://{interface_name}/{modport or 'full'}"
-        if target != expected_target:
-            raise SVXInheritanceError(
-                f"virtual interface target {target!r} must be {expected_target!r}"
-            )
-        handle["operations"] = _vif_operations(target, fact, modport)
+    def enrich_handle(handle):
+        _enrich_vif_handle(handle, facts)
 
     def visit_class(declaration: object) -> None:
         if not isinstance(declaration, dict):
@@ -1740,11 +1792,12 @@ def enrich_virtual_interface_manifest(
     declaration = manifest_dict(manifest)
     if manifest.classes:
         _enrich_native_handle_fields(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
-        normalize_sv_handle_types(declaration["classes"], paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
-    _enrich_virtual_interface_handles(
-        [*declaration['classes'], {'methods': [item['method'] for item in declaration.get('callables', [])]}],
-        scan_sv_virtual_interfaces(paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
-    )
+    contexts = [*declaration['classes'], {'language': 'python', 'symbol': 'SVXCallableContext',
+                'methods': [item['method'] for item in declaration.get('callables', [])]}]
+    facts = scan_sv_virtual_interfaces(paths, parse_options=parse_options, compilation_unit=sv_compilation_unit)
+    normalize_sv_handle_types(contexts, paths, parse_options=parse_options, compilation_unit=sv_compilation_unit,
+                               vif_enricher=_semantic_vif_enricher(facts))
+    _enrich_virtual_interface_handles(contexts, facts)
     # The input object has already passed file-backed provenance validation.
     # Enrichment is an in-memory derivative, not a new discovery certification.
     declaration.pop('discovery_provenance', None)

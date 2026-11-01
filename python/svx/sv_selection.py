@@ -28,6 +28,24 @@ def matches_sv_selector(symbol, pattern, *, relative_units=True):
             and not pattern.startswith('$unit') and fnmatchcase(owner[1], pattern))
 
 
+def package_import_names(root):
+    """Share immutable import facts only for the same analysis-owned syntax node."""
+    from pyslang.syntax import SyntaxKind
+    from .sv_frontend import _analysis
+
+    state = _analysis.get()
+    cached = state.package_imports.get(id(root)) if state is not None else None
+    if cached is not None and cached[0] is root:
+        return cached[1]
+    imports = []
+    root.visit(lookup_table={SyntaxKind.PackageImportItem:
+                            lambda item: imports.append(str(item.package.valueText))})
+    names = tuple(dict.fromkeys(imports))
+    if state is not None:
+        state.package_imports[id(root)] = (root, names)
+    return names
+
+
 def source_packages(paths, *, parse_options=None, compilation_unit=False):
     syntax = _pyslang()
     from pyslang.syntax import SyntaxKind
@@ -40,10 +58,7 @@ def source_packages(paths, *, parse_options=None, compilation_unit=False):
             if root.kind != SyntaxKind.PackageDeclaration:
                 continue
             name = str(root.header.name.valueText)
-            imports = []
-            root.visit(lookup_table={SyntaxKind.PackageImportItem:
-                                    lambda item: imports.append(str(item.package.valueText))})
-            package_imports[name] = tuple(dict.fromkeys(imports))
+            package_imports[name] = package_import_names(root)
     return package_imports
 
 

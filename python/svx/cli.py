@@ -369,6 +369,23 @@ def _sv_macro_config(args: argparse.Namespace) -> dict:
     args._sv_build_configuration = imported
     args._sv_build_recipe = recipe
     args.sv_source = [str(p) for p in imported.sources] + args._explicit_sv_sources
+    shared = args.sv_compilation_unit or imported.shared
+    excluded = {Path(p).resolve() for p in getattr(args, 'exclude_source', [])}
+    args._excluded_sv_sources = []
+    if excluded:
+        sources = [(p, Path(p).resolve()) for p in args.sv_source]
+        unknown = excluded - {path for _, path in sources}
+        if unknown:
+            raise SVXInheritanceError('--exclude-source is not an explicit parse input: ' +
+                                      ', '.join(str(p) for p in sorted(unknown)))
+        if shared:
+            raise SVXInheritanceError(
+                '--exclude-source requires separate compilation units; removing a source '
+                'from a shared unit can change macros and compilation-unit declarations')
+        args._excluded_sv_sources = [p for p, path in sources if path in excluded]
+        args.sv_source = [p for p, path in sources if path not in excluded]
+        if not args.sv_source:
+            raise SVXInheritanceError('--exclude-source removed every SV parse input')
     definitions = dict(imported.defines)
     explicit = {}
     for item in args.sv_define:
@@ -381,7 +398,6 @@ def _sv_macro_config(args: argparse.Namespace) -> dict:
     undefines = [name for name in imported.undefines if name not in explicit] + list(args.sv_undefine)
     for name in undefines:
         definitions.pop(name, None)
-    shared = args.sv_compilation_unit or imported.shared
     includes = [str(p) for p in imported.include_dirs] + list(args.sv_include_dir)
     if (definitions or undefines or shared or includes) and not args.sv_source:
         raise SystemExit("SV source configuration requires --sv-source")
@@ -415,9 +431,12 @@ def _cmd_compile_config(args, out):
                 include_dirs=[relative(p) for p in effective['sv_include_dirs']],
                 defines=effective['sv_predefines'], undefines=effective['sv_undefines'],
                 compilation_unit=effective['sv_compilation_unit'])
+    if args._excluded_sv_sources:
+        data['excluded_parse_inputs'] = [relative(p) for p in args._excluded_sv_sources]
     text = json.dumps(data, indent=2) + '\n'
     if args.out:
         _protect_generation_inputs([Path(args.out)], [*args._sv_build_configuration.inputs,
+                                                    *(Path(p) for p in args._excluded_sv_sources),
                                                     *(Path(p) for p in args.sv_source)])
         write_text_atomic(Path(args.out), text)
     else:
@@ -482,7 +501,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
     else:
         python_sources = emit_python_mirrors(manifest)
         from .inheritance import projection_plans
-        if args.sv_source and all(source.language == 'sv' for source in manifest.classes) and not any(
+        if args.sv_source and not any(
                 plan.steps for plan in projection_plans(manifest)) and not args.sv_stage_dir:
             from .source_layout import emit_sv_export_bridge
             sv_text = emit_sv_export_bridge(manifest, metadata=startup_metadata)
@@ -589,6 +608,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
                         *getattr(args, '_discovery_sources', ()),
                         Path(args.manifest).resolve(), *_sv_source_dependencies(args),
                         *args._sv_build_configuration.inputs,
+                        *(Path(p).resolve() for p in args._excluded_sv_sources),
                         *python_dependencies}
     removable = []
     if args.python_out:
@@ -895,6 +915,8 @@ def _generation_inputs(args: argparse.Namespace, root: Path, certified_sources=N
     }
     if args.sv_elaboration != 'all':
         inputs['sv_elaboration'] = args.sv_elaboration
+    if args._excluded_sv_sources:
+        inputs['sv_excluded_sources'] = [relative(Path(p).resolve()) for p in args._excluded_sv_sources]
     if build_record := _sv_build_record(args, root):
         inputs['sv_build'] = build_record
         inputs['sv_build_inputs'] = [file_record(path) for path in args._sv_build_configuration.inputs]
@@ -1165,11 +1187,13 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
     ])
     for name in ('sv_source', 'sv_filelist', 'sv_relative_filelist', 'sv_build_command',
                  'sv_build_directory', 'sv_include_dir', 'sv_compilation_unit',
-                 'sv_define', 'sv_undefine', 'sv_elaboration', 'python_source'):
+                 'sv_define', 'sv_undefine', 'sv_elaboration', 'exclude_source', 'python_source'):
         setattr(generation, name, getattr(args, name))
     _cmd_inheritance_gen(generation, StringIO())
+    for path in getattr(discovery, '_excluded_sv_sources', []):
+        print(f'Excluded explicit parse input: {path}', file=out)
     if args.sv_elaboration == 'packages':
-        print('SV elaboration: packages; design hierarchy omitted; all explicit sources still preprocessed; DUT-only library requests skipped', file=out)
+        print('SV elaboration: packages; design hierarchy omitted; retained explicit sources still preprocessed; DUT-only library requests skipped', file=out)
     print(f'Python path: {root / "python"}', file=out)
     for target in manifest.classes:
         if target.language == 'sv':
@@ -1185,7 +1209,9 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
         if '.' in value.qualname:
             print(f'Type: {value.module}.{value.qualname}', file=out)
     for value in manifest.constants:
-        print(f'from {value.module} import {value.name}', file=out)
+        print(f'from {value.module} import {value.qualname.split(".")[0]}', file=out)
+        if '.' in value.qualname:
+            print(f'Constant: {value.module}.{value.qualname}', file=out)
     for item in manifest.callables:
         print(f'from svx_mirror.{item.package} import {item.name}', file=out)
     artifact = json.loads((root / 'artifacts.json').read_text(encoding='utf-8'))
@@ -1212,6 +1238,10 @@ def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int
     if not target.name:
         raise SVXInheritanceError(f'generated manifest target requires a filename: {target}')
     evidence = target.with_name(target.name + '.svx-discovery.json')
+    if args.sv_source:
+        # Own reusable syntax under the current compiler inputs, not the path
+        # spellings/macro ordering reconstructed from a previous output record.
+        _sv_source_dependencies(args)
     retained = {}
     if target.is_file():
         try:
@@ -1265,6 +1295,7 @@ def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int
         *(Path(path).resolve() for path in args.sv_declarations),
         *(Path(item['path']) for item in fingerprints['sv_dependencies']),
         *args._sv_build_configuration.inputs,
+        *(Path(p).resolve() for p in args._excluded_sv_sources),
         *(Path(item['path']) for item in fingerprints['python_sources']),
         *(Path(module.__file__).resolve() for module in modules if getattr(module, "__file__", None)),
         *retained,
@@ -1345,6 +1376,8 @@ def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int
         }
     if args.sv_elaboration != 'all':
         configuration['sv_elaboration'] = args.sv_elaboration
+    if args._excluded_sv_sources:
+        configuration['sv_excluded_sources'] = [relative(path) for path in args._excluded_sv_sources]
     if build_record := _sv_build_record(args, root):
         configuration['sv_build'] = build_record
     ancestors = {'.'.join(item['module'].split('.')[:index])
@@ -1377,6 +1410,8 @@ def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int
 
 
 def _add_sv_macro_arguments(parser: argparse.ArgumentParser, *, analysis=False) -> None:
+    parser.add_argument('--exclude-source', action='append', default=[], metavar='FILE',
+                        help='omit an explicit source from export parsing only; exact path relative to current directory; separate compilation units required; includes and library dependencies remain enabled')
     if analysis:
         parser.add_argument('--sv-elaboration', choices=('all', 'packages'), default='all',
                             help='packages skips design hierarchy elaboration and DUT-only library requests, retaining explicit source preprocessing and package/VIF dependencies')
@@ -1542,23 +1577,31 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--check", action="store_true", help="verify the output is current")
     p.set_defaults(func=_cmd_inheritance_manifest)
 
+    for command in sub.choices.values():
+        command.add_argument('--config', action='append', metavar='FILE',
+                             help='user configuration file; repeat in order; requires --config-parser')
+        command.add_argument('--config-parser', metavar='PYTHON',
+                             help='trusted script defining svx_args(config_path, argv); all following tokens belong to the script')
     return parser
 
 
 def main(argv: list[str] | None = None, out: TextIO = sys.stdout) -> int:
+    from .cli_config import expand_config_arguments
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(expand_config_arguments(sys.argv[1:] if argv is None else argv))
     return args.func(args, out)
 
 
 def entrypoint(argv: list[str] | None = None) -> int:
     """Present expected command errors without hiding unexpected failures."""
 
-    args = build_parser().parse_args(argv)
+    from .cli_config import expand_config_arguments, explicit_debug_requested
+    raw = list(sys.argv[1:] if argv is None else argv)
     try:
+        args = build_parser().parse_args(expand_config_arguments(raw))
         return args.func(args, sys.stdout)
     except (SVXError, OSError) as error:
-        if args.debug:
+        if explicit_debug_requested(raw):
             raise
         print(f"svx: error: {error}", file=sys.stderr)
         return 2

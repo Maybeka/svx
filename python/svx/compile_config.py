@@ -83,19 +83,23 @@ def import_compile_configuration(recipe: dict, root: Path | None = None) -> Comp
     directory = (root / recipe.get('directory', '.')).resolve()
     result = CompileConfiguration([], [], {}, [], [], ignored=[])
     active: list[Path] = []
+    source_paths = set()
+    input_paths = set()
 
     def path(value, base):
         return (base / _expand(value)).resolve()
 
     def remember_input(value):
-        if value not in result.inputs:
+        if value not in input_paths:
+            input_paths.add(value)
             result.inputs.append(value)
 
     def source(value):
         if not value.is_file():
             raise SVXInheritanceError(f'build source does not exist: {value}')
-        if value in result.sources:
+        if value in source_paths:
             raise SVXInheritanceError(f'duplicate build source: {value}')
+        source_paths.add(value)
         result.sources.append(value)
 
     def definition(value):

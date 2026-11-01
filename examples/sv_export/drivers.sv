@@ -34,6 +34,8 @@ package export_driver_pkg;
                                       mode:ACTIVE, base_mode:BASE_ACTIVE};
   localparam int TABLE[3]='{1,-2,3};
   class Driver extends Base;
+    localparam int DEFAULT_SEED=COUNT;
+    localparam Mode DEFAULT_MODE=IDLE;
     Packet packet;
     function new(int seed); super.new(seed); packet='0; endfunction
     function int status(); return super.status() + 1; endfunction

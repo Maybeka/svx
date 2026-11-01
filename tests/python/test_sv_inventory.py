@@ -85,7 +85,7 @@ endpackage''', encoding='utf-8')
     assert items['p::A::Hidden']['export_status'] == 'not-public'
     assert items['p::A::Protected']['export_status'] == 'not-public'
     assert items['p::A::Public']['export_status'] == 'selectable'
-    assert items['p::A::CLASS_N']['export_status'] == 'member-only'
+    assert items['p::A::CLASS_N']['export_status'] == 'selectable'
     assert not any('LocalOnly' in name or 'LocalTaskOnly' in name for name in items)
     selected = inspect(source, '--kind', 'callable', 'constant', '--name', 'p::*')
     assert {item['symbol'] for item in selected['declarations']} == {

@@ -3,19 +3,23 @@
 from dataclasses import replace
 
 from .errors import SVXInheritanceError
-from .owner_records import emit_owner_records, emit_owner_initializer, with_local_call_records, bind_owner_types
+from .owner_records import emit_owner_records, emit_owner_initializer, with_local_call_records, bind_owner_types, owner_value_dependencies
 from .scoped_exports import _scope_component
 from .source_scopes import instance_namespace_parts
 from .value_exports import with_value_types
+from .native_handles import with_native_handle_adapters, register_native_handle_alias
 
 
 @with_value_types(codegen=True)
 @with_local_call_records
-def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=None, local_owners=(), owner_roots=None):
+@with_native_handle_adapters
+def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=None, local_owners=(), owner_roots=None,
+                                 owner_contexts=None):
     from .inheritance import (
         _all_manifest_classes, _effective_virtual_methods, _emit_sv_projection_class,
         _emit_sv_projection_factory, _emit_sv_static_gateway, _generated_sv_header,
         _manifest_handle_bindings, _sv_class_reference, _unbridged_sv_ancestors,
+        _handle_adapter_stem, _emit_sv_external_handle_adapters,
         projection_plans,
     )
 
@@ -28,33 +32,122 @@ def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=No
     lines = [*_generated_sv_header(manifest), '']
     bindings = []
     registered_static = set()
+    registered_adapters = set()
+    registered_value_aliases = set()
     for source in classes:
         local = replace(manifest, classes=(source,), callables=())
         if any(owner.language != 'sv' for owner in _all_manifest_classes(local)):
             raise SVXInheritanceError('instance-bound class bridges currently require SV lineage')
-        if _manifest_handle_bindings(local):
-            raise SVXInheritanceError('instance-owned handle adapters need owner-bound type arguments; this layout remains unfinished')
+        handles = _manifest_handle_bindings(local)
+        if any(binding.kind == 'virtual_interface' for binding in handles):
+            from .native_handles import uses_generic_handle
+            if any(not uses_generic_handle(binding) for binding in handles
+                   if binding.kind == 'virtual_interface'):
+                raise SVXInheritanceError('instance virtual-interface adapters with nominal call records need owner-local type binding; this layout remains unfinished')
         path = source.source_scope['path']
         container = source.source_scope.get('container', 'module')
         if container == 'program' and path not in local_owners:
             raise SVXInheritanceError('program class bridges require integrated source copies')
-        if any(owner.source_scope is not None and owner.source_scope != source.source_scope
-               for owner in source.base_lineage):
-            raise SVXInheritanceError('instance ancestors from other native owners need explicit type binding; this layout remains unfinished')
+        context = (owner_contexts or {}).get(path, {})
+        visible_scopes = []
+        for owner in source.base_lineage:
+            scope = owner.source_scope
+            if scope is None or scope == source.source_scope:
+                continue
+            accessible = ((scope['kind'] == 'compilation_unit' and scope['index'] == context.get('unit'))
+                          or (scope['kind'] == 'instance' and scope['path'] in context.get('instances', ())))
+            if not accessible:
+                raise SVXInheritanceError('instance ancestors from other native owners need explicit type binding; this layout remains unfinished')
+            if scope not in visible_scopes:
+                visible_scopes.append(scope)
         stem = '_'.join(map(_scope_component, (*instance_namespace_parts(path), 'class', *source.symbol.split('::'))))
         module = 'svx_instance_' + stem
         instance = 'svx_export_' + '_'.join(map(_scope_component, source.symbol.split('::')))
         parameters = [('SVXSourceType', source),
                       *((f'SVXBaseType_{index}', owner) for index, owner in enumerate(source.base_lineage))]
+        needed_values = {value.key for value in owner_value_dependencies(local)}
+        if needed_values.intersection(context.get('shadowed_values', ())):
+            raise SVXInheritanceError('visible owner value types with shadowed native names need qualified alias placement; this layout remains unfinished')
         value_parameters = [(f'SVXNativeValueType_{index}', value) for index, value in enumerate(local.value_types)
-                            if value.source_scope == source.source_scope]
+                            if value.key in needed_values and value.source_scope in (source.source_scope, *visible_scopes)]
+        from .value_exports import native_value_name
+        symbols, names = {}, {}
+        for _, value in value_parameters:
+            name = native_value_name(value.symbol, value.source_scope)
+            if ((value.symbol in symbols and symbols[value.symbol] != value.key)
+                    or (name in names and names[name] != value.key)):
+                raise SVXInheritanceError('visible owner value types with shadowed native names need qualified alias placement; this layout remains unfinished')
+            symbols[value.symbol] = names[name] = value.key
         native_references = {value.symbol: name for name, value in value_parameters}
-        if path in local_owners:
+        handle_parameters = [(f'SVXNativeHandleType_{index}', binding)
+                             for index, binding in enumerate(handles) if binding.collection_binding is None]
+        native_references.update((binding.sv_type, name) for name, binding in handle_parameters)
+        local_source = path in local_owners or (container == 'interface' and bool(handles))
+        value_arguments = {name: value.symbol for name, value in value_parameters}
+        type_arguments = {name: _sv_class_reference(owner) for name, owner in parameters}
+        if not local_source:
+            for name, owner in parameters[1:]:
+                if owner.source_scope is None or owner.source_scope == source.source_scope:
+                    continue
+                if owner_insertions is None:
+                    raise SVXInheritanceError('lexical ancestor bindings require integrated source copies')
+                scope = owner.source_scope
+                parts = (('unit', str(scope['index']), *owner.symbol.split('::')[1:])
+                         if scope['kind'] == 'compilation_unit' else
+                         ('instance', *instance_namespace_parts(scope['path']), *owner.symbol.split('::')))
+                alias = 'SVXNativeAncestor_' + '_'.join(map(_scope_component, parts))
+                type_arguments[name] = alias
+                if (path, owner.canonical_id) not in registered_value_aliases:
+                    owner_insertions.setdefault(path, []).append({'name': alias,
+                        'text': f'typedef {_sv_class_reference(owner)} {alias};', 'lexical_declaration': True})
+                    registered_value_aliases.add((path, owner.canonical_id))
+            for name, value in value_parameters:
+                if '::' not in value.symbol:
+                    continue
+                if owner_insertions is None:
+                    raise SVXInheritanceError('nested owner type arguments require integrated source copies')
+                alias = 'SVXNativeValue_' + '_'.join(map(_scope_component, value.symbol.split('::')))
+                value_arguments[name] = alias
+                if (path, value.symbol) not in registered_value_aliases:
+                    owner_insertions.setdefault(path, []).append({'name': alias,
+                        'text': f'typedef {value.symbol} {alias};', 'lexical_declaration': True})
+                    registered_value_aliases.add((path, value.symbol))
+        if handles and local_source:
+            if owner_insertions is None:
+                raise SVXInheritanceError('scoped class handles require integrated source copies')
+            for index, binding in enumerate(handles):
+                adapter_stem = _handle_adapter_stem(binding)
+                alias = 'SVXScoped_' + adapter_stem
+                register_native_handle_alias(binding, alias)
+            fresh = tuple(binding for binding in handles
+                          if (path, _handle_adapter_stem(binding)) not in registered_adapters)
+            if fresh:
+                from .source_scopes import instance_class_id
+                owner_prefix = instance_class_id(path, 'SVX').rsplit('/', 1)[0] + '/'
+                local_bindings = tuple(binding for binding in fresh if local_source
+                                       and binding.target_type_name.startswith(owner_prefix))
+                shared_bindings = tuple(binding for binding in fresh if binding not in local_bindings)
+                declarations = []
+                if local_bindings:
+                    declarations = _emit_sv_external_handle_adapters(local, package_name=None,
+                        bindings=local_bindings, import_call_records=False)
+                from .native_handles import generic_handle_specialization
+                for binding in shared_bindings:
+                    adapter_stem = _handle_adapter_stem(binding)
+                    alias = 'SVXScoped_' + adapter_stem
+                    native = generic_handle_specialization(binding, adapter_stem)
+                    declarations.append(f'typedef {native} {alias};')
+                owner_insertions.setdefault(path, []).append({'name': 'SVXScoped_' + _handle_adapter_stem(fresh[0]),
+                    'text': '\n'.join(declarations), 'lexical_declaration': True})
+                registered_adapters.update((path, _handle_adapter_stem(binding)) for binding in fresh)
+        if local_source:
             if owner_insertions is None:
                 raise SVXInheritanceError('generate class bridges require integrated source copies')
             block = 'svx_local_' + stem
             owner_lines = ['import svx_pkg::*;', 'import svtypes_pkg::*;']
-            owner_lines.extend(emit_owner_records(local, source.source_scope))
+            enum_packers = {} if (owner_roots or {}).get(path, path) != path else None
+            owner_lines.extend(emit_owner_records(local, source.source_scope, local_enum_packers=enum_packers,
+                                                 visible_scopes=visible_scopes))
             inherited = _unbridged_sv_ancestors(source.base_lineage)
             helper = 'SVXInstanceMirror'
             owner_lines.extend(_emit_sv_projection_class(helper, _sv_class_reference(source), source,
@@ -76,15 +169,19 @@ def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=No
             owner_lines.extend(['function automatic void initialize();', *registrations, 'endfunction', ''])
             key = path + '.' + block
             owner_lines.extend(emit_owner_initializer(key, owner_root=(owner_roots or {}).get(path, path), owner_path=path))
+            if enum_packers:
+                # Rewrite only generator-owned fragments, never original SV.
+                for original, replacement in enum_packers.items():
+                    owner_lines = [line.replace(original, replacement) for line in owner_lines]
             owner_insertions.setdefault(path, []).append({'name': block, 'text': '\n'.join(owner_lines)})
             bindings.append({'class_id': source.canonical_id, 'instance_path': path,
-                             'bridge_kind': 'program' if container == 'program' and (owner_roots or {}).get(path) == path else 'generate',
+                             'bridge_kind': container if container in {'program', 'interface'} and (owner_roots or {}).get(path) == path else 'generate',
                              'bridge_instance': block, 'initialization_key': key})
             if container != 'program':
                 bindings[-1]['initialize'] = '$root.' + key + '.initialize'
             continue
         lines.extend([f'{container} {module} #(',
-                      ',\n'.join(f'  parameter type {name}' for name, _ in (*parameters, *value_parameters)),
+                      ',\n'.join(f'  parameter type {name}' for name, _ in (*parameters, *value_parameters, *handle_parameters)),
                       ');', 'import svx_pkg::*;', 'import svtypes_pkg::*;'])
         bound_source = bind_owner_types(source, native_references)
         record_manifest = replace(local, classes=(bound_source,))
@@ -93,7 +190,8 @@ def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=No
                 return replace(owner, methods=tuple(method for method in owner.methods if not method.is_static),
                                base_lineage=tuple(without_statics(parent) for parent in owner.base_lineage))
             record_manifest = replace(local, classes=(without_statics(bound_source),))
-        lines.extend(emit_owner_records(record_manifest, source.source_scope, native_references=native_references))
+        lines.extend(emit_owner_records(record_manifest, source.source_scope, native_references=native_references,
+                                        visible_scopes=visible_scopes))
         ancestors = tuple(replace(owner, symbol=name, specialization=None)
                           for (name, _), owner in zip(parameters[1:], bound_source.base_lineage))
         native = replace(bound_source, symbol='SVXSourceType', specialization=None, base_lineage=ancestors)
@@ -121,7 +219,7 @@ def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=No
                 replace(owner, fields=(), base_lineage=(),
                         methods=tuple(method for method in owner.methods if method.is_static))
                 for _, owner in static_owners))
-            owner_lines.extend(emit_owner_records(static_records, source.source_scope))
+            owner_lines.extend(emit_owner_records(static_records, source.source_scope, visible_scopes=visible_scopes))
             owner_registrations = []
             for index, (_, owner) in enumerate(static_owners):
                 dispatcher = f'static_dispatcher_{index}'
@@ -148,8 +246,9 @@ def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=No
         lines.extend(emit_owner_initializer(key))
         lines.extend([f'end{container} : {module}',
                       f'bind {path} {module} #(',
-                      ',\n'.join([*(f'  .{name}({_sv_class_reference(owner)})' for name, owner in parameters),
-                                  *(f'  .{name}({value.symbol})' for name, value in value_parameters)]),
+                      ',\n'.join([*(f'  .{name}({type_arguments[name]})' for name, owner in parameters),
+                                  *(f'  .{name}({value_arguments[name]})' for name, value in value_parameters),
+                                  *(f'  .{name}({binding.sv_type})' for name, binding in handle_parameters)]),
                       f') {instance}();', ''])
         bindings.append({'class_id': source.canonical_id, 'instance_path': path,
                          'bridge_module': module, 'bridge_instance': instance,

@@ -10,7 +10,7 @@ from types import new_class
 import svtypes
 
 from .errors import SVXInheritanceError
-from .value_exports import parse_constant_exports, parse_value_exports, value_modules, _schema_annotation, value_key
+from .value_exports import parse_constant_exports, parse_value_exports, value_modules, _schema_annotation, value_key, native_value_reference
 
 
 _value_discovery = ContextVar('svx_value_discovery', default=None)
@@ -42,6 +42,81 @@ class SourceValues:
         self.unit_indices = {}
         self.instance_symbols = {}
         self.current_instance = None
+        self.class_value_symbols = {}
+        self.class_value_members = {}
+        self.named_value_origins = {}
+        self.default_class_owners = set()
+        self.class_lookup = None
+
+    def _default_owners(self, symbol):
+        return sorted(owner for owner in self.default_class_owners if symbol.startswith(owner + '::'))
+
+    def native_reference(self, actual):
+        symbol, _ = self.source_symbol(actual)
+        return native_value_reference(symbol, self._default_owners(symbol))
+
+    @staticmethod
+    def _generic_value_owner(actual):
+        node = getattr(actual, 'syntax', None)
+        while node is not None:
+            if type(node).__name__ == 'ClassDeclarationSyntax' and node.parameters is not None:
+                return True
+            node = node.parent
+        return False
+
+    def register_class_values(self, native, prefix):
+        """Anchor template-owned values to a concrete, usable package class name."""
+        key = (native, prefix)
+        if key in self.class_value_members:
+            return
+        members = []
+        self.class_value_members[key] = members
+        generic = native.genericClass
+        if generic is not None and prefix.rsplit('::', 1)[-1] == generic.name:
+            default = native.parentScope.lookupName(generic.name)
+            if default is None or not getattr(default, 'isClass', False) or not native.isMatching(default.canonicalType):
+                return
+            self.default_class_owners.add(prefix)
+        seen = set()
+        def collect(owner, path):
+            if owner in seen:
+                return
+            seen.add(owner)
+            for entry in owner:
+                member = owner.lookupName(entry.name) if entry.kind.name == 'TransparentMember' else entry
+                if member is None or getattr(getattr(member, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
+                    continue
+                symbol = path + '::' + entry.name
+                if member.kind.name == 'ClassType':
+                    collect(member, symbol)
+                    continue
+                if member.kind.name == 'TypeAlias' and member.canonicalType.isClass:
+                    collect(member.canonicalType, symbol)
+                    continue
+                generic = self._generic_value_owner(member)
+                if member.kind.name == 'TypeParameter':
+                    member = member.typeAlias
+                if member.kind.name not in {'TypeAlias', 'Parameter'} or not (generic or self._generic_value_owner(member)):
+                    continue
+                if member.kind.name == 'TypeAlias' and member.canonicalType.isClass:
+                    continue
+                self.class_value_symbols.setdefault(member, (symbol, None))
+                if member.kind.name == 'TypeAlias':
+                    members.append((member, symbol))
+                if member.kind.name == 'TypeAlias' and member.canonicalType.lexicalPath == member.lexicalPath:
+                    self.class_value_symbols.setdefault(member.canonicalType, (symbol, None))
+        collect(native, prefix)
+
+    def publish_class_values(self, native, prefix):
+        """Expose each selected class's alias of an already materialized value."""
+        self.register_class_values(native, prefix)
+        for member, symbol in self.class_value_members[(native, prefix)]:
+            if symbol in self.declarations:
+                continue
+            origin, scope = self.named_value_origins.get(member.canonicalType) or self.source_symbol(member.canonicalType)
+            annotation = self.modules.annotations.get(value_key(origin, scope))
+            if annotation is not None:
+                self._add(symbol, annotation)
 
     @contextmanager
     def instance_context(self, scope):
@@ -60,7 +135,10 @@ class SourceValues:
                 if getattr(getattr(item, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
                     continue
                 if item.kind.name == 'ClassType':
+                    symbols[item] = prefix + item.name
                     collect(item, prefix + item.name + '::')
+                elif item.kind.name == 'TypeAlias' and item.canonicalType.isClass:
+                    symbols[item] = prefix + item.name
                 elif item.kind.name == 'TypeAlias' and not item.canonicalType.isClass:
                     symbol = prefix + item.name
                     symbols[item] = symbol
@@ -78,6 +156,23 @@ class SourceValues:
             symbols = self.instance_symbols.get(self.current_instance['path'], {})
             if actual in symbols:
                 return symbols[actual], self.current_instance
+        known = self.class_value_symbols.get(actual)
+        canonical = getattr(actual, 'canonicalType', None)
+        if canonical is not None and canonical.lexicalPath == actual.lexicalPath:
+            known = self.class_value_symbols.get(canonical, known)
+        if known is None and canonical is not None and self.class_lookup is not None and self._generic_value_owner(actual):
+            owner_name, separator, member_name = actual.lexicalPath.rpartition('::')
+            owner = self.class_lookup(owner_name) if separator else None
+            if owner is not None and getattr(owner, 'isClass', False):
+                owner = owner.canonicalType
+                member = owner.lookupName(member_name)
+                if member is not None and getattr(member, 'canonicalType', None) is not None and member.canonicalType.isMatching(canonical):
+                    self.register_class_values(owner, owner_name)
+                    known = self.class_value_symbols.get(actual)
+                    if canonical.lexicalPath == actual.lexicalPath:
+                        known = self.class_value_symbols.get(canonical, known)
+        if known is not None:
+            return known
         index = self.unit_symbols.get(actual)
         if index is None:
             node = getattr(actual, 'syntax', None)
@@ -134,10 +229,11 @@ class SourceValues:
             method['return_handle'] = result['handle']
         self.callables[symbol] = {'symbol': symbol, 'method': method}
 
-    def constant(self, actual):
+    def constant(self, actual, *, symbol=None):
         from .declarations import _source_semantic_type_declaration
 
-        symbol, scope = self.source_symbol(actual)
+        native_symbol, scope = self.source_symbol(actual)
+        symbol = symbol or native_symbol
         where = f'SV constant {symbol}'
         binding = _source_semantic_type_declaration(actual.type, where=where,
             value_annotations=self.value_annotations, value_exports=self)
@@ -151,6 +247,7 @@ class SourceValues:
             data = codec.pack(value)
             declaration, = parse_constant_exports([{'symbol': symbol, 'svtypes': binding['svtypes'],
                 'schema': schema, 'encoding_descriptor': svtypes.encoding_descriptor(codec).to_dict(),
+                **({'default_class_owners': self._default_owners(symbol)} if self._default_owners(symbol) else {}),
                 'data': data.hex(), **({'source_scope': scope} if scope is not None else {})}])
         except (TypeError, ValueError, KeyError, AttributeError, OverflowError) as error:
             raise SVXInheritanceError(f'{where} cannot be represented by its public SvTypes type: {error}') from error
@@ -196,16 +293,19 @@ class SourceValues:
             annotation = _schema_annotation(schema, self.modules.named)
         declaration, = parse_value_exports([{'symbol': symbol,
             'svtypes': svtypes.type_spec_identity(annotation),
+            **({'default_class_owners': self._default_owners(symbol)} if self._default_owners(symbol) else {}),
             'schema': schema, **({'source_scope': scope} if scope is not None else {})}])
         annotation = self.modules.add(declaration)
         self.declarations[declaration.key] = declaration
         return annotation
 
-    def annotation(self, actual, *, where):
+    def annotation(self, actual, *, where, public_symbol=None):
         from .declarations import _source_semantic_type_declaration, _validate_source_value_schema
         from .sv_selection import matches_sv_selector
 
         symbol, scope = self.source_symbol(actual)
+        native_symbol = symbol
+        symbol = public_symbol or symbol
         if any(matches_sv_selector(value_key(symbol, scope), pattern) for pattern in self.exclude):
             raise SVXInheritanceError(f'{where} requires excluded SV value type {symbol}')
         key = value_key(symbol, scope)
@@ -220,9 +320,15 @@ class SourceValues:
                     'the generated external value bridge requires an accessible public type')
             if actual.kind.name == 'TypeAlias' and actual.targetType.type.kind.name == 'TypeAlias':
                 return self._add(symbol, self.annotation(actual.targetType.type, where=where), scope)
-            origin = self.source_symbol(canonical)[0] if canonical.name else symbol
+            known_origin = self.named_value_origins.get(canonical) or self.class_value_symbols.get(canonical)
+            origin = (known_origin[0] if known_origin is not None and known_origin[1] == scope
+                      else self.source_symbol(canonical)[0] if canonical.name else native_symbol)
             if symbol != origin:
-                return self._add(symbol, self.annotation(canonical, where=where), scope)
+                annotation = self.modules.annotations.get(value_key(origin, scope))
+                if annotation is None:
+                    source = actual if not canonical.name and native_symbol == origin else canonical
+                    annotation = self.annotation(source, where=where)
+                return self._add(symbol, annotation, scope)
             from .scoped_exports import scoped_public_module
             from .source_scopes import source_class_parts
             parts = source_class_parts(symbol, scope)
@@ -256,6 +362,9 @@ class SourceValues:
                 annotation = type(name, (svtypes.SvStruct,), {'__module__': module, '__qualname__': qualname, **fields})
             _validate_source_value_schema(canonical,
                 svtypes.schema_descriptor(annotation).schema, where=where)
+            self.named_value_origins.setdefault(canonical, (symbol, scope))
+            if scope is None and self._generic_value_owner(canonical):
+                self.class_value_symbols.setdefault(canonical, (symbol, scope))
             return self._add(symbol, annotation, scope)
         if canonical.kind.name == 'UnpackedStructType':
             raise SVXInheritanceError(f'{where}: SvTypes SvStruct currently describes packed, not unpacked structs')
@@ -296,11 +405,67 @@ class SourceValues:
                     typedefs(root.header.name.valueText, root.members)
         from .sv_frontend import compile_source_trees
         compilation = compile_source_trees(compilation.getSyntaxTrees())
+        self.class_lookup = lambda name: _lookup_sv_symbol(compilation, name)
         candidates = {}
         for name in names:
             actual = _lookup_sv_symbol(compilation, name)
             if actual is not None and not actual.canonicalType.isClass:
                 candidates[name] = actual
+        candidate_packages = set(owned)
+        for pattern in (*types, *constants, *callables):
+            candidate_packages.update(package for package in package_imports
+                if '::' not in pattern or fnmatchcase(package, pattern.split('::')[0]))
+        class_constants, class_contexts, inherited_constants, inherited_types = {}, {}, set(), set()
+        callable_class_roots = []
+        def class_members(native, prefix, owner=None, inherited=False, visiting=()):
+            if native in visiting:
+                return
+            owner = owner or (native, prefix)
+            for entry in native:
+                forwarded = entry.kind.name == 'TransparentMember'
+                member = native.lookupName(entry.name) if forwarded else entry
+                if member is None or getattr(getattr(member, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
+                    continue
+                name = prefix + '::' + entry.name
+                if member.kind.name == 'TypeParameter':
+                    member = member.typeAlias
+                if member.kind.name == 'Parameter':
+                    class_constants[name] = member
+                    class_contexts[name] = owner
+                    if inherited or forwarded:
+                        inherited_constants.add(name)
+                elif member.kind.name == 'TypeAlias' and not member.canonicalType.isClass:
+                    candidates[name] = member
+                    class_contexts[name] = owner
+                    if inherited or forwarded:
+                        inherited_types.add(name)
+                elif member.kind.name == 'ClassType':
+                    class_members(member, name, owner, inherited or forwarded, (*visiting, native))
+                elif member.kind.name == 'TypeAlias' and member.canonicalType.isClass:
+                    class_members(member.canonicalType, name, owner, inherited or forwarded, (*visiting, native))
+        for package in sorted(candidate_packages):
+            native_package = compilation.getPackage(package)
+            if native_package is not None:
+                for item in native_package:
+                    if item.kind.name == 'GenericClassDef' and (types or constants or owned):
+                        resolved = native_package.lookupName(item.name)
+                        if resolved is None or not getattr(resolved, 'isClass', False):
+                            continue
+                        native = resolved.canonicalType
+                        if any(member.kind.name == 'TypeParameter' and member.targetType.type.isError
+                               or member.kind.name == 'Parameter' and not member.isLocalParam and not member.value
+                               for member in native):
+                            continue
+                        callable_class_roots.append((native, item.lexicalPath))
+                        class_members(native, item.lexicalPath)
+                    elif item.kind.name == 'ClassType':
+                        callable_class_roots.append((item, item.lexicalPath))
+                        if types or constants or owned:
+                            class_members(item, item.lexicalPath)
+                    elif item.kind.name == 'TypeAlias' and item.canonicalType.isClass:
+                        callable_class_roots.append((item.canonicalType, item.lexicalPath))
+                        if types or constants or owned:
+                            class_members(item.canonicalType, item.lexicalPath)
         unit_constants = {}
         instance_contexts = {}
         instance_patterns = [pattern for pattern in (*types, *constants)
@@ -340,14 +505,13 @@ class SourceValues:
                             candidates[f'$unit[{index}]::{item.lexicalPath}'] = item
                     elif item.kind.name == 'ClassType':
                         unit_types(item)
+                    elif item.kind.name == 'Parameter':
+                        self.unit_symbols[item] = index
+                        unit_constants[f'$unit[{index}]::{item.lexicalPath}'] = item
             # Packages have their own scope; do not reinterpret their types as $unit.
             unit_types(unit)
-            for item in unit:
-                if item.kind.name == 'Parameter':
-                    self.unit_symbols[item] = index
-                    unit_constants[f'$unit[{index}]::{item.lexicalPath}'] = item
 
-        selected = {name for name in candidates if name.split('::')[0] in owned}
+        selected = {name for name in candidates if name.split('::')[0] in owned and name not in inherited_types}
         for pattern in types:
             found = {name for name in candidates if matches(name, pattern)}
             if not found:
@@ -360,15 +524,14 @@ class SourceValues:
         if types and not selected:
             raise SVXInheritanceError('SV value export selection is empty after exclusions')
         for name in sorted(selected):
+            if name in class_contexts:
+                self.register_class_values(*class_contexts[name])
             with self.instance_context(instance_contexts.get(name)):
-                self.annotation(candidates[name], where=f'SV value type {name}')
+                self.annotation(candidates[name], where=f'SV value type {name}',
+                    public_symbol=name if not name.startswith(('$unit[', '$instance[')) else None)
         if not (constants or callables or owned):
             return
-        candidate_packages = set(owned)
-        for pattern in (*constants, *callables):
-            candidate_packages.update(package for package in package_imports
-                if '::' not in pattern or fnmatchcase(package, pattern.split('::')[0]))
-        constant_candidates, callable_candidates = dict(unit_constants), {}
+        constant_candidates, callable_candidates = {**unit_constants, **class_constants}, {}
         for package in sorted(candidate_packages):
             native_package = compilation.getPackage(package)
             if native_package is not None:
@@ -377,11 +540,12 @@ class SourceValues:
                         constant_candidates[item.lexicalPath] = item
                     elif item.kind.name == 'Subroutine':
                         callable_candidates[item.lexicalPath] = item
-        selected_constants = {name for name in constant_candidates if name.split('::')[0] in owned}
+        selected_constants = {name for name in constant_candidates
+                              if name.split('::')[0] in owned and name not in inherited_constants}
         for pattern in constants:
             found = {name for name in constant_candidates if matches(name, pattern)}
             if not found:
-                raise SVXInheritanceError(f'SV constant selector {pattern!r} matched no package parameter/localparam or $unit parameter/localparam or instance parameter/localparam')
+                raise SVXInheritanceError(f'SV constant selector {pattern!r} matched no package parameter/localparam or $unit parameter/localparam or instance parameter/localparam (including ordinary class-owned declarations)')
             exact = not any(char in re.sub(r'\[-?[0-9]+\]', '', re.sub(r'^\$unit\[\d+\]', '$unit', pattern)) for char in '*?[')
             if exact and len(found) > 1:
                 raise SVXInheritanceError(f'ambiguous SV constant {pattern!r}: ' + ', '.join(sorted(map(_source_display_name, found))))
@@ -392,8 +556,10 @@ class SourceValues:
         if constants and not selected_constants:
             raise SVXInheritanceError('SV constant export selection is empty after exclusions')
         for name in sorted(selected_constants):
+            if name in class_contexts:
+                self.register_class_values(*class_contexts[name])
             with self.instance_context(instance_contexts.get(name)):
-                self.constant(constant_candidates[name])
+                self.constant(constant_candidates[name], symbol=name if not name.startswith(('$unit[', '$instance[')) else None)
         selected_callables = {name for name in callable_candidates if name.split('::')[0] in owned}
         for pattern in callables:
             matches = {name for name in callable_candidates if fnmatchcase(
@@ -408,5 +574,9 @@ class SourceValues:
             for pattern in self.exclude_callables)}
         if callables and not selected_callables:
             raise SVXInheritanceError('SV callable export selection is empty after exclusions')
+        if selected_callables:
+            for native, prefix in sorted(callable_class_roots,
+                    key=lambda item: (item[0].genericClass is None, item[1])):
+                self.register_class_values(native, prefix)
         for name in sorted(selected_callables):
             self.callable(callable_candidates[name])

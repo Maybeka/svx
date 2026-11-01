@@ -1,9 +1,10 @@
-"""Replay parser-observed include/library choices without parsing source text."""
+"""Command-owned dependency proofs and freshly validated raw syntax sharing."""
 
 from contextvars import ContextVar
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import wraps
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -18,11 +19,128 @@ class SourceObservations:
     proofs: dict = field(default_factory=dict)
     captures: int = 0
     reuses: int = 0
+    parse_options: dict = field(default_factory=dict)
+    syntax: dict = field(default_factory=dict)
+    syntax_reuses: int = 0
+    source_copy_reuses: int = 0
+
+
+@dataclass(frozen=True)
+class _OwnedSyntax:
+    proof: dict
+    trees: tuple
+    source_manager: object
+    owners: tuple
+    root_trees: tuple = ()
+    root_buffers: tuple = ()
+    class_fact_tables: dict = field(default_factory=dict)
+
+
+def _parse_options_fingerprint(options):
+    try:
+        preprocessor, lexer = options.preprocessorOptions, options.lexerOptions
+        if (options.parserOptions is not None or options.compilationOptions is not None
+                or lexer.commentHandlers or preprocessor.keywordMapping or preprocessor.ignoreDirectives):
+            return None
+        return (tuple(preprocessor.predefines), tuple(preprocessor.undefines),
+                tuple(map(str, preprocessor.additionalIncludePaths)), str(preprocessor.predefineSource),
+                preprocessor.maxIncludeDepth, str(preprocessor.languageVersion),
+                lexer.enableLegacyProtect, lexer.maxErrors, str(lexer.languageVersion))
+    except (AttributeError, TypeError):
+        return None
+
+
+def remember_parse_options(options, predefines, undefines, include_dirs, discover_proxies):
+    state = _observations.get()
+    if state is not None:
+        state.parse_options[id(options)] = (
+            options, _parse_options_fingerprint(options),
+            dict(predefines or {}), tuple(undefines), tuple(include_dirs), discover_proxies)
+
+
+def _syntax_context(paths, options, compilation_unit):
+    state = _observations.get()
+    entry = state.parse_options.get(id(options)) if state is not None else None
+    if (entry is None or entry[0] is not options or entry[1] is None
+            or _parse_options_fingerprint(options) != entry[1]):
+        return None
+    context = selection_context(paths, predefines=entry[2], undefines=entry[3],
+                                include_dirs=entry[4], compilation_unit=compilation_unit)
+    # Keep exact parser options; physical source identity follows the frontend's
+    # default canonical/proximate filename policy (also used by dependency proofs).
+    key = json.dumps({'context': context, 'options': entry[1],
+                      'proxy_discovery': entry[5]}, sort_keys=True)
+    return key, context
+
+
+def record_raw_syntax(paths, options, compilation_unit, trees, source_manager, owners):
+    recording = _recording.get()
+    context = _syntax_context(paths, options, compilation_unit)
+    if recording is not None and context is not None:
+        recording.setdefault('syntax', []).append((context, tuple(trees), source_manager, owners))
+
+
+def record_source_roots(paths, options, compilation_unit, trees, manager):
+    """Retain explicit roots before a library loader reparses or adds units."""
+    recording = _recording.get()
+    context = _syntax_context(paths, options, compilation_unit)
+    if recording is None or context is None:
+        return
+    expected = {str(Path(path).resolve()) for path in paths}
+    buffers = {}
+    for buffer in manager.getAllBuffers():
+        filename = manager.getRawFileName(buffer)
+        if not filename or filename.startswith('<') or manager.getIncludedFrom(buffer):
+            continue
+        path = str(Path(filename).resolve())
+        if path in expected:
+            if path in buffers and buffers[path] != buffer:
+                return  # Ambiguous ownership is not suitable for source edits.
+            buffers[path] = buffer
+    if set(buffers) == expected:
+        recording.setdefault('roots', {})[(context[0], id(manager))] = (tuple(trees), tuple(buffers.items()))
+
+
+def borrow_source_copy_syntax(sources, options, compilation_unit):
+    """Borrow only when the caller's exact text still matches physical buffers."""
+    snapshot = borrow_raw_syntax(tuple(map(Path, sources)), options, compilation_unit)
+    if snapshot is None or not snapshot.root_trees:
+        return None
+    roots = list(sources)[:1] if compilation_unit else list(sources)
+    if [Path(path).resolve() for path, _ in snapshot.root_trees] != [Path(path).resolve() for path in roots]:
+        return None
+    retained = dict(snapshot.root_buffers)
+    buffers = {}
+    for filename, text in sources.items():
+        buffer = retained.get(str(Path(filename).resolve()))
+        if buffer is None or snapshot.source_manager.getSourceText(buffer) != text + '\0':
+            return None
+        buffers[filename] = buffer
+    _observations.get().source_copy_reuses += 1
+    return snapshot, buffers
+
+
+def borrow_raw_syntax(paths, options, compilation_unit, *, required_manager=None):
+    state = _observations.get()
+    context = _syntax_context(paths, options, compilation_unit)
+    if state is None or _recording.get() is not None or context is None:
+        return None
+    key, expected = context
+    snapshot = state.syntax.get(key)
+    if snapshot is None:
+        return None
+    if not validate_selection(snapshot.proof, expected):
+        state.syntax.pop(key, None)
+        return None
+    if required_manager is not None and snapshot.source_manager is not required_manager:
+        return None
+    state.syntax_reuses += 1
+    return snapshot
 
 
 @contextmanager
 def source_observations():
-    """Reuse dependency observations only after fresh byte/lookup verification."""
+    """Own proofs and syntax until command exit; every cross-phase borrow verifies."""
     previous = _observations.get()
     if previous is not None:
         yield previous
@@ -62,6 +180,18 @@ def observed_dependencies(paths, **options):
         return dependencies
     state.proofs[key] = proof
     return {Path(item['path']) for item in proof['files']}
+
+
+def validated_selection_fingerprints(paths, **options):
+    """Freshly replay an existing proof; never parse or cache content hashes."""
+    state = _observations.get()
+    if state is None or _recording.get() is not None:
+        return None
+    context = selection_context(tuple(paths), **options)
+    proof = state.proofs.get(json.dumps(context, sort_keys=True))
+    if proof is None or not validate_selection(proof, context):
+        return None
+    return {Path(item['path']): item['sha256'] for item in proof['files']}
 
 
 def file_digest(path):
@@ -177,6 +307,13 @@ def _capture_selection(paths, **options):
     if not validate_selection(proof, context):
         # A changing source/lookup graph must take the fresh-parser fallback.
         return None, None
+    observations = _observations.get()
+    if observations is not None:
+        for (key, expected), trees, manager, owners in state.get('syntax', ()):
+            if expected == context:
+                roots, buffers = state.get('roots', {}).get((key, id(manager)), ((), ()))
+                observations.syntax[key] = _OwnedSyntax(deepcopy(proof), trees, manager, owners,
+                                                       root_trees=roots, root_buffers=buffers)
     return proof, dependencies
 
 

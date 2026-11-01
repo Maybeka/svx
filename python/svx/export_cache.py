@@ -219,6 +219,7 @@ def run_incremental_export(args, out, execute):
         from .inheritance import write_text_atomic
         _protect_generation_inputs([cache], [*(Path(item['path']) for item in proof['files']),
                                             *prepared._sv_build_configuration.inputs,
+                                            *(Path(p) for p in prepared._excluded_sv_sources),
                                             *(root / item['path'] for item in outputs)])
         entry = {'schema_uri': SCHEMA, 'request': request, 'selection': proof,
                  'outputs': outputs, 'summary': summary}

@@ -9,7 +9,7 @@
 
 module tb;
   import svx_pkg::*;
-  typedef svx_external_handles_pkg::SVXExternal_sv_vif___external_bus_if_master VifAdapter;
+  typedef svx_external_handles_pkg::SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smaster VifAdapter;
   mixed_source_pkg::A a;
   mixed_source_pkg::C python_c;
   mixed_source_pkg::Holder holder;

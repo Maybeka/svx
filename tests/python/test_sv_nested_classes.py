@@ -99,6 +99,7 @@ def test_package_nested_types_share_original_owner_class_namespace(source, tmp_p
 assert isinstance(Outer, type) and isinstance(OtherOuter, type)
 assert Outer.Inner.__name__ == OtherOuter.Inner.__name__ == 'Inner'
 assert Outer.Inner is not OtherOuter.Inner
+assert issubclass(OtherOuter.Inner, Outer.Inner)
 assert Outer.Alias.__name__ == 'Alias'
 assert Outer.Inner.__qualname__ == 'Outer.Inner'
 assert OtherOuter.Inner.__qualname__ == 'OtherOuter.Inner'

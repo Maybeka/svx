@@ -8,6 +8,24 @@ Mirror stub or decorated Python subclass.
 
 ## Generate
 
+For reusable project settings, the included project-owned [JSON](export-config.json)
+and [Python adapter](config_parser.py)
+provide the same export through a shorter command:
+
+```sh
+svx export --config examples/sv_export/export-config.json \
+  --config-parser examples/sv_export/config_parser.py
+```
+
+This writes .tmp/configured-export; append --check to validate it without writes.
+The adapter receives all tokens after its script path as argv. This example
+returns them unchanged; a project adapter can instead consume its own options.
+Place additional --config files and direct SVX options before --config-parser.
+The adapter resolves build_directory/output relative to the JSON file, then uses
+the original filelist unchanged. Its JSON shape is an example, not an SVX schema.
+See [configuration adapters](../../docs/SVX_GENERATION_WORKFLOW.md#project-configuration-adapters)
+for the interface and option precedence.
+
 From the repository root:
 
 ```sh
@@ -63,6 +81,24 @@ packed-struct and array parameters. Package selection includes owned constants;
 --exclude-constant can remove unneeded snapshots. The generated constants were
 compared against an independently compiled SV evaluation of these declarations.
 
+Ordinary class constants keep their class namespace. For example:
+
+```sh
+svx export --constant 'export_driver_pkg::Driver::*' \
+  -f examples/sv_export/design.f --out .tmp/exported-driver-constants
+```
+
+```python
+from svx_mirror.export_driver_pkg import Driver, Mode
+assert Driver.DEFAULT_SEED == 18
+assert Driver.DEFAULT_MODE == Mode.IDLE
+```
+
+Here Driver is only a value namespace. Select the class as well to attach these
+snapshots to its actual callable mirror. Package selection includes both. Nested
+class constants retain their nesting. Templates use complete SV defaults or a
+concrete class typedef alias, as in the next example.
+
 To select every owned class, supported value type, constant and function/task, replace `--class` with
 `--package export_driver_pkg`. Imports provide dependency context; they do not
 automatically export all of `export_base_pkg`. `--recursive-packages` explicitly
@@ -78,6 +114,54 @@ Add --incremental to that export command for verified no-op reuse. Repeat it
 with --check to leave both outputs and local cache unchanged. Input or lookup
 changes select the full pipeline; --incremental --refresh-cache forces it.
 This does not cache runtime Python tests or parse only individual changed files.
+
+## Closed Class Aliases
+
+[generic_values.sv](generic_values.sv) defines one Config template, 9-bit Narrow
+and 70-bit Wide aliases, an equivalent Same alias and a derived Child. Their
+enum/packed-struct types retain native specialization and alias identity.
+
+```sh
+svx export --constant 'generic_class_constants_pkg::Narrow::*' \
+  'generic_class_constants_pkg::Wide::*' \
+  -f examples/sv_export/generic.f --out .tmp/exported-generic-values
+```
+
+```python
+from svx_mirror.generic_class_constants_pkg import Narrow, Wide
+assert Narrow.WIDTH == 9 and Wide.WIDTH == 70
+assert str(Wide.DEFAULT_PACKET.data.value) == 'x' * 70
+```
+
+This selects snapshots and necessary value types, not class factories. Use
+--constant 'generic_class_constants_pkg::Config::*' for the actual SV defaults,
+or --constant 'generic_class_constants_pkg::Child::WIDTH' for inherited lookup.
+--type 'generic_class_constants_pkg::Wide::Packet' selects just the closed type.
+Enum labels use WIDTH'(...) so their literal widths match the parameterized base.
+
+For the complete executable example:
+
+```sh
+svx export --package generic_class_constants_pkg \
+  -f examples/sv_export/generic.f --out .tmp/exported-generic
+```
+
+Follow the compile/runtime setup below with generic.f, the new mirrors.sv,
+[tb_generic.sv](tb_generic.sv) and top generic_class_constants_tb. Add the new
+generated Python directory to the Python path. [generic_entry.py](generic_entry.py)
+checks both widths, original SV state, four-state task output, inherited types
+and a Python virtual override with super().
+Alternatively select only the package functions/tasks:
+
+```sh
+svx export --callable 'generic_class_constants_pkg::*' \
+  -f examples/sv_export/generic.f --out .tmp/exported-generic-calls
+```
+
+Compile with that generated bridge and run the same top with
++SVX_GENERIC_ONLY_CALLABLES.
+[generic_calls.py](generic_calls.py) then uses package functions and value
+namespaces without constructing or generating any class mirror.
 
 ## Compile And Run
 

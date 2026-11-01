@@ -76,7 +76,7 @@ class InstanceAnalysis:
 
 def prepare_instance_analysis(paths, *, parse_options=None, compilation_unit=False, patterns=()):
     from pyslang.ast import Compilation
-    from .sv_scan import _parse_sources, _pyslang, _class_fact, _semantic_class_selector
+    from .sv_scan import _parse_sources, _pyslang, _class_fact, _semantic_class_selector, _instance_scope
     from .sv_frontend import analysis_source_manager, compile_source_trees, source_elaboration_mode
     from .sv_library_search import _search
 
@@ -95,7 +95,7 @@ def prepare_instance_analysis(paths, *, parse_options=None, compilation_unit=Fal
     compilation = compile_source_trees(compilation.getSyntaxTrees())
     result = InstanceAnalysis(compilation, manager, trees, parse_options, _search.get())
 
-    def classes(scope, path, container, prefix=''):
+    def classes(scope, path, container, prefix='', discovered=None):
         for member in scope:
             if member.kind.name not in {'ClassType', 'GenericClassDef', 'TypeAlias'}:
                 continue
@@ -114,8 +114,10 @@ def prepare_instance_analysis(paths, *, parse_options=None, compilation_unit=Fal
             result.facts[selector] = _class_fact(selector, node, concrete_alias=member.kind.name == 'TypeAlias')
             result.scopes[selector] = {'kind': 'instance', 'path': path, 'container': container}
             if actual is not None:
+                if discovered is not None and selector not in result.actuals:
+                    discovered.append(selector)
                 result.actuals[selector] = actual
-                classes(actual, path, container, name + '::')
+                classes(actual, path, container, name + '::', discovered=discovered)
 
     def walk(scope, path, container):
         classes(scope, path, container)
@@ -158,13 +160,32 @@ def prepare_instance_analysis(paths, *, parse_options=None, compilation_unit=Fal
     else:
         for instance in compilation.getRoot().topInstances:
             walk(instance.body, instance.hierarchicalPath, instance.body.definition.definitionKind.name.lower())
-    for selector, actual in result.actuals.items():
+    # Exact selectors avoid walking unrelated hierarchy. Follow their actual
+    # ancestor owners on demand in this same compilation, not a second parse.
+    pending = list(result.actuals)
+    visited = set()
+    while pending:
+        selector = pending.pop()
+        if selector in visited:
+            continue
+        visited.add(selector)
+        actual = result.actuals[selector]
         fact = result.facts[selector]
         if fact.direct_base is not None:
             declared = actual.parentScope.lookupName(fact.direct_base)
             parent = declared if declared is not None and getattr(declared, 'canonicalType', None) else actual.baseClass
             if parent is not None:
-                result.facts[selector] = replace(fact, direct_base=_semantic_class_selector(parent))
+                parent_selector = _semantic_class_selector(parent)
+                result.facts[selector] = replace(fact, direct_base=parent_selector)
+                instance = _instance_scope(parent_selector)
+                if instance is not None and parent_selector not in result.facts:
+                    from .source_scopes import lookup_native_scope
+                    owner = lookup_native_scope(compilation, instance[0])
+                    if owner is not None:
+                        native = getattr(owner, 'body', owner)
+                        container = (owner.body.definition.definitionKind.name.lower() if owner.kind.name == 'Instance'
+                                     else owner.containingInstance.definition.definitionKind.name.lower())
+                        classes(native, instance[0], container, discovered=pending)
     state = _instances.get()
     if state is not None:
         state[_key(paths, parse_options, compilation_unit)] = result

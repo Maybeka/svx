@@ -75,7 +75,7 @@ module dut;for(genvar i=0;i<500;i++) begin:g logic[31:0] data;end endmodule''', 
     stream = io.StringIO()
     assert main(args, out=stream) == 0
     assert observed and all(names == ['svx_export_analysis_root'] for names in observed)
-    assert 'all explicit sources still preprocessed' in stream.getvalue()
+    assert 'retained explicit sources still preprocessed' in stream.getvalue()
     evidence = json.loads((output / 'inheritance.json.svx-discovery.json').read_text(encoding='utf-8'))
     assert evidence['configuration']['sv_elaboration'] == 'packages'
     assert {'../design.sv', '../config.svh'} <= {item['path'] for item in evidence['sources']}

@@ -127,7 +127,7 @@ def endpoint_source_inputs(source):
   import svtypes_pkg::*;
   remote_ref reference;
   initial begin
-    reference = svx_external_handles_pkg::SVXExternal_sv___mixed_source_pkg_Packet::encode(null);
+    reference = svx_external_handles_pkg::SVXExternal_sv_c_s_smixed_usource_upkg_sPacket::encode(null);
     if (reference.object_number != 0) $fatal(1, "early null endpoint changed identity");
     $display("EARLY_ENDPOINT_CONSUMER_PASS");
   end

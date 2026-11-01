@@ -8,6 +8,22 @@
 
 ## 生成
 
+工程配置较多时，可复用本例提供的[自定义 JSON 配置](export-config.json)和
+[Python 解析器](config_parser.py)：
+
+```sh
+svx export --config examples/sv_export/export-config.json \
+  --config-parser examples/sv_export/config_parser.py
+```
+
+输出位于 .tmp/configured-export；追加 --check 可只检查而不写入。
+脚本路径之后的所有参数都会原样传入解析器的 argv。本例将它们原样返回给
+SVX；项目自己的解析器也可以消费自定义参数，不再转发。额外的 --config
+文件和直接交给 SVX 的选项应放在 --config-parser 之前。
+解析器以 JSON 文件所在目录解析 build_directory/output，再复用原始 filelist。
+JSON 的结构只是本例约定，不是 SVX 固定格式；接口和参数优先级见
+[配置适配器](../../docs/SVX_GENERATION_WORKFLOW.md#project-configuration-adapters)。
+
 在仓库根目录执行：
 
 ```sh
@@ -60,6 +76,23 @@ assert DEFAULT_PACKET.tag.value == 0x81
 常量，可用 --exclude-constant 排除不需要的快照。生成值已与独立编译的 SV
 对同一声明的求值逐项对照。
 
+普通类内的常量保留类命名空间，例如：
+
+```sh
+svx export --constant 'export_driver_pkg::Driver::*' \
+  -f examples/sv_export/design.f --out .tmp/exported-driver-constants
+```
+
+```python
+from svx_mirror.export_driver_pkg import Driver, Mode
+assert Driver.DEFAULT_SEED == 18
+assert Driver.DEFAULT_MODE == Mode.IDLE
+```
+
+此时 Driver 只是值命名空间；同时选择类时，快照会挂到实际可调用的镜像类上。
+按 package 选择会同时包含两者。嵌套类常量保持嵌套关系；参数化类可使用源码中
+完整的默认参数或具体 typedef 别名，见下例。
+
 若要导出包内所有自有类、支持的值类型、编译期常量及函数/task，将 --class 改为
 --package export_driver_pkg。
 import 仅提供依赖解析上下文，不会自动导出整个 export_base_pkg；只有显式添加
@@ -74,6 +107,52 @@ import 仅提供依赖解析上下文，不会自动导出整个 export_base_pkg
 生成文件和本地缓存都不改写。输入或查找选择变化后自动执行完整流程，也可用
 --incremental --refresh-cache 强制完整检查。这不会缓存运行期 Python 用例，
 也不代表已经实现只解析某个变化文件。
+
+## 具体类类型别名
+
+[generic_values.sv](generic_values.sv) 定义一个 Config 模板、9 位 Narrow、70 位
+Wide、等价别名 Same 和派生类 Child。其 enum/packed struct 保持实际特化后的
+位宽；等价别名引用同一个 Python 值类型。
+
+```sh
+svx export --constant 'generic_class_constants_pkg::Narrow::*' \
+  'generic_class_constants_pkg::Wide::*' \
+  -f examples/sv_export/generic.f --out .tmp/exported-generic-values
+```
+
+```python
+from svx_mirror.generic_class_constants_pkg import Narrow, Wide
+assert Narrow.WIDTH == 9 and Wide.WIDTH == 70
+assert str(Wide.DEFAULT_PACKET.data.value) == 'x' * 70
+```
+
+这里仅生成快照及必要值类型，不生成类工厂。
+`--constant 'generic_class_constants_pkg::Config::*'` 使用实际 SV 默认参数；
+`--constant 'generic_class_constants_pkg::Child::WIDTH'` 按 SV 继承关系解析常量。
+`--type 'generic_class_constants_pkg::Wide::Packet'` 可只导出具体的值类型。
+枚举值采用 `WIDTH'(...)`，使字面量位宽与参数化基类型一致。
+
+完整可运行示例：
+
+```sh
+svx export --package generic_class_constants_pkg \
+  -f examples/sv_export/generic.f --out .tmp/exported-generic
+```
+
+沿用下节编译和运行准备，将输入替换为 generic.f、新生成的 mirrors.sv 和
+[tb_generic.sv](tb_generic.sv)，顶层为 generic_class_constants_tb；Python 路径
+加入新的生成目录。[generic_entry.py](generic_entry.py) 检查两种位宽、SV 原始状态、
+task 的四态输出、继承类型，以及 Python 虚方法覆盖和 super()。
+也可只选择包级函数/task：
+
+```sh
+svx export --callable 'generic_class_constants_pkg::*' \
+  -f examples/sv_export/generic.f --out .tmp/exported-generic-calls
+```
+
+编译时使用这个生成目录中的桥接，运行相同顶层时加 +SVX_GENERIC_ONLY_CALLABLES。
+[generic_calls.py](generic_calls.py) 此时只使用包函数和必要的值命名空间，
+不生成或构造类镜像。
 
 ## 编译和运行
 

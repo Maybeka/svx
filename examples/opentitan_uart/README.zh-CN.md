@@ -82,6 +82,16 @@ include 路径加入 SVX 仓库根目录、SvTypes runtime 目录和 `$UART_GENE
 顶层模块之外增加 `uart_svx_migration_registration`。该源码先包含 bridge，再包含
 生成的 `mirrors.sv`。按 [用户手册](../../docs/SVX_USER_MANUAL.md) 构建并加载匹配的
 SVX native runtime。
+采用上面的直接源码导出命令时，在该 top 的 `svx_init()` 之后、`svx_load()` 之前
+调用 CLI 报告的 `svx_exports_pkg::initialize()`，显式注册生成的 factory 和 dispatcher。
+
+也可在同一 export 命令中增加 `--integrated`，生成包含桥接的源码副本。此时按
+`artifacts.json` 的 `source_replacements` 和 `systemverilog_compile_order` 替换原
+编译输入；先编译 SvTypes/SVX runtime package，不要再同时编译原清单或单独的
+bridge/mirrors。在迁移 top 中移除开头的四条重复 include，保留其 test package 和
+registration module，并使用同一个 initialize 调用。仍保留原工程的隐式库选项和
+DPI 链接设置，不能因为副本含有库源码文本就删除这些选项。此模式已重新编译并
+验证 mixed、Python 主导和原 SV 三条路径，见[验收记录](RESULTS.zh-CN.md)。
 
 必须保留原构建的访问权限、断言、语言和插桩选项。扩展原构建，不手工重组全部
 RTL 清单；迁移构建使用独立输出目录，不覆盖原基线二进制。

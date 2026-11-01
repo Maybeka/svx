@@ -4984,7 +4984,7 @@ package svx_external_handles_pkg;
   import svx_call_records_pkg::*;
 
   // virtual_interface: virtual register_if.diagnostics <-> RemoteRef[sv-vif://register_if/diagnostics].
-  class SVXExternal_sv_vif___register_if_diagnosticsEndpoint implements svx_external_handle, svx_dispatchable, svx_function_dispatchable;
+  class SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnosticsEndpoint implements svx_external_handle, svx_dispatchable, svx_function_dispatchable;
     virtual register_if.diagnostics value;
     longint unsigned object_id;
 
@@ -5123,11 +5123,11 @@ package svx_external_handles_pkg;
         end
       endcase
     endfunction
-  endclass : SVXExternal_sv_vif___register_if_diagnosticsEndpoint
+  endclass : SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnosticsEndpoint
 
-  class SVXExternal_sv_vif___register_if_diagnostics implements svx_session_resource;
-    static SVXExternal_sv_vif___register_if_diagnosticsEndpoint endpoints[$];
-    static SVXExternal_sv_vif___register_if_diagnostics session_resource = new();
+  class SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics implements svx_session_resource;
+    static SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnosticsEndpoint endpoints[$];
+    static SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics session_resource = new();
 
     virtual function void clear_session();
       endpoints.delete();
@@ -5135,7 +5135,7 @@ package svx_external_handles_pkg;
 
     static function remote_ref encode(virtual register_if.diagnostics value);
       longint unsigned object_id;
-      SVXExternal_sv_vif___register_if_diagnosticsEndpoint endpoint;
+      SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnosticsEndpoint endpoint;
       remote_ref reference;
       svx_external_handle_registry::register_resource(session_resource);
       // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
@@ -5161,7 +5161,7 @@ package svx_external_handles_pkg;
 
     static function bit decode(input remote_ref reference, output virtual register_if.diagnostics value, output string error);
       svx_external_handle raw;
-      SVXExternal_sv_vif___register_if_diagnosticsEndpoint endpoint;
+      SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnosticsEndpoint endpoint;
       value = null;
       error = "";
       // Resolve this session-scoped RemoteRef back to the declared static SV type.
@@ -5178,10 +5178,10 @@ package svx_external_handles_pkg;
       value = endpoint.value;
       return 1;
     endfunction
-  endclass : SVXExternal_sv_vif___register_if_diagnostics
+  endclass : SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics
 
   // sv_class: register_policy_pkg::PacketTag <-> RemoteRef[sv://register_policy_pkg/PacketTag].
-  class SVXExternal_sv___register_policy_pkg_PacketTagEndpoint implements svx_external_handle;
+  class SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTagEndpoint implements svx_external_handle;
     register_policy_pkg::PacketTag value;
     longint unsigned object_id;
 
@@ -5192,11 +5192,11 @@ package svx_external_handles_pkg;
     virtual function string svx_external_target_type();
       return "sv://register_policy_pkg/PacketTag";
     endfunction
-  endclass : SVXExternal_sv___register_policy_pkg_PacketTagEndpoint
+  endclass : SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTagEndpoint
 
-  class SVXExternal_sv___register_policy_pkg_PacketTag implements svx_session_resource;
-    static SVXExternal_sv___register_policy_pkg_PacketTagEndpoint endpoints[$];
-    static SVXExternal_sv___register_policy_pkg_PacketTag session_resource = new();
+  class SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag implements svx_session_resource;
+    static SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTagEndpoint endpoints[$];
+    static SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag session_resource = new();
 
     virtual function void clear_session();
       endpoints.delete();
@@ -5204,7 +5204,7 @@ package svx_external_handles_pkg;
 
     static function remote_ref encode(register_policy_pkg::PacketTag value);
       longint unsigned object_id;
-      SVXExternal_sv___register_policy_pkg_PacketTagEndpoint endpoint;
+      SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTagEndpoint endpoint;
       remote_ref reference;
       svx_external_handle_registry::register_resource(session_resource);
       // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
@@ -5229,7 +5229,7 @@ package svx_external_handles_pkg;
 
     static function bit decode(input remote_ref reference, output register_policy_pkg::PacketTag value, output string error);
       svx_external_handle raw;
-      SVXExternal_sv___register_policy_pkg_PacketTagEndpoint endpoint;
+      SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTagEndpoint endpoint;
       value = null;
       error = "";
       // Resolve this session-scoped RemoteRef back to the declared static SV type.
@@ -5246,7 +5246,7 @@ package svx_external_handles_pkg;
       value = endpoint.value;
       return 1;
     endfunction
-  endclass : SVXExternal_sv___register_policy_pkg_PacketTag
+  endclass : SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag
 endpackage : svx_external_handles_pkg
 
 
@@ -5672,7 +5672,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv___register_policy_pkg_PacketTag::decode(request_value.value, value, error)) begin
+          if (!SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::decode(request_value.value, value, error)) begin
             ok = 0;
             response = null;
             return;
@@ -5681,7 +5681,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           result = super.echo_packet(value);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv___register_policy_pkg_PacketTag::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -5696,7 +5696,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv_vif___register_if_diagnostics::decode(request_value.value, value, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(request_value.value, value, error)) begin
             ok = 0;
             response = null;
             return;
@@ -5705,7 +5705,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           result = super.echo_bus(value);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv_vif___register_if_diagnostics::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -5720,7 +5720,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv_vif___register_if_diagnostics::decode(request_value.value, value, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(request_value.value, value, error)) begin
             ok = 0;
             response = null;
             return;
@@ -5773,9 +5773,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
               end else if (operation.code == 1 && operation.has_payload) begin
+                bit [31:0] field_wire;
                 field_offset = 0;
-                svtypes_pkg::bit_packer#(bit [31:0])::unpack(this.mask, operation.payload, field_offset);
+                svtypes_pkg::bit_packer#(bit [31:0])::unpack(field_wire, operation.payload, field_offset);
                 svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.mask", "field write", "field leaf", field_offset, operation.payload.size());
+                this.mask = field_wire;
                 ok = 1;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -5865,9 +5867,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
               end else if (operation.code == 1 && operation.has_payload) begin
+                int field_wire;
                 field_offset = 0;
-                svtypes_pkg::int_packer::unpack(this.calls, operation.payload, field_offset);
+                svtypes_pkg::int_packer::unpack(field_wire, operation.payload, field_offset);
                 svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.calls", "field write", "field leaf", field_offset, operation.payload.size());
+                this.calls = field_wire;
                 ok = 1;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -5957,9 +5961,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
               end else if (operation.code == 1 && operation.has_payload) begin
+                int field_wire [$];
                 field_offset = 0;
-                svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)::unpack(this.history, operation.payload, field_offset);
+                svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)::unpack(field_wire, operation.payload, field_offset);
                 svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.history", "field write", "field leaf", field_offset, operation.payload.size());
+                this.history = field_wire;
                 ok = 1;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -6024,9 +6030,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                     error = "";
                     response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
                   end else if (operation.code == 1 && operation.has_payload) begin
+                    int field_wire;
                     field_offset = 0;
-                    svtypes_pkg::int_packer::unpack(this.history[operation.path_index[0]], operation.payload, field_offset);
+                    svtypes_pkg::int_packer::unpack(field_wire, operation.payload, field_offset);
                     svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.history", "field write", "field leaf", field_offset, operation.payload.size());
+                    this.history[operation.path_index[0]] = field_wire;
                     ok = 1;
                     error = "";
                     response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -6142,7 +6150,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field read request must be empty";
           end else begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv___register_policy_pkg_PacketTag::encode(this.packet);
+            field_wire = SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::encode(this.packet);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6158,7 +6166,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           field_offset = 0;
           svtypes_pkg::remote_ref_packer::unpack(field_wire, bytes, field_offset);
           svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.packet", "field write", "field value", field_offset, bytes.size());
-          if (!SVXExternal_sv___register_policy_pkg_PacketTag::decode(field_wire, field_native, error)) begin
+          if (!SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::decode(field_wire, field_native, error)) begin
             ok = 0;
             response = null;
           end else begin
@@ -6178,7 +6186,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field path extends a handle value";
           end else if (operation.code == 0) begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv___register_policy_pkg_PacketTag::encode(this.packet);
+            field_wire = SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::encode(this.packet);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6192,7 +6200,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             field_offset = 0;
             svtypes_pkg::remote_ref_packer::unpack(field_wire, operation.payload, field_offset);
             svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.packet", "field write", "field value", field_offset, operation.payload.size());
-            if (!SVXExternal_sv___register_policy_pkg_PacketTag::decode(field_wire, field_native, error)) begin
+            if (!SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::decode(field_wire, field_native, error)) begin
               ok = 0;
               response = null;
             end else begin
@@ -6211,7 +6219,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field read request must be empty";
           end else begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv_vif___register_if_diagnostics::encode(this.bus);
+            field_wire = SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::encode(this.bus);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6227,7 +6235,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           field_offset = 0;
           svtypes_pkg::remote_ref_packer::unpack(field_wire, bytes, field_offset);
           svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.bus", "field write", "field value", field_offset, bytes.size());
-          if (!SVXExternal_sv_vif___register_if_diagnostics::decode(field_wire, field_native, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(field_wire, field_native, error)) begin
             ok = 0;
             response = null;
           end else begin
@@ -6247,7 +6255,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field path extends a handle value";
           end else if (operation.code == 0) begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv_vif___register_if_diagnostics::encode(this.bus);
+            field_wire = SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::encode(this.bus);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6261,7 +6269,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             field_offset = 0;
             svtypes_pkg::remote_ref_packer::unpack(field_wire, operation.payload, field_offset);
             svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.bus", "field write", "field value", field_offset, operation.payload.size());
-            if (!SVXExternal_sv_vif___register_if_diagnostics::decode(field_wire, field_native, error)) begin
+            if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(field_wire, field_native, error)) begin
               ok = 0;
               response = null;
             end else begin
@@ -6341,7 +6349,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv___register_policy_pkg_PacketTag::decode(request_value.value, value, error)) begin
+          if (!SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::decode(request_value.value, value, error)) begin
             ok = 0;
             response = null;
             return;
@@ -6350,7 +6358,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           result = super.echo_packet(value);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv___register_policy_pkg_PacketTag::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -6365,7 +6373,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv_vif___register_if_diagnostics::decode(request_value.value, value, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(request_value.value, value, error)) begin
             ok = 0;
             response = null;
             return;
@@ -6374,7 +6382,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           result = super.echo_bus(value);
           bytes.delete();
           response_value = new();
-          response_value.svx_return_value = SVXExternal_sv_vif___register_if_diagnostics::encode(result);
+          response_value.svx_return_value = SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::encode(result);
           response_value.pack(bytes);
           ok = 1;
           error = "";
@@ -6389,7 +6397,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           // Foreign handles are resolved through typed RemoteRef endpoints.
           request_value = new();
           request_value.unpack(bytes, offset);
-          if (!SVXExternal_sv_vif___register_if_diagnostics::decode(request_value.value, value, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(request_value.value, value, error)) begin
             ok = 0;
             response = null;
             return;
@@ -6442,9 +6450,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
               end else if (operation.code == 1 && operation.has_payload) begin
+                bit [31:0] field_wire;
                 field_offset = 0;
-                svtypes_pkg::bit_packer#(bit [31:0])::unpack(this.mask, operation.payload, field_offset);
+                svtypes_pkg::bit_packer#(bit [31:0])::unpack(field_wire, operation.payload, field_offset);
                 svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.mask", "field write", "field leaf", field_offset, operation.payload.size());
+                this.mask = field_wire;
                 ok = 1;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -6534,9 +6544,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
               end else if (operation.code == 1 && operation.has_payload) begin
+                int field_wire;
                 field_offset = 0;
-                svtypes_pkg::int_packer::unpack(this.calls, operation.payload, field_offset);
+                svtypes_pkg::int_packer::unpack(field_wire, operation.payload, field_offset);
                 svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.calls", "field write", "field leaf", field_offset, operation.payload.size());
+                this.calls = field_wire;
                 ok = 1;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -6626,9 +6638,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
               end else if (operation.code == 1 && operation.has_payload) begin
+                int field_wire [$];
                 field_offset = 0;
-                svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)::unpack(this.history, operation.payload, field_offset);
+                svtypes_pkg::queue_packer#(int, svtypes_pkg::int_packer)::unpack(field_wire, operation.payload, field_offset);
                 svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.history", "field write", "field leaf", field_offset, operation.payload.size());
+                this.history = field_wire;
                 ok = 1;
                 error = "";
                 response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -6693,9 +6707,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
                     error = "";
                     response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
                   end else if (operation.code == 1 && operation.has_payload) begin
+                    int field_wire;
                     field_offset = 0;
-                    svtypes_pkg::int_packer::unpack(this.history[operation.path_index[0]], operation.payload, field_offset);
+                    svtypes_pkg::int_packer::unpack(field_wire, operation.payload, field_offset);
                     svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.history", "field write", "field leaf", field_offset, operation.payload.size());
+                    this.history[operation.path_index[0]] = field_wire;
                     ok = 1;
                     error = "";
                     response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
@@ -6811,7 +6827,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field read request must be empty";
           end else begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv___register_policy_pkg_PacketTag::encode(this.packet);
+            field_wire = SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::encode(this.packet);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6827,7 +6843,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           field_offset = 0;
           svtypes_pkg::remote_ref_packer::unpack(field_wire, bytes, field_offset);
           svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.packet", "field write", "field value", field_offset, bytes.size());
-          if (!SVXExternal_sv___register_policy_pkg_PacketTag::decode(field_wire, field_native, error)) begin
+          if (!SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::decode(field_wire, field_native, error)) begin
             ok = 0;
             response = null;
           end else begin
@@ -6847,7 +6863,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field path extends a handle value";
           end else if (operation.code == 0) begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv___register_policy_pkg_PacketTag::encode(this.packet);
+            field_wire = SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::encode(this.packet);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6861,7 +6877,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             field_offset = 0;
             svtypes_pkg::remote_ref_packer::unpack(field_wire, operation.payload, field_offset);
             svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.packet", "field write", "field value", field_offset, operation.payload.size());
-            if (!SVXExternal_sv___register_policy_pkg_PacketTag::decode(field_wire, field_native, error)) begin
+            if (!SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTag::decode(field_wire, field_native, error)) begin
               ok = 0;
               response = null;
             end else begin
@@ -6880,7 +6896,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field read request must be empty";
           end else begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv_vif___register_if_diagnostics::encode(this.bus);
+            field_wire = SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::encode(this.bus);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6896,7 +6912,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
           field_offset = 0;
           svtypes_pkg::remote_ref_packer::unpack(field_wire, bytes, field_offset);
           svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.bus", "field write", "field value", field_offset, bytes.size());
-          if (!SVXExternal_sv_vif___register_if_diagnostics::decode(field_wire, field_native, error)) begin
+          if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(field_wire, field_native, error)) begin
             ok = 0;
             response = null;
           end else begin
@@ -6916,7 +6932,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             ok = 0; error = "field path extends a handle value";
           end else if (operation.code == 0) begin
             svtypes_pkg::remote_ref field_wire;
-            field_wire = SVXExternal_sv_vif___register_if_diagnostics::encode(this.bus);
+            field_wire = SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::encode(this.bus);
             bytes.delete();
             svtypes_pkg::remote_ref_packer::pack(field_wire, bytes);
                         ok = 1;
@@ -6930,7 +6946,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
             field_offset = 0;
             svtypes_pkg::remote_ref_packer::unpack(field_wire, operation.payload, field_offset);
             svx_require_unpacked_all("sv://register_policy_pkg/RegisterPolicy.bus", "field write", "field value", field_offset, operation.payload.size());
-            if (!SVXExternal_sv_vif___register_if_diagnostics::decode(field_wire, field_native, error)) begin
+            if (!SVXExternal_sv_hvif_c_s_sregister_uif_sdiagnostics::decode(field_wire, field_native, error)) begin
               ok = 0;
               response = null;
             end else begin

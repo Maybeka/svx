@@ -1,6 +1,9 @@
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 import svtypes
@@ -56,6 +59,28 @@ def run(args):
     output = io.StringIO()
     assert main(args, out=output) == 0
     return output.getvalue()
+
+
+def test_independent_package_export_with_python_declaration_preserves_type_graph(project):
+    arguments, first, _, _ = project
+    arguments = [*arguments, '--package', 'base_pkg', '--python-module',
+                 'tests.integration.package_export_independent']
+    result = subprocess.run([sys.executable, '-m', 'svx', *arguments], capture_output=True,
+                            text=True, timeout=60,
+                            env=dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path)))
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = first.parent / 'generated'
+    artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
+    assert artifact['systemverilog_startup'] == 'svx_exports_pkg::initialize'
+    assert len(artifact['systemverilog_compile_order']) == 2
+    subprocess_import(output, '''from svx_mirror.base_pkg import Base
+from svx_mirror.child_pkg import Child
+from svx import inheritance
+assert Child.__bases__ == (Base,)
+class PythonChild(Child):
+    pass
+assert inheritance._python_subclasses['sv://child_pkg/Child'] is PythonChild
+''')
 
 
 def test_independent_units_preserve_order_macros_types_and_source_owners(project):

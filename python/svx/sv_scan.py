@@ -246,6 +246,7 @@ def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, co
     paths = tuple(paths)
     if not paths:
         return
+    explicit_manager = source_manager is not None
     source_manager = source_manager or analysis_source_manager()
     state = _analysis.get()
     shared = state is not None and source_manager is state.source_manager
@@ -256,16 +257,35 @@ def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, co
         trees = state.trees[key]
         state.syntax_reuses += 1
     else:
-        start = perf_counter()
-        trees = tuple(_parse_source_batch(syntax, paths, source_manager,
-                                         parse_options=parse_options, compilation_unit=compilation_unit))
+        from .source_selection import borrow_raw_syntax, record_raw_syntax
+        snapshot = (borrow_raw_syntax(paths, parse_options, compilation_unit,
+                                     required_manager=source_manager if state and state.trees else None)
+                    if not explicit_manager else None)
+        if snapshot is not None:
+            trees = snapshot.trees
+            source_manager = snapshot.source_manager
+            if shared:
+                state.source_manager = source_manager
+                state.syntax_reuses += 1
+                state.owners.append(snapshot)
+        else:
+            start = perf_counter()
+            trees = tuple(_parse_source_batch(syntax, paths, source_manager,
+                                             parse_options=parse_options, compilation_unit=compilation_unit))
+            if not explicit_manager:
+                record_raw_syntax(paths, parse_options, compilation_unit, trees,
+                                  source_manager, (parse_options, search))
         if shared:
             state.trees[key] = trees
+            for _, tree in trees:
+                state.class_fact_tables.setdefault(
+                    tree, snapshot.class_fact_tables.setdefault(tree, {}) if snapshot is not None else {})
             # Trees and library parser storage must outlive every semantic probe.
             # Retain option/search identities too, preventing object-id reuse.
             state.owners.append((parse_options, search))
-            state.parse_batches += 1
-            state.parse_seconds += perf_counter() - start
+            if snapshot is None:
+                state.parse_batches += 1
+                state.parse_seconds += perf_counter() - start
     # Proxy members depend on Python discovery context, not just SV source.
     # Never reuse a transformed tree for a different set of Python declarations.
     for path, tree in trees:
@@ -285,7 +305,8 @@ def _parse_source_batch(syntax, paths, source_manager, *, parse_options, compila
             tree = _parse_source(syntax, path, source_manager, parse_options=parse_options)
             trees.append((path, tree))
     from .sv_library_search import load_libraries
-    from .source_selection import record_source_trees
+    from .source_selection import record_source_roots, record_source_trees
+    record_source_roots(paths, parse_options, compilation_unit, trees, source_manager)
     record_source_trees(trees)
     yield from load_libraries(trees, paths, source_manager, parse_options, compilation_unit)
 
@@ -418,7 +439,7 @@ def _source_display_name(symbol):
 
 def _has_instance_named_values(value, owner=None):
     if isinstance(value, dict):
-        reference = value.get('sv')
+        reference = value.get('sv', value.get('sv_type'))
         if (owner is not None and isinstance(reference, str)
                 and re.fullmatch(r'[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*', reference)):
             native = owner
@@ -429,7 +450,7 @@ def _has_instance_named_values(value, owner=None):
                 native = find(component) if find is not None else None
                 if native is None:
                     break
-            if native is not None and native.kind.name == 'TypeAlias' and not native.canonicalType.isClass:
+            if native is not None and (native.kind.name == 'TypeAlias' or getattr(native, 'isClass', False)):
                 return True
         return any(_has_instance_named_values(item, owner) for item in value.values())
     if isinstance(value, (tuple, list)):
@@ -437,11 +458,17 @@ def _has_instance_named_values(value, owner=None):
     return isinstance(value, str) and value.startswith('svx_mirror_instance.')
 
 
-def _class_fact(symbol, member, *, concrete_alias=False):
+def _class_fact(symbol, member, *, concrete_alias=False, owner=None):
+    state = _analysis.get()
+    table = state.class_fact_tables.get(owner) if state is not None and owner is not None else None
+    key = (symbol, member, concrete_alias)
+    if table is not None and key in table:
+        state.class_fact_reuses += 1
+        return table[key]
     extends = getattr(member, 'extendsClause', None)
     methods = tuple(method for item in member.items
                     if (method := _method_fact(item)) is not None)
-    return SVClassFact(
+    result = SVClassFact(
         symbol, _source_class_name(extends.baseName) if extends is not None else None,
         frozenset(name for item in member.items if _is_virtual(item)
                   and (name := _method_name(item)) is not None),
@@ -460,6 +487,10 @@ def _class_fact(symbol, member, *, concrete_alias=False):
         next((method for item in member.items
               if (method := _method_fact(item, include_constructor=True)) is not None and method.name == 'new'), None),
         _python_proxy_id(member))
+    if table is not None:
+        table[key] = result
+        state.class_fact_builds += 1
+    return result
 
 
 def _declaration_source_symbol(declaration):
@@ -540,7 +571,7 @@ def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, p
                     raise SVXInheritanceError(
                         f"duplicate SystemVerilog class definition {symbol}"
                     )
-                facts[symbol] = _class_fact(symbol, member)
+                facts[symbol] = _class_fact(symbol, member, owner=tree)
         if not package_count and not allow_no_packages:
             raise SVXInheritanceError(
                 f"SystemVerilog source {path} must contain a package declaration"
@@ -656,7 +687,7 @@ def _compile_owner_probes(compilation, unit_probes, manager, parse_options, sour
                         root_buffer=buffer, insertions=insertions), library=tree.sourceLibrary)
                     for path, buffer in zip(paths, root_buffers)]
             if index in unit_probes:
-                buffers.append(manager.assignText(f'<svx-owner-checks-{index}>', '\n'.join(unit_probes[index]) + '\n',
+                buffers.append(manager.assignText(f'<svx-owner-checks-{index}-{len(manager.getAllBuffers())}>', '\n'.join(unit_probes[index]) + '\n',
                                                   library=tree.sourceLibrary))
             tree = _pyslang().SyntaxTree.fromBuffers(buffers, manager,
                 **({} if parse_options is None else {'options': parse_options}))
@@ -877,6 +908,8 @@ def discover_sv_class_declarations(
             source = source.canonicalType
         if source is None or not hasattr(source, "constructor"):
             raise SVXInheritanceError(f"cannot resolve SV class {symbol} in supplied sources")
+        if value_exports is not None and _unit_scope(symbol) is None and _instance_scope(symbol) is None:
+            value_exports.register_class_values(source, symbol)
         specialization = None
         if fact.parameter_kinds:
             arguments = []
@@ -933,10 +966,8 @@ def discover_sv_class_declarations(
 
         def value_type(actual, location):
             result = {"type": binding(actual, where=location)}
-            handle = _source_handle_metadata(actual, where=location, collections=True)
+            handle = _source_handle_metadata(actual, where=location, collections=True, value_exports=value_exports)
             if handle is not None:
-                if _instance_scope(symbol) is not None:
-                    raise SVXInheritanceError(f'{location}: instance-owned handle adapters remain unfinished')
                 result["handle"] = handle
             return result
 
@@ -972,6 +1003,8 @@ def discover_sv_class_declarations(
             if "static" in field.qualifiers:
                 raise SVXInheritanceError(f"cannot automatically export static SV field {symbol}.{field.name}; exclude it with --exclude-member")
             fields.append({"name": field.name, **value_type(member.type, f"{symbol}.{field.name}")})
+        if value_exports is not None and _unit_scope(symbol) is None and _instance_scope(symbol) is None:
+            value_exports.publish_class_values(source, symbol)
         declaration = {"canonical_id": class_id, "language": "sv", "symbol": symbol,
                        "constructor": {"initiator": "sv", "parameters": (
                            parameters(source.constructor, f"{symbol}.new")
@@ -1153,22 +1186,29 @@ def _canonical_sv_handle_type(actual) -> str:
             if spelling.startswith(actual.name) else spelling)
 
 
-def _source_handle_metadata(actual, *, where, collections=False):
+def _source_handle_metadata(actual, *, where, collections=False, value_exports=None):
     original = actual
     actual = actual.canonicalType
     if collections and actual.kind.name in {'QueueType', 'DynamicArrayType',
                                              'FixedSizeUnpackedArrayType', 'AssociativeArrayType'}:
-        return _source_handle_metadata(actual.elementType, where=where, collections=True)
+        return _source_handle_metadata(actual.elementType, where=where, collections=True, value_exports=value_exports)
+    def selector(source):
+        if value_exports is not None and value_exports.current_instance is not None:
+            name, scope = value_exports.source_symbol(source)
+            if scope is not None and scope['kind'] == 'instance':
+                return '$instance[' + scope['path'] + ']::' + name
+        return _semantic_class_selector(source)
     if actual.isClass:
         if actual.genericClass is not None:
             if original.kind.name == "TypeAlias":
-                selector = _semantic_class_selector(original)
-                unit = _unit_scope(selector)
-                return {"kind": "sv_class", "sv_type": '$unit::' + unit[1] if unit is not None else selector,
-                        "target_type_name": _source_class_id(selector)}
+                selected = selector(original)
+                unit = _unit_scope(selected)
+                instance = _instance_scope(selected)
+                return {"kind": "sv_class", "sv_type": '$unit::' + unit[1] if unit is not None else instance[1] if instance is not None else selected,
+                        "target_type_name": _source_class_id(selected)}
             raise SVXInheritanceError(f"{where} requires explicit closed class-handle target metadata")
         return {"kind": "sv_class", "sv_type": _canonical_sv_handle_type(actual),
-                "target_type_name": _source_class_id(_semantic_class_selector(actual))}
+                "target_type_name": _source_class_id(selector(actual))}
     if actual.isVirtualInterface:
         interface = actual.iface.body.definition.name
         modport = actual.modport.name if actual.modport is not None else "full"
@@ -1181,7 +1221,7 @@ def _source_handle_metadata(actual, *, where, collections=False):
 
 
 def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compilation_unit=False,
-                               proxy_context=()) -> None:
+                               proxy_context=(), vif_enricher=None) -> None:
     """Canonicalize all resolvable endpoint types together, not field by field."""
     from pyslang.ast import Compilation
 
@@ -1226,6 +1266,7 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
 
     probes = []
     unit_probes = {}
+    scope_probes = {}
     def visit(declaration):
         for base in declaration.get("base_lineage", []):
             visit(base)
@@ -1241,8 +1282,9 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
         symbol = declaration.get("symbol")
         source_known = declaration.get("language") == "sv" and _declaration_source_symbol(declaration) in facts
         unit = _unit_scope(_declaration_source_symbol(declaration)) if source_known else None
-        lines = [] if unit is not None else [f"package {package};"]
-        if source_known and unit is None:
+        instance = _instance_scope(_declaration_source_symbol(declaration)) if source_known else None
+        lines = [] if unit is not None or instance is not None else [f"package {package};"]
+        if source_known and unit is None and instance is None:
             lines.append(f"import {symbol.split('::')[0]}::*;")
         extends = " extends " + _declared_class_reference(declaration) if source_known else ""
         probe_name = package if unit is not None else 'Probe'
@@ -1250,6 +1292,10 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
         for index, handle in enumerate(handles):
             lines.extend([f"function void check_{index}(input {handle['sv_type']} value);", "endfunction"])
         lines.append('endclass')
+        if instance is not None:
+            scope_probes.setdefault(instance[0], []).append({'name': package, 'text': '\n'.join(lines)})
+            probes.append((f'$instance[{instance[0]}.{package}]::Probe', handles))
+            return
         if unit is not None:
             unit_probes.setdefault(unit[0], []).append('\n'.join(lines))
             probes.append((f'$unit[{unit[0]}]::{probe_name}', handles))
@@ -1263,7 +1309,7 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
         probes.append((package + '::Probe', handles))
     for declaration in declarations:
         visit(declaration)
-    compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context)
+    compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context, scope_probes)
     updates = []
     targets = {}
     for package, handles in probes:
@@ -1286,9 +1332,12 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
                     f"is declared as both {_canonical_sv_handle_type(previous)!r} "
                     f"and {_canonical_sv_handle_type(actual)!r}"
                 )
-            updates.append((handle, _canonical_sv_handle_type(actual)))
-    for handle, spelling in updates:
-        handle["sv_type"] = spelling
+            normalized = dict(handle, sv_type=_canonical_sv_handle_type(actual))
+            if actual.isVirtualInterface and vif_enricher is not None:
+                vif_enricher(normalized, actual.iface.body)
+            updates.append((handle, normalized))
+    for handle, normalized in updates:
+        handle.update(normalized)
 
 
 def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compilation_unit=False,
@@ -1314,6 +1363,7 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
                 occupied.add(name)
     probes = []
     unit_probes = {}
+    scope_probes = {}
     for declaration in declarations:
         symbol = declaration["symbol"]
         reference = _declared_class_reference(declaration)
@@ -1322,8 +1372,10 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
             package += "_"
         occupied.add(package)
         unit = _unit_scope(_declaration_source_symbol(declaration))
+        instance = _instance_scope(_declaration_source_symbol(declaration))
         probe_name = package if unit is not None else 'Probe'
         lines = ([f'virtual class {probe_name} extends {reference};'] if unit is not None else
+                 [f'virtual class Probe extends {reference};'] if instance is not None else
                  [f"package {package};", f"import {symbol.split('::')[0]}::*;",
                   f"virtual class Probe extends {reference};"])
         for index, field in enumerate(declaration.get("fields", [])):
@@ -1331,6 +1383,10 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
             if isinstance(handle, dict):
                 lines.extend([f"function void check_{index}(input {handle['sv_type']} value);", "endfunction"])
         lines.append('endclass')
+        if instance is not None:
+            scope_probes.setdefault(instance[0], []).append({'name': package, 'text': '\n'.join(lines)})
+            probes.append((declaration, f'$instance[{instance[0]}.{package}]::Probe'))
+            continue
         if unit is not None:
             unit_probes.setdefault(unit[0], []).append('\n'.join(lines))
             probes.append((declaration, f'$unit[{unit[0]}]::{probe_name}'))
@@ -1342,7 +1398,7 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
             raise SVXInheritanceError(f"SV declaration {symbol} has an invalid field handle type expression")
         compilation.addSyntaxTree(tree)
         probes.append((declaration, package + '::Probe'))
-    compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context)
+    compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context, scope_probes)
     result = {}
     for declaration, package in probes:
         probe = _lookup_sv_symbol(compilation, package)

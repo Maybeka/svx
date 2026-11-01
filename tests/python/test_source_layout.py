@@ -286,7 +286,7 @@ def test_source_unit_early_public_endpoint_reference_uses_ready_owner(macro):
 
     model, source = manifest_and_source(endpoint_handles=True, multiple_endpoint_packages=True)
     inputs = endpoint_source_inputs(source)
-    public = 'svx_external_handles_pkg::SVXExternal_sv___mixed_source_pkg_Packet'
+    public = 'svx_external_handles_pkg::SVXExternal_sv_c_s_smixed_usource_upkg_sPacket'
     consumer = inputs['early-endpoint-consumer.sv']
     consumer = consumer.replace('  import svtypes_pkg::*;',
                                 '  import svtypes_pkg::*;\n  // ' + public + '\n'
@@ -297,8 +297,8 @@ def test_source_unit_early_public_endpoint_reference_uses_ready_owner(macro):
     inputs['early-endpoint-consumer.sv'] = consumer
     text = _emit_source_units(model, inputs)
     early = text[text.index('module early_endpoint_consumer;'):text.index('endmodule', text.index('module early_endpoint_consumer;'))]
-    assert 'endpoint_types_pkg::_svx_SVXExternal_sv___mixed_source_pkg_Packet::encode(null)' in early
-    assert 'svx_external_handles_pkg::SVXExternal_sv___mixed_source_pkg_Packet::encode(null)' not in early
+    assert 'endpoint_types_pkg::_svx_SVXExternal_sv_c_s_smixed_usource_upkg_sPacket::encode(null)' in early
+    assert 'svx_external_handles_pkg::SVXExternal_sv_c_s_smixed_usource_upkg_sPacket::encode(null)' not in early
     assert text.count('sv_class: endpoint_types_pkg::Packet') == 1
     assert '// ' + public in text
     assert '"' + public + '"' in text
@@ -315,18 +315,18 @@ def test_source_unit_automatically_owns_external_endpoints_once(collision):
     manifest, original = manifest_and_source(endpoint_handles=True)
     if collision:
         original = original.replace('package mixed_source_pkg;',
-                                    'package mixed_source_pkg; class _svx_SVXExternal_sv___mixed_source_pkg_Packet; endclass')
+                                    'package mixed_source_pkg; class _svx_SVXExternal_sv_c_s_smixed_usource_upkg_sPacket; endclass')
     text = _emit_source_units(manifest, {'mixed-source.sv': original})
     assert text.count('package svx_external_handles_pkg;') == 1
     assert text.count('sv_class: mixed_source_pkg::Packet <-> RemoteRef') == 1
     assert text.count('virtual_interface: virtual external_bus_if.master <-> RemoteRef') == 1
     assert text.index('endclass\n') < text.index('sv_class: mixed_source_pkg::Packet')
-    assert 'mixed_source_pkg::_svx_SVXExternal_sv_vif___external_bus_if_master::decode' in text
+    assert 'mixed_source_pkg::_svx_SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smaster::decode' in text
     assert 'typedef mixed_source_pkg::' in text
     assert not list(SyntaxTree.fromText(text).diagnostics)
     if collision:
-        assert text.count('class _svx_SVXExternal_sv___mixed_source_pkg_Packet;') == 1
-        assert 'typedef mixed_source_pkg::_svx_SVXExternal_sv___mixed_source_pkg_Packet SVXExternal_' not in text
+        assert text.count('class _svx_SVXExternal_sv_c_s_smixed_usource_upkg_sPacket;') == 1
+        assert 'typedef mixed_source_pkg::_svx_SVXExternal_sv_c_s_smixed_usource_upkg_sPacket SVXExternal_' not in text
 
 
 def test_source_unit_external_endpoint_follows_static_type_alias():
@@ -363,14 +363,14 @@ def test_inline_external_adapter_renderer_uses_one_owner_and_selected_binding():
     lines = _emit_sv_external_handle_adapters(model, package_name=None, bindings=(binding,))
     assert not any(line.startswith('package ') or line.startswith('endpackage') for line in lines)
     text = '\n'.join(lines)
-    assert text.count('class SVXExternal_sv___external_handle_test_pkg_PacketEndpoint implements') == 1
+    assert text.count('class SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacketEndpoint implements') == 1
     assert 'virtual external_bus_if' not in text
     original = '\n'.join(_emit_sv_external_handle_adapters(model))
     assert 'package svx_external_handles_pkg;' in original
     assert 'endpackage : svx_external_handles_pkg' in original
     source = inline_sources()['source.sv']
-    assert source.count('class SVXExternal_sv___external_handle_test_pkg_PacketEndpoint implements') == 1
-    assert source.count('class SVXExternal_sv_vif___external_bus_if_masterEndpoint implements') == 1
+    assert source.count('class SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacketEndpoint implements') == 1
+    assert source.count('class SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smasterEndpoint implements') == 1
     assert source.count('typedef external_handle_test_pkg::SVXExternal_') == 4
 
 

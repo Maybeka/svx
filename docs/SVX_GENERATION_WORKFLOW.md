@@ -52,6 +52,70 @@ external build dependencies explicitly. Do not add invented provenance records.
 These commands are generic templates. Prefer the example's generate.py or an
 equivalent project command that already owns the complete input arguments.
 
+## Project Configuration Adapters
+
+Keep long project selections in a configuration file of your own format. A trusted
+Python adapter translates it to the existing command's arguments:
+
+```sh
+svx export --config project.json --config-parser tools/svx_config.py
+svx export --config project.json --config-parser tools/svx_config.py --check
+```
+
+The adapter script defines
+`svx_args(config_path: pathlib.Path, argv: list[str]) -> list[str]`.
+SVX passes an absolute path to the existing configuration file and every token
+after the parser script path, unchanged and in order. Return individual
+argument tokens, not a shell command, subcommand name, or shell-quoted string:
+
+```python
+import json
+from pathlib import Path
+
+def svx_args(config_path: Path, argv: list[str]) -> list[str]:
+    settings = json.loads(config_path.read_text(encoding="utf-8"))
+    return ["--package", *settings["packages"],
+            "-f", str(config_path.parent / settings["filelist"]),
+            "--out", str(config_path.parent / settings["output"]), *argv]
+```
+
+The file format belongs to the adapter: JSON, TOML or an existing project's format
+need no additional SVX schema. Non-standard parsers must be installed in the CLI's
+Python environment. This is executable Python, not a sandbox; only run trusted
+adapters. The script runs as __svx_cli_config__, not __main__.
+
+--config-parser is an argument boundary, not just another option. Write it in
+full. Put --config and all options intended directly for SVX before it. Everything
+after its script path belongs exclusively to the adapter, including unknown
+options, positional values, --help, --debug and a literal --. The adapter may
+parse these with argparse or another library, consume them, or explicitly return
+them to SVX; SVX never forwards them a second time. The example above deliberately
+forwards them unchanged, so its trailing --check reaches SVX. Both
+--config-parser script.py and --config-parser=script.py support this boundary.
+
+Repeat --config before the boundary to combine files in order using the same
+--config-parser. Each call receives a fresh copy of the same trailing argv.
+Expanded options precede explicit CLI options before the boundary.
+Single-valued options such as --out use the
+last value; repeatable selections, filelists and defines accumulate under their
+normal CLI rules rather than replacing earlier lists. Both options are required
+together; adapter output cannot recursively include them. --help before the
+boundary executes no adapter; after it, the adapter handles help and may exit
+normally (for example through argparse). SVX --debug must precede the boundary
+to preserve exception tracebacks; a trailing --debug belongs to the adapter.
+
+Paths returned by the adapter retain normal CLI semantics: the invocation working
+directory is unchanged. Resolve paths relative to config_path.parent explicitly
+when that is what your format intends; original filelists still follow their
+--sv-build-directory/-f/-F rules. Each invocation, including --check and
+--incremental, reruns the adapter and passes its effective arguments to the same
+discovery, provenance and generation paths. This is not a separate generator or
+a cache of configuration results.
+
+The [SV export example](../examples/sv_export/README.md#generate) includes a complete
+configuration file and adapter. Configuration adapters are available on the other
+CLI subcommands too; return only arguments supported by the chosen command.
+
 ## Direct SV Export
 
 Before selecting an unfamiliar project's APIs, inspect its existing inputs:
@@ -150,6 +214,43 @@ they are not implicitly extra targets. `--recursive-packages` explicitly selects
 owned declarations in transitively imported packages. `--exclude-class 'pkg::Internal*'`
 removes unwanted targets. A selector matching nothing reports an error.
 
+For ordinary SV classes exported together, the generated Python
+mirrors preserve inheritance between selected ancestors and descendants, including
+ancestors in another package and the qualified
+[lexically visible source owners](#lexically-visible-sv-ancestors). For example, selecting base_pkg::Base and
+drivers::Driver produces svx_mirror.base_pkg.Base and svx_mirror.drivers.Driver,
+with Driver inheriting Base. isinstance/issubclass follow this relationship.
+Inherited field declarations are shared, and constructing Driver allocates only
+the complete SV Driver object, not an additional Base object. Module/class loading
+resolves bases on demand, so either public module may be imported first.
+This does not promote every lineage entry to an export target: select a base
+explicitly, or select its owning package, to obtain its independent public mirror.
+The same rule applies to consecutive SV classes inside a source-managed
+alternating chain. In A(SV) -> B(Python) -> C(SV) -> CLeaf(SV), the public Python
+CLeaf inherits C; C keeps the Python B portion in its ancestry. A Python boundary
+is not skipped merely because an earlier SV ancestor is also exported. Ordinary
+SV class families in that same package retain their own inheritance independently.
+This does not claim every nested, specialized or non-package lineage is qualified.
+
+Independent Python declarations may be selected in the same invocation with
+--python-module. Their presence does not change the ordinary SV package mirrors'
+inheritance, constructor ownership or Python override registration. Both separate
+bridges and --integrated source copies retain the explicit startup initializer;
+independent original source files retain their compilation-unit boundaries and
+macro isolation. A manifest containing both languages is not, by itself, an
+alternating-language inheritance chain: the latter requires actual cross-language
+edges and still follows the source-managed lineage placement rules.
+
+When an alternating chain and independent classes are exported together, the
+source-managed output also reports svx_exports_pkg::initialize() as its startup
+entry. Call it after svx_init() and before loading Python or constructing paired
+objects, just as for separate direct-export bridges. It explicitly registers the
+generated factories/dispatchers, does not construct user objects, and is
+idempotent. Do not rely on initializers in otherwise unreferenced helper packages
+being retained across separate native compilation steps. A selected ancestor
+already serving as a chain bridge is generated once, not again as an independent
+helper.
+
 By default, discovery exposes accessible methods and fields. For a narrow API
 or a large library, add `--member status --member advance`, or
 `--member 'drivers_pkg::Driver.*'`. A bare pattern matches member names throughout
@@ -193,6 +294,35 @@ original simulation build. The same option is available on inheritance-manifest
 and inheritance-gen; use the same mode throughout a manual pipeline. svx export
 forwards it to both steps automatically. This is selective analysis, not a
 persistent parse cache or completed incremental parsing.
+
+When independent RTL files are explicit filelist entries, opt in to removing
+specific **parse roots** without maintaining a second filelist:
+
+```sh
+svx compile-config -f project.f --exclude-source rtl/datapath.sv
+svx export --package drivers_pkg -f project.f --exclude-source rtl/datapath.sv \
+  --sv-elaboration packages --out generated
+```
+
+Repeat --exclude-source for each exact file path, relative to the current working
+directory (not the filelist directory). Unknown paths and removing every input
+are errors. The retained sources keep their original order; compile-config lists
+excluded_parse_inputs and export reports each removed root. The original build
+recipe remains recorded unchanged. This only changes export analysis, never
+the simulator build or the generated replacement rules for retained sources.
+With --integrated, keep excluded roots in their original simulator compile
+positions; they have no source_replacements entry because SVX did not rewrite them.
+
+This operation requires separate compilation units. A shared unit (including
+-mfcu or --single-unit in the original build) is rejected because removal may
+change macro propagation or compilation-unit declarations. It is not a blacklist
+for dependencies: a removed root can still be read through an include or required
+library lookup and then remains freshness-checked. Removing a required package
+or base declaration without another valid source produces an error, not a dummy
+type or a truncated inheritance chain. An edit confined to a genuinely unused
+removed root does not invalidate --check or --incremental reuse; selected
+declaration/header/library changes still do. Use the same exclusions on both
+manual inheritance-manifest and inheritance-gen commands; export forwards them.
 
 For repeated direct SV exports, --incremental enables opt-in result-level reuse:
 
@@ -265,7 +395,27 @@ Zero/empty values, signedness, wide integers and X/Z in Logic are preserved;
 X/Z cannot silently pass through a two-state integer codec. Required named value
 types are generated automatically. Pure constants, like pure types, need only
 SvTypes at import time and no running simulator. Runtime const variables and
-class/module instance parameters are not package compile-time snapshots.
+runtime instance fields are not compile-time snapshots.
+Ordinary class parameter/localparam declarations are also selectable, for example
+--constant 'pkg::Limits::*' publishes Limits.WIDTH and Limits.Nested.DEPTH in
+svx_mirror.pkg. Package selection includes its ordinary classes' declared
+constants, including non-parameterized class aliases; --exclude-constant applies
+normally. Only selecting constants creates value namespaces, not extra mirror
+classes/factories. If their owner class is also selected, snapshots attach to the
+actual mirror and selected Python base classes preserve inherited lookup. These
+are still copies: modifying an int, packed-struct or container snapshot cannot
+change the original SV constant. Explicit $unit class selectors follow the same
+namespace rule. Package-owned parameterized classes can use complete SV defaults
+or a concrete typedef alias already present in the project. Their constants and
+named values retain actual specialization widths, including nominal enum/packed
+struct types and type parameters. Equivalent aliases share the same Python value
+type; different specializations do not collapse into the template's default type.
+Inherited constants may be explicitly selected through the derived class name.
+Package selection still follows declared ownership, not every inherited alias;
+explicit selectors and required signature dependencies can request those aliases.
+Missing required arguments are never filled with guessed types or values.
+Parameterized $unit value ownership remains unfinished. Runnable source and both
+class/function-only paths are in [the closed-alias example](../examples/sv_export/README.md#closed-class-aliases).
 Constant manifests use schema2.2.0 with unchanged generator ABI2: optional
 constants entries contain symbol, public SvTypes identity/schema/encoding descriptor
 and canonical hex data encoded exclusively by that codec. The public encoding
@@ -273,6 +423,14 @@ descriptor is verified both while generating and when importing a snapshot;
 an incompatible dependency encoding requires regeneration, not reinterpretation
 of old bytes. --check also validates their input
 configuration and generated output.
+
+Default template owner references use schema2.7.0, with unchanged generator ABI2
+and SvTypes data encoding. Value/constant entries may record default_class_owners:
+a list of qualified class-name prefixes of their logical symbol. These names
+remain ordinary public Python paths; only native SV references add #() at those
+owner segments, for example pkg::Config#()::Mode. The generator uses this recorded
+structure rather than inferring parameter defaults again. Entries reject duplicate,
+unrelated or non-identifier owners; they do not accept arbitrary source expressions.
 
 --callable selects package functions/tasks directly, and --exclude-callable
 excludes optional functions/tasks from direct or package selection. Python imports
@@ -419,7 +577,8 @@ cannot reference those native types. Same-unit class-owned enum/struct runtime
 signatures are supported. Named values from parameterized class specializations
 still need specialization-aware placement; those unfinished
 layouts reject explicitly rather than emitting fake package references.
-Unit classes use the workflow below; class-parameter snapshots remain unfinished.
+Unit classes use the workflow below; ordinary class parameter/localparam snapshots
+are selectable independently, while parameterized $unit value ownership remains unfinished.
 Existing SvTypes value-kind
 limits still apply, including unsupported four-state enums/unpacked structs.
 
@@ -455,7 +614,8 @@ selection. Package selection does not implicitly select instance values.
 The hierarchy must be elaborated: --sv-elaboration packages cannot serve these
 selectors. Inactive owners and unsupported concrete SvTypes schemas reject.
 
-Selecting a class automatically collects same-owner value dependencies from its
+Selecting a class automatically collects value dependencies from its own scope
+and supported [lexical ancestors](#lexically-visible-sv-ancestors), using its
 fields, constructor and method signatures. No separate --type list is needed:
 
 ```sh
@@ -472,10 +632,16 @@ checks live enum/struct fields, enum/struct/array/queue method transport,
 constructor arguments, virtual callbacks, static calls and output/inout tasks.
 Equal-parameter owners retain separate Python nominal identities.
 
-Generate-owned nominal runtime combinations still need native qualification;
-successful snapshot selection does not establish that runtime support.
-Cross-owner native type dependencies, native handle adapters and
-parameterized-class named values remain unfinished. See the
+Generate-owned scalar enum runtime paths are also qualified, including signed
+9/70bit constructor/field/function/task/static values, output/inout and Python
+virtual callbacks; see [Generate-Owned Classes](#generate-owned-classes).
+Same-owner generate enum/packed-struct values and containers also have native
+qualification, for direct generate declarations and class-owned types. The
+[complete runtime example](../examples/sv_scoped/README.md#generate-runtime-values)
+checks whole/local storage operations and X/Z, not only snapshot selection.
+Other cross-owner native type dependencies, advanced VIF operation type bindings and
+parameterized-class named values remain unfinished. Native class handles use
+the qualified [source-owner handle path](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#native-source-owners). See the
 [snapshot example](../examples/sv_scoped/README.md#instance-owned-type-snapshots)
 for standalone Python imports and native reference results.
 
@@ -551,9 +717,12 @@ Class-owned nominal types keep their complete native name, such as
 $unit::Outer::Inner::State; inherited methods retain their original declaring
 type even when a subclass declares its own State with identical literal names.
 Use --type Outer::Inner::States for an explicitly wanted nested container alias.
-Cross-unit/package access, owner-local handle adapters and alternating
+Cross-unit native type dependencies and alternating
 unit-owned cross-language lineages still need additional placement support;
 these implementation gaps report errors rather than manufacturing packages.
+Native class handles and their nested containers are supported through the
+same [typed handle adapters](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#native-source-owners),
+without exporting every referenced class.
 
 ## Instance-Owned Classes
 
@@ -602,8 +771,69 @@ object. Scalar owner-parameter guards keep each gateway in its matching
 specialization; string, real and four-state scalar parameters are retained.
 Owner type/structured parameters, library-only owner source replacement and
 macro-generated endinterface anchors still need additional placement support.
-Instance-owned named values/handles and alternating owner lineages remain
-unfinished and diagnose rather than emitting a callable wrong contract.
+Same-owner named values follow the runtime-value rules above; native class
+handles follow the [source-owner handle rules](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#native-source-owners).
+Owner-local VIF constructor/member/method handles also use the same typed
+endpoint path; see the [qualified operation scope](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#owner-local-virtual-interfaces).
+VIF member typedefs are resolved in the native interface scope using the existing
+handle analysis; supported structural aliases need no extra declaration JSON or
+export target. Package-callable-only exports use this same enrichment path.
+Package-defined enum and packed-struct VIF operation types and their supported
+containers also require no extra declarations. Shared typed endpoints bind the
+actual native types explicitly, retaining SvTypes encoding and input/output/
+inout behavior; see the [nominal operation fixture](../tests/integration/scoped_nominal_bus_if.sv).
+Interface-local nominal VIF types, native class/VIF values inside operations,
+other cross-owner native types and alternating owner
+lineages remain unfinished and diagnose rather than emitting a callable wrong
+contract.
+
+## Lexically Visible SV Ancestors
+
+An instance-owned class can inherit an accessible class in the same compilation
+unit, or in its enclosing module/generate scopes. These are native SV inheritance
+edges, not new cross-language boundaries. Module/interface/program/generate
+targets with a compilation-unit base, and generate targets with an enclosing
+module base, have native qualification. Base and derived class-owned enums,
+packed structs, inherited live fields, static methods and output/inout tasks
+keep their native definitions and normal construction order.
+
+For example, with SharedBase declared at compilation-unit scope and Driver in
+tb.a/tb.b, select both to obtain their Python type relationship:
+
+```sh
+svx export --class SharedBase 'tb.*.Driver' -f original.f --out generated
+```
+
+Inside an initialized Python entry:
+
+```python
+from svx_mirror_unit.unit_0 import SharedBase
+from svx_mirror_instance.tb.a.classes import Driver
+
+assert issubclass(Driver, SharedBase)
+item = Driver(7)
+assert isinstance(item, SharedBase)
+```
+
+Only the complete native Driver object is allocated; its original new function
+calls the SV base constructor. Inherited Python descriptors address that same
+object, rather than creating another member entity or base object. A Python
+subclass override still receives a virtual call through the original SV base
+handle, and super() invokes the native implementation.
+
+Selecting only Driver retains its full base_lineage and inherited surface, but
+does not create an independent callable SharedBase mirror/factory. Required
+SharedBase.State/Packet value declarations may still be exported. Exact class
+selectors follow required ancestor owners in the existing semantic compilation;
+this does not enable an unrelated full-hierarchy scan or extra export targets.
+See the [source fixture](../tests/integration/lexical_ancestry.sv).
+
+This does not make declarations in independent compilation units or unrelated
+instances visible. Cross-owner type-parameter placement remains separate work.
+Visible ancestor/descendant nominal types whose native spellings shadow each
+other currently diagnose a missing qualified-alias layout; they are not merged
+or rebound to a different width. As with other export failures, discovery may
+have published its manifest before a later generation diagnostic.
 
 ## Generate-Owned Classes
 
@@ -621,6 +851,33 @@ passed out through a bound module's type parameter. Startup is still a single
 svx_exports.initialize. The example verifies six real owners,8/9/13/14bit
 fields, constructor/state independence, inherited statics, a1ns output/inout
 task and original SV-handle virtual callbacks into Python.
+
+Scalar enum members and call values use local typed conversion packers in the
+original generate owner. These delegate bytes and offsets to the ordinary
+SvTypes bit codec through an equal-width temporary, then cast locally back to
+the original enum. The enum is not relocated or replaced by another stored
+field, and its SvTypes identity, encoding descriptor and call prototype remain
+unchanged. No extra CLI setting or type JSON is required. The
+[enum source fixture](../tests/integration/generate_enum_classes.sv) covers
+parameter-dependent9/70bit signed enums, constructors, live fields, static
+results, function/task output/inout and virtual methods. Native qualification
+also checks callbacks through the existing explicit object handoff and enum
+fields combined with restricted VIF/typedef operations. Enum-containing
+collections and generate-owned struct runtime layouts use the same existing
+SvTypes codecs and source-owner bridge.
+
+For a complete project, export the original filelist of
+[Generate Runtime Values](../examples/sv_scoped/README.md#generate-runtime-values).
+It keeps enum, packed struct, fixed/dynamic arrays, enum queues, string-indexed
+struct maps and nested map-of-queue fields in their original Driver class inside
+generate. Native8/13bit owners verify whole and addressed writes, unchanged
+siblings/empty containers, X/Z readback through original SV getters,
+constructors/static calls, output/inout tasks and enum/struct/array virtual
+callbacks with Python super(). Only Driver is selected; required named values
+are discovered automatically, and unused intermediate container aliases are not
+extra Python export targets. This qualification covers the shown same-owner
+module-generate layouts, not arbitrary owner type parameters, cross-owner native
+dependencies or alternating owner lineages.
 
 Parent parameter guards are captured before each child generate construct.
 Genvar guards are evaluated in their own lexical scope, so an inner localparam
@@ -835,6 +1092,12 @@ graph and filesystem latency. Unchanged output timestamps avoid recompilation;
 they do not make checks constant-time. Measure the entire refresh/check/run path
 on the actual project, not only the number of requested classes.
 
+Importing build inputs preserves source/filelist order while using set-based
+duplicate checks, avoiding a quadratic scan of large source lists. Filelists,
+environment expansion and filesystem paths are still read again for validation;
+this is not cached compiler configuration. Exclusion-path matching runs only
+when `--exclude-source` is supplied and resolves each candidate once per match.
+
 Within one `inheritance-manifest` discovery operation, source consumers share
 raw syntax trees and their source manager. Class ancestry, value selection and
 instance discovery also share the default semantic compilation when the actual
@@ -842,15 +1105,45 @@ syntax trees, library context and elaboration mode are identical. Python Proxy
 placeholders are enriched separately for each discovery context; semantic probes
 use separate compilations rather than adding checks to the shared source graph.
 Generation-time native-handle and virtual-interface enrichment has its own
-shared analysis scope. Its consumers reuse one raw parse, but do not retain
-discovery trees across the generation input-validation boundary.
+semantic analysis scope. On replayable, stable inputs, initial dependency capture
+owns the raw syntax trees and their source manager. Discovery and generation
+borrow these same trees only after fresh content/include/library validation and
+exact parser-option matching. They do not share mutable semantic compilations.
+Immutable class-declaration facts are shared with their owning raw tree as well;
+returned fact dictionaries remain separate, and imported-base/alias resolution
+still uses the current semantic context rather than a cached resolved graph.
+Within an analysis scope, declaration inventory and target selection also share
+immutable package-import names for the exact same syntax node. Imports inside
+subroutines remain dependencies; only the inventory's declaration walk skips
+subroutine bodies, whose local declarations are not externally named export
+targets. Distinct trees and later analysis scopes do not share these import facts.
+Python Proxy member enrichment is reapplied for the current declaration context.
 Initial and final input observations independently re-read current source bytes
 and replay parser-recorded include/library lookups. Within one CLI operation,
 discovery and generation may reuse a proven dependency graph after those fresh
 checks; changed or non-replayable selections use the full parser path. This does
-not keep old file bytes or suppress input-change rejection. The observation
+not accept a tree after its source or lookup choices have changed. The observation
 scope ends with the command; it is not changed-unit AST incrementality or a
 persistent parse cache. Opt-in unchanged-result reuse remains a separate layer.
+For SV-only discovery selections, provenance validation can use one fresh proof
+replay to check both the recorded byte digests and the current include/library
+choices. It does not immediately hash those same SV files a second time within
+that validation. Each later validation still reads current bytes again; missing
+or invalid proofs retain the ordinary source checks and parser fallback. Python
+module selections retain their independent validation path.
+Source-copy integration can borrow the explicit root trees and physical buffer
+IDs from the same proof, retaining original source order and compilation-unit
+grouping. Original roots are recorded before demand-driven library loading;
+library units stay separate from source replacements. Caller-provided text must
+match each retained buffer exactly, in addition to the fresh dependency/lookup
+and parser-option checks. Transformed or newline-normalized text, ambiguous root
+ownership, and unmatched groups fall back to parsing the provided text. No old
+source manager is overlaid or updated with new file contents.
+Explicit external source managers and parser options that cannot be verified
+retain their independent parser path. Expanded includes, generated scaffolds,
+source-copy placement and semantic probe snippets may still require their own
+parsing; raw-source reuse is not a claim that all generated-text processing
+disappears or that end-to-end time necessarily improves.
 Proof contexts use the current physical identity of existing include directories,
 so equivalent path spellings can share dependency observations. Directory order
 and duplicate entries remain intact; the actual compiler inputs are not rewritten.

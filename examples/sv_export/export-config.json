@@ -1,0 +1,6 @@
+{
+  "build_directory": "../..",
+  "filelists": ["examples/sv_export/design.f"],
+  "classes": ["export_driver_pkg::Driver"],
+  "output": "../../.tmp/configured-export"
+}

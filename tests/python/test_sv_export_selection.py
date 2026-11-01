@@ -1,5 +1,8 @@
 import io
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -57,6 +60,78 @@ def test_direct_class_discovers_members_and_lineage_without_python_or_json(proje
     assert any(method.name == 'status' and method.virtual for method in target.methods)
     adjust = next(method for method in target.methods if method.name == 'adjust')
     assert [parameter.direction for parameter in adjust.parameters] == ['input', 'output', 'inout']
+
+
+@pytest.mark.parametrize('first_module', ['base_pkg', 'drivers', 'same_package', 'mixed', 'mixed_integrated'])
+def test_selected_packages_preserve_python_inheritance_and_one_constructor(project, tmp_path, first_module):
+    source, _ = project
+    driver_module = 'drivers'
+    packages = ['base_pkg', 'drivers']
+    extra_arguments = []
+    if first_module in {'mixed', 'mixed_integrated'}:
+        integrated = first_module == 'mixed_integrated'
+        first_module = 'drivers'
+        extra_arguments = ['--python-module', 'tests.integration.package_export_independent']
+        if integrated:
+            extra_arguments.append('--integrated')
+    if first_module == 'same_package':
+        text = source.read_text(encoding='utf-8').replace(
+            'endpackage\npackage drivers;\n  import base_pkg::*;', '')
+        # The facade import is unrelated to this test's selected declarations.
+        text = text[:text.index('package facade;')]
+        source.write_text(text, encoding='utf-8')
+        driver_module = first_module = 'base_pkg'
+        packages = ['base_pkg']
+    root = tmp_path / 'generated'
+    arguments = ['export', *extra_arguments, '--package', *packages, '--sv-source', str(source),
+                 '--out', str(root)]
+    if extra_arguments:
+        environment = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
+        generation = subprocess.run([sys.executable, '-m', 'svx', *arguments], env=environment,
+                                    capture_output=True, text=True, timeout=60)
+        assert generation.returncode == 0, generation.stdout + generation.stderr
+        artifact = json.loads((root / 'artifacts.json').read_text(encoding='utf-8'))
+        assert artifact['systemverilog_startup'] == 'svx_exports_pkg::initialize'
+    else:
+        assert main(arguments, out=io.StringIO()) == 0
+    program = f'''
+import importlib
+from svx import inheritance, _native
+importlib.import_module('svx_mirror.{first_module}')
+from svx_mirror.base_pkg import Base
+from svx_mirror.{driver_module} import Driver
+assert issubclass(Driver, Base)
+assert Driver.__bases__ == (Base,)
+namespace = {{}}
+exec('from svx_mirror.{driver_module} import *', namespace)
+assert namespace['Driver'] is Driver
+assert 'Driver' in dir(importlib.import_module('svx_mirror.{driver_module}'))
+assert inheritance._python_subclasses.get('sv://base_pkg/Base') in (None, Base)
+allocations = []
+def create(class_id, payload):
+    allocations.append((class_id, payload))
+    return 817
+_native.inheritance_create_sv = create
+_native.inheritance_bind = lambda object_id, instance: None
+_native.inheritance_close = lambda object_id: None
+inheritance.encode_constructor = lambda class_id, values: values
+# Generated modules capture encode_constructor during module import.
+importlib.import_module('svx_mirror.{driver_module}').encode_constructor = inheritance.encode_constructor
+driver = Driver(23)
+assert isinstance(driver, Base)
+assert allocations == [('sv://{driver_module}/Driver', {{'seed': 23}})], allocations
+assert driver._svx_remote_object_id == 817
+class UserDriver(Driver):
+    pass
+assert inheritance._python_subclasses['sv://{driver_module}/Driver'] is UserDriver
+assert inheritance._python_subclasses.get('sv://base_pkg/Base') in (None, Base)
+print('PACKAGE_INHERITANCE_PASS')
+'''
+    env = dict(os.environ)
+    env['PYTHONPATH'] = os.pathsep.join([str(root / 'python'), *sys.path])
+    result = subprocess.run([sys.executable, '-c', program], env=env, text=True,
+                            capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize('package, expected', [

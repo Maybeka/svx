@@ -16,10 +16,12 @@ from .inheritance import (
 from .scoped_exports import _scope_component
 from .value_exports import with_value_types
 from .owner_records import emit_owner_records, with_local_call_records
+from .native_handles import with_native_handle_adapters, emit_native_handle_adapters
 
 
 @with_value_types(codegen=True)
 @with_local_call_records
+@with_native_handle_adapters
 def emit_unit_export_bridge(manifest, index, *, metadata=None):
     """Render one owner's direct class targets with the existing runtime ABI."""
     if type(index) is not int or index < 0:
@@ -38,8 +40,11 @@ def emit_unit_export_bridge(manifest, index, *, metadata=None):
             raise SVXInheritanceError('a unit class cannot inherit a class from an independent compilation unit')
     local = replace(manifest, classes=classes, callables=())
     from .inheritance import _manifest_handle_bindings
-    if _manifest_handle_bindings(local):
-        raise SVXInheritanceError('unit class handle adapters need owner-local adapter placement; this layout remains unfinished')
+    if any(binding.kind == 'virtual_interface' for binding in _manifest_handle_bindings(local)):
+        from .native_handles import uses_generic_handle
+        if any(not uses_generic_handle(binding) for binding in _manifest_handle_bindings(local)
+               if binding.kind == 'virtual_interface'):
+            raise SVXInheritanceError('unit virtual-interface adapters with nominal call records need owner-local type binding; this layout remains unfinished')
     lines = [*_generated_sv_header(manifest), '',
              '// These declarations remain in the original compilation unit.',
              'import svx_pkg::*;', 'import svtypes_pkg::*;']
@@ -79,6 +84,8 @@ def emit_unit_export_bridge(manifest, index, *, metadata=None):
     return '\n'.join(lines)
 
 
+@with_value_types(codegen=True)
+@with_native_handle_adapters
 def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
                                 startup_metadata=None, predefines=None, undefines=(), include_dirs=()):
     """Preserve original unit grouping and explicitly link each owner's factory."""
@@ -105,22 +112,33 @@ def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
         raise SVXInheritanceError('instance-owned exports require design hierarchy elaboration; use --sv-elaboration all')
     _join_source_units(sources)
     options = _source_parse_options(predefines, undefines, include_dirs, discover_proxies=True)
-    manager = SourceManager()
-    buffers = {filename: manager.assignText(filename, text) for filename, text in sources.items()}
     groups = [tuple(sources)] if compilation_unit else [(filename,) for filename in sources]
-    trees = []
-    for group in groups:
-        tree = _pyslang().SyntaxTree.fromBuffers([buffers[name] for name in group], manager, options=options)
-        _check_source_diagnostics(tree, group[0])
-        trees.append((Path(group[0]), tree))
-    validation_trees = tuple(tree for _, tree in load_libraries(
-        trees, tuple(map(Path, sources)), manager, options, compilation_unit))
+    from .source_selection import borrow_source_copy_syntax
+    borrowed = borrow_source_copy_syntax(sources, options, compilation_unit)
+    if borrowed is not None:
+        snapshot, buffers = borrowed
+        manager, trees = snapshot.source_manager, snapshot.root_trees
+        validation_trees = (*[tree for _, tree in trees],
+                            *[tree for _, tree in snapshot.trees if tree.isLibraryUnit])
+    else:
+        manager = SourceManager()
+        buffers = {filename: manager.assignText(filename, text) for filename, text in sources.items()}
+        trees = []
+        for group in groups:
+            tree = _pyslang().SyntaxTree.fromBuffers([buffers[name] for name in group], manager, options=options)
+            _check_source_diagnostics(tree, group[0])
+            trees.append((Path(group[0]), tree))
+        validation_trees = tuple(tree for _, tree in load_libraries(
+            trees, tuple(map(Path, sources)), manager, options, compilation_unit))
+        buffers = {name: buffer.id for name, buffer in buffers.items()}
     compilation = Compilation()
     for tree in validation_trees:
         compilation.addSyntaxTree(tree)
     compilation = elaborate_sources(compilation)
     local_owners = set()
     owner_roots = {}
+    owner_contexts = {}
+    unit_indices = {unit: index for index, unit in enumerate(compilation.getRoot().compilationUnits)}
     for source in manifest.classes:
         raw = {'symbol': source.symbol, 'source_scope': source.source_scope}
         actual = _lookup_sv_symbol(compilation, _declaration_source_symbol(raw))
@@ -133,6 +151,24 @@ def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
             from .source_scopes import native_scope_chain, lookup_native_scope
             owner = lookup_native_scope(compilation, source.source_scope['path'])
             scopes = native_scope_chain(compilation, source.source_scope['path'])
+            context = owner_contexts.setdefault(source.source_scope['path'], {
+                'unit': unit_indices[actual.parentScope.compilationUnit],
+                'instances': tuple(scope.hierarchicalPath for scope in scopes),
+                'shadowed_values': set(),
+            })
+            from .owner_records import owner_value_dependencies
+            for value in owner_value_dependencies(replace(manifest, classes=(source,), callables=())):
+                scope = value.source_scope
+                if (scope is None or scope['kind'] != 'instance' or scope == source.source_scope
+                        or scope['path'] not in context['instances']):
+                    continue
+                expected = _lookup_sv_symbol(compilation, _declaration_source_symbol({
+                    'symbol': value.symbol, 'source_scope': scope}))
+                visible = scopes[-1].lookupName(value.symbol)
+                expected_type = getattr(expected, 'canonicalType', None)
+                visible_type = getattr(visible, 'canonicalType', None)
+                if expected_type is None or visible_type is None or not expected_type.isMatching(visible_type):
+                    context['shadowed_values'].add(value.key)
             container = scopes[0].definition.definitionKind.name.lower()
             owner_roots[source.source_scope['path']] = scopes[0].hierarchicalPath
             if owner.kind.name == 'GenerateBlock' or container == 'program':
@@ -147,7 +183,7 @@ def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
     owner_insertions = {}
     instance_bridges = emit_instance_export_bridges(manifest, metadata=instance_metadata,
                                                    owner_insertions=owner_insertions, local_owners=local_owners,
-                                                   owner_roots=owner_roots)
+                                                   owner_roots=owner_roots, owner_contexts=owner_contexts)
     definitions = {definition.name for definition in compilation.getDefinitions()}
     for binding in instance_metadata.get('instance_bindings', ()):
         from .source_scopes import lookup_native_scope
@@ -155,7 +191,7 @@ def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
         if (binding.get('bridge_module') in definitions
                 or getattr(owner, 'body', owner).lookupName(binding['bridge_instance']) is not None):
             raise SVXInheritanceError(f'instance export generated name collides with original design at {binding["instance_path"]}')
-    reachable_buffers = {buffer.id for buffer in buffers.values()}
+    reachable_buffers = set(buffers.values())
     reachable_buffers.update(directive.buffer.id for _, tree in trees for directive in tree.getIncludeDirectives())
     from .source_scopes import native_scope_insertions
     insertions = native_scope_insertions(compilation, owner_insertions, manager=manager,
@@ -173,10 +209,12 @@ def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
 
     paths = integrated_source_paths(sources, compilation_unit=compilation_unit)
     emitted = {}
+    if handles := emit_native_handle_adapters(manifest):
+        emitted['native_handles.sv'] = handles
     unit_modules = []
     package_metadata = {}
     for index, (output, group, (_, tree)) in enumerate(zip(paths, groups, trees)):
-        originals = {name: _inline_active_source_includes(tree, sources[name], root_buffer=buffers[name].id,
+        originals = {name: _inline_active_source_includes(tree, sources[name], root_buffer=buffers[name],
                                                         insertions=insertions) for name in group}
         if index == package_anchor:
             if any(str(node.kind) == 'SyntaxKind.PackageDeclaration'
