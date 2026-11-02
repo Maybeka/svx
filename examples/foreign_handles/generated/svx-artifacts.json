@@ -10,7 +10,7 @@
       "language": "python",
       "module": "svx_py.examples.foreign_handles.python_api",
       "path": "python/svx_py/examples/foreign_handles/python_api.py",
-      "sha256": "467778c19da0c8c61605b0a298a3411b0524f7ffe9f3d846e415a863fa33cf89"
+      "sha256": "0aa66900fe7be0d12e721f2e946f26a24cdebdcbd2bba50729eb0784849e1548"
     },
     {
       "language": "python",
@@ -33,7 +33,7 @@
     {
       "language": "systemverilog",
       "path": "mirrors.sv",
-      "sha256": "b5e7deac3f8381c131973a19b3ccb415d1666687bb4ab85a065b924aace53d8f"
+      "sha256": "a8db59176023d881c45d47e7a1bdc7df09190934282a4cb099486469ae41a3c9"
     }
   ],
   "callables": [

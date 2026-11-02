@@ -7,6 +7,6 @@ class Operation(svtypes.Enum):
 
 
 @svtypes.svobj
-class ValuePacket(svtypes.SvStruct):
+class ValuePacket(svtypes.SvPackedStruct):
     tag = svtypes.Bit[8]()
     flags = svtypes.Logic[4]()

@@ -2,7 +2,7 @@ import sys
 from types import ModuleType
 
 import pytest
-from svtypes import Array, Bit, Enum, Int, Logic, Real, ShortReal, Signed, String, SvStruct
+from svtypes import Array, Bit, Enum, Int, Logic, Real, ShortReal, Signed, String, SvPackedStruct
 
 from svx.declarations import inheritance_class, manifest_from_declarations
 from svx.inheritance import _sv_field_declaration
@@ -13,7 +13,7 @@ class DeclaredDefaultMode(Enum[Bit[8]]):
     ACTIVE = 7
 
 
-class DeclaredDefaultRecord(SvStruct):
+class DeclaredDefaultRecord(SvPackedStruct):
     tag = Bit[8](7)
     flags = Logic[4]()
 

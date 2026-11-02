@@ -294,6 +294,8 @@ def _codec_from_spec(spec: dict[str, Any]):
             import svtypes
 
             require_type_spec_api(svtypes)
+            from .struct_contract import validate_struct_metadata
+            validate_struct_metadata(identity, where='SVX manifest type')
             annotation = svtypes.type_spec_from_identity(identity, location="SVX manifest type")
             return svtypes.materialize_type_spec(annotation, location="SVX manifest type")
         except Exception as error:
@@ -1050,6 +1052,9 @@ def parse_manifest(data: Any, *, source_path: Path | None = None) -> Manifest:
                                      for item in classes if item.language == 'sv'}):
         raise _error('root', 'contains conflicting class, value type or constant export names')
     required_capabilities = set(REQUIRED_RUNTIME_CAPABILITIES)
+    from .struct_contract import CAPABILITY as STRUCT_CAPABILITY, validate_struct_metadata
+    if validate_struct_metadata(raw, where='manifest'):
+        required_capabilities.add(STRUCT_CAPABILITY)
     if any(
         candidate.fields
         for cls in classes
@@ -1537,6 +1542,8 @@ def _field_specs(parameters: tuple[Parameter, ...]) -> str:
 def _constructor_registration(cls: ForeignClass, *, function_name: str = "register_constructor") -> str:
     assert cls.constructor is not None
     targets = tuple(p.handle.target_type_name for p in cls.constructor.parameters if p.handle is not None)
+    targets = tuple(dict.fromkeys((*targets, *(target for parameter in cls.constructor.parameters
+                                               for target in _nested_external_targets(parameter.type_binding)))))
     extra = f", external_targets={targets!r}" if targets else ""
     return f"{function_name}({cls.canonical_id!r}, {_field_specs(cls.constructor.parameters)}{extra})"
 
@@ -1566,6 +1573,35 @@ def _response_field_specs(method: Method) -> str:
     return f"({content}{',' if len(fields) == 1 else ''})"
 
 
+def _nested_external_targets(binding):
+    import svtypes
+    spec = binding.runtime_spec()
+    identity = spec.get('svtypes')
+    if identity is not None and identity.get('kind') in {'scalar', 'enum', 'remote_ref'}:
+        return ()
+    codec = _codec_from_spec(spec)
+    if not isinstance(codec, (svtypes.SvStruct, svtypes.Array, svtypes.DynArray, svtypes.Queue, svtypes.AssocArray)):
+        return ()
+    schema = svtypes.schema_descriptor(codec).to_dict()['schema']
+    targets = []
+
+    def visit(node):
+        kind = node['kind']
+        if kind == 'remote_ref' and node['target_type_name'].startswith('sv://'):
+            targets.append(node['target_type_name'])
+        elif kind == 'struct':
+            for field in node['fields']:
+                visit(field['type'])
+        elif kind in {'array', 'dyn_array', 'queue'}:
+            visit(node['element'])
+        elif kind == 'assoc_array':
+            visit(node['value'])
+
+    if schema['kind'] == 'struct' or schema['kind'] in {'array', 'dyn_array', 'queue', 'assoc_array'}:
+        visit(schema)
+    return tuple(dict.fromkeys(targets))
+
+
 def _contract_data(method: Method) -> dict[str, Any]:
     """Return the runtime contract with a stable, readable field order."""
 
@@ -1577,6 +1613,9 @@ def _contract_data(method: Method) -> dict[str, Any]:
         )
         if handle is not None
     )
+    external_targets = tuple(dict.fromkeys((*external_targets, *(
+        target for binding in (*(parameter.type_binding for parameter in method.parameters), method.return_type)
+        if binding is not None for target in _nested_external_targets(binding)))))
     return {
         "timing": method.timing,
         "parameters": tuple(
@@ -2866,6 +2905,26 @@ def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
             if method.return_handle is None:
                 continue
             add(method.return_handle)
+    def nested_handles(schema):
+        kind = schema['kind']
+        if kind == 'remote_ref':
+            target = schema['target_type_name']
+            if (target, '') in bindings:
+                return
+            if target.startswith('sv://'):
+                from .sv_scan import _source_class_selector
+                add(HandleBinding(kind='sv_class', target_type_name=target,
+                                  sv_type=_source_class_selector(target)))
+        elif kind == 'struct':
+            for field in schema['fields']:
+                nested_handles(field['type'])
+        elif kind in {'array', 'dyn_array', 'queue'}:
+            nested_handles(schema['element'])
+        elif kind == 'assoc_array':
+            nested_handles(schema['value'])
+
+    for value in manifest.value_types:
+        nested_handles(value.as_dict()['schema'])
     return tuple(bindings[key] for key in sorted(bindings))
 
 
@@ -3044,6 +3103,15 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
         arguments = '#(' + ', '.join(type_parameters) + ')' if type_parameters else ''
         endpoint = name + 'Endpoint' + arguments
         target = json.dumps(binding.target_type_name)
+        if binding.kind == 'sv_class' and not binding.operations:
+            if not parameters:
+                lines.append(f'  typedef svx_class_reference_endpoint#({binding.sv_type}, {target}) {name}Endpoint;')
+            lines.extend([
+                f'  // {binding.kind}: {binding.sv_type} <-> RemoteRef[{binding.target_type_name}].',
+                f'  class {name}{parameters} extends svx_class_reference#({binding.sv_type}, {target});',
+                f'  endclass : {name}',
+            ])
+            continue
         endpoint_interfaces = "svx_external_handle, svx_dispatchable, svx_function_dispatchable" if binding.operations else "svx_external_handle"
         lines.extend(
             [
@@ -3187,6 +3255,10 @@ def _sv_record_type(
         if isinstance(codec, svtypes.Enum):
             # Native class-owned enum literals are not visible in record scope.
             options = {'cov': False, 'plusarg': False}
+        elif isinstance(codec, svtypes.SvStruct):
+            # Native struct aliases can contain native handles, not wire RemoteRefs.
+            # Private transport records must not expand them as wire dump fields.
+            options = {'dump': False, 'cov': False, 'plusarg': False}
         elif isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.Queue, svtypes.AssocArray)):
             # Transport collections are not user coverage hosts.
             options = {'cov': False}
@@ -3893,15 +3965,30 @@ def _emit_sv_sequence_mutation(codec: Any, expression: str, field_id: str,
     child = svtypes.FieldDescriptor(codec).resolve_path(svtypes.FieldPath().index(0)).codec
     child_type = svtypes.sv_type_expression(child)
     child_packer = svtypes.sv_packer_expression(child)
+    from .struct_contract import _contains_native_reference, _convert_native_reference
+    child_schema = svtypes.schema_descriptor(child).to_dict()['schema']
+    native_reference = _contains_native_reference(child_schema)
+    if native_reference:
+        child_type = f'svx_native_element_{depth}'
+    declarations = [f'  {child_type} field_element;']
+    unpack_target = 'field_element'
+    conversion = []
+    if native_reference:
+        declarations.append(f'  {svtypes.sv_declaration(child, "field_wire")};')
+        unpack_target = 'field_wire'
+        conversion = _convert_native_reference(child_schema, 'field_wire', 'field_element',
+                                               encode=False, where=field_id)
+
     queue = isinstance(codec, svtypes.Queue)
     index = f"operation.path_index[{depth}]"
     size = f"{expression}.size()"
     success = [line.strip() for line in _emit_sv_field_operation_success()]
     if not indexed:
         lines = ["else if (operation.code == 4 && operation.has_payload) begin",
-                 f"  {child_type} field_element;", "  field_offset = 0;",
-                 f"  {child_packer}::unpack(field_element, operation.payload, field_offset);",
-                 f'  svx_require_unpacked_all("{field_id}", "field append", "field element", field_offset, operation.payload.size());']
+                 *declarations, "  field_offset = 0;",
+                 f"  {child_packer}::unpack({unpack_target}, operation.payload, field_offset);",
+                 f'  svx_require_unpacked_all("{field_id}", "field append", "field element", field_offset, operation.payload.size());',
+                 *conversion]
         if queue:
             lines.append(f"  {expression}.push_back(field_element);")
         else:
@@ -3927,9 +4014,10 @@ def _emit_sv_sequence_mutation(codec: Any, expression: str, field_id: str,
         lines.extend([*("    " + line for line in success), "  end", "end"])
         return lines
     lines = [f"if (operation.code == 2 && operation.has_payload && {index} <= {size}) begin",
-             f"  {child_type} field_element;", "  field_offset = 0;",
-             f"  {child_packer}::unpack(field_element, operation.payload, field_offset);",
-             f'  svx_require_unpacked_all("{field_id}", "field insert", "field element", field_offset, operation.payload.size());']
+             *declarations, "  field_offset = 0;",
+             f"  {child_packer}::unpack({unpack_target}, operation.payload, field_offset);",
+             f'  svx_require_unpacked_all("{field_id}", "field insert", "field element", field_offset, operation.payload.size());',
+             *conversion]
     if queue:
         lines.extend([f"  if ({index} == {size}) {expression}.push_back(field_element);",
                       f"  else {expression}.insert({index}, field_element);"])
@@ -3962,6 +4050,12 @@ def _emit_sv_deep_field_access(codec: Any, expression: str, field_id: str,
 
     with svtypes.sv_codegen_context(codec, prefix=f'__svx_path_{depth}') as declarations:
         lines = _emit_sv_deep_field_access_body(codec, expression, field_id, depth, ancestors)
+    declarations = list(declarations)
+    if isinstance(codec, (svtypes.DynArray, svtypes.Queue)):
+        from .struct_contract import _contains_native_reference
+        child = svtypes.FieldDescriptor(codec).resolve_path(svtypes.FieldPath().index(0)).codec
+        if _contains_native_reference(svtypes.schema_descriptor(child).to_dict()['schema']):
+            declarations.append(f'typedef type({expression}[0]) svx_native_element_{depth};')
     if declarations:
         return ['begin', *('  ' + line for line in declarations),
                 *('  ' + line for line in lines), 'end']
@@ -3975,16 +4069,26 @@ def _emit_sv_deep_field_access_body(codec: Any, expression: str, field_id: str,
 
     descriptor = svtypes.FieldDescriptor(codec)
     packer = svtypes.sv_packer_expression(codec)
+    from .struct_contract import _contains_native_reference, _convert_native_reference
+    schema = svtypes.schema_descriptor(codec).to_dict()['schema']
+    native_reference = _contains_native_reference(schema)
+    read = [f'    {packer}::pack({expression}, bytes);']
+    write = [f'    {expression} = field_wire;']
+    if native_reference:
+        read = [f'    {svtypes.sv_declaration(codec, "field_wire")};',
+                *_convert_native_reference(schema, expression, 'field_wire', encode=True, where=field_id),
+                f'    {packer}::pack(field_wire, bytes);']
+        write = _convert_native_reference(schema, 'field_wire', expression, encode=False, where=field_id)
     lines = [f"if (operation.path_kind.size() == {depth}) begin",
              "  if (operation.code == 0) begin",
-             f"    {packer}::pack({expression}, bytes);",
+             *read,
              *["    " + line.strip() for line in _emit_sv_field_operation_success()],
              "  end else if (operation.code == 1 && operation.has_payload) begin",
              f'    {svtypes.sv_declaration(codec, "field_wire")};',
              "    field_offset = 0;",
              f"    {packer}::unpack(field_wire, operation.payload, field_offset);",
              f'    svx_require_unpacked_all("{field_id}", "field write", "field leaf", field_offset, operation.payload.size());',
-             f'    {expression} = field_wire;',
+             *write,
              *["    " + line.strip() for line in _emit_sv_field_operation_success()],
              "  end"]
     if isinstance(codec, (DynArray, Queue)):
@@ -5489,7 +5593,10 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             elif data['schema']['kind'] == 'struct':
                 import svtypes
                 model = svtypes.type_spec_from_identity(data['svtypes'], location=value.symbol)
-                lines.extend(['', model.to_sv_obj(1)])
+                from .struct_contract import bind_native_struct_declaration
+                text = bind_native_struct_declaration(model.to_sv_obj(1), model.__name__,
+                    value.native_reference, packed=data['schema']['packed'], schema=data['schema'])
+                lines.extend(['', text])
         for record_type in record_types:
             lines.extend(["", record_type.to_sv_obj(1)])
         lines.extend(["endpackage : svx_call_records_pkg", ""])

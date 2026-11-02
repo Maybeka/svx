@@ -275,9 +275,12 @@ class SourceValues:
             result = svtypes.materialize_type_spec(_schema_annotation(schema, self.modules.named),
                                                    location=actual.lexicalPath)
             native_fields = {field.name: field for field in actual if field.kind.name == 'Field'}
-            for field in schema['fields']:
+            for index, field in enumerate(schema['fields']):
                 native = native_fields[field['name']]
-                selected = value.slice(native.bitOffset + native.type.bitWidth - 1, native.bitOffset)
+                if schema['packed']:
+                    selected = value.slice(native.bitOffset + native.type.bitWidth - 1, native.bitOffset)
+                else:
+                    selected = value[index].value
                 getattr(result, field['name']).value = self._constant_value(native.type, selected, field['type'])
             return result
         if kind in {'array', 'dyn_array', 'queue'}:
@@ -312,7 +315,7 @@ class SourceValues:
         if key in self.modules.annotations:
             return self.modules.annotations[key]
         canonical = actual.canonicalType
-        if canonical.kind.name in {'EnumType', 'PackedStructType'}:
+        if canonical.kind.name in {'EnumType', 'PackedStructType', 'UnpackedStructType'}:
             visibility = getattr(actual, 'visibility', None)
             if visibility is not None and visibility.name in {'Local', 'Protected'}:
                 raise SVXInheritanceError(
@@ -359,15 +362,15 @@ class SourceValues:
                         where=f'{where}.{field.name}', value_annotations=self.value_annotations, value_exports=self)
                     annotation = svtypes.type_spec_from_identity(binding['svtypes'], location=where)
                     fields[field.name] = svtypes.materialize_type_spec(annotation, location=where)
-                annotation = type(name, (svtypes.SvStruct,), {'__module__': module, '__qualname__': qualname, **fields})
+                from .struct_contract import struct_base
+                base = struct_base(canonical.kind.name == 'PackedStructType', where=where)
+                annotation = type(name, (base,), {'__module__': module, '__qualname__': qualname, **fields})
             _validate_source_value_schema(canonical,
                 svtypes.schema_descriptor(annotation).schema, where=where)
             self.named_value_origins.setdefault(canonical, (symbol, scope))
             if scope is None and self._generic_value_owner(canonical):
                 self.class_value_symbols.setdefault(canonical, (symbol, scope))
             return self._add(symbol, annotation, scope)
-        if canonical.kind.name == 'UnpackedStructType':
-            raise SVXInheritanceError(f'{where}: SvTypes SvStruct currently describes packed, not unpacked structs')
         binding = _source_semantic_type_declaration(actual, where=where,
             value_annotations=self.value_annotations, value_exports=self)
         annotation = svtypes.type_spec_from_identity(binding['svtypes'], location=where)

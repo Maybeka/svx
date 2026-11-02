@@ -417,17 +417,21 @@ def test_generated_external_handle_adapters_preserve_sv_formal_types(
     adapter = _handle_adapter_stem(next(binding for binding in _manifest_handle_bindings(manifest)
                                         if binding.target_type_name == target))
     assert "package svx_external_handles_pkg;" in text
-    assert f"class {adapter} implements svx_session_resource;" in text
-    assert f"function remote_ref encode({sv_type} value);" in text
-    assert f"function bit decode(input remote_ref reference, output {sv_type} value" in text
+    if kind == 'sv_class':
+        assert f'class {adapter} extends svx_class_reference#({sv_type}, "{target}");' in text
+    else:
+        assert f"class {adapter} implements svx_session_resource;" in text
+        assert f"function remote_ref encode({sv_type} value);" in text
+        assert f"function bit decode(input remote_ref reference, output {sv_type} value" in text
     assert f"virtual function {sv_type} sample(input {sv_type} foreign);" in text
     assert "svtypes_pkg::remote_ref foreign = new" in text
     assert f"{adapter}::encode(foreign)" in text
     assert f"{adapter}::decode(response_value.svx_return_value, result, error)" in text
     assert "// Private typed endpoints; RemoteRef is the sole encoded foreign-handle value." in text
     assert f"// {kind}: {sv_type} <-> RemoteRef[{target}]." in text
-    assert "// Preserve the concrete SV handle in this session; encode only a typed RemoteRef." in text
-    assert "// Resolve this session-scoped RemoteRef back to the declared static SV type." in text
+    if kind != 'sv_class':
+        assert "// Preserve the concrete SV handle in this session; encode only a typed RemoteRef." in text
+        assert "// Resolve this session-scoped RemoteRef back to the declared static SV type." in text
     assert "// Foreign handles are resolved through typed RemoteRef endpoints." in text
 
 

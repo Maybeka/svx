@@ -61,9 +61,12 @@ def _svtypes_binding(annotation: Any, *, where: str) -> dict[str, Any]:
         if not svtypes.is_materializable_type(annotation):
             raise TypeError("not a concrete SvTypes boundary type")
         codec = svtypes.materialize_type_spec(annotation, location=where)
+        from .struct_contract import validate_struct_metadata
+        identity = svtypes.type_spec_identity(annotation, location=where)
+        validate_struct_metadata(identity, where=where)
         return {
             "unified_type_name": svtypes.unified_type_name(codec),
-            "svtypes": svtypes.type_spec_identity(annotation, location=where),
+            "svtypes": identity,
             "sv": svtypes.sv_type_expression(codec),
             "sv_packer": svtypes.sv_packer_expression(codec),
             "encoding_descriptor": svtypes.encoding_descriptor(codec).to_dict(),
@@ -1077,6 +1080,11 @@ def manifest_from_declarations(
         return isinstance(lineage, list) and any(declares_fields(base) for base in lineage)
 
     required_capabilities = list(REQUIRED_RUNTIME_CAPABILITIES)
+    from .struct_contract import CAPABILITY as STRUCT_CAPABILITY, validate_struct_metadata
+    value_metadata = ([item.as_dict() for item in auto_values.declarations.values()]
+                      if auto_values else [])
+    if validate_struct_metadata([classes, value_metadata], where='manifest'):
+        required_capabilities.append(STRUCT_CAPABILITY)
     if any(declares_fields(item) for item in classes):
         required_capabilities.append(EXTERNAL_FIELD_STORAGE_CAPABILITY)
     return parse_manifest(
@@ -1131,6 +1139,39 @@ def _source_value_annotations(modules) -> dict[str, tuple[type, ...]]:
 def _validate_source_value_schema(actual, schema, *, where):
     actual = actual.canonicalType
     kind = schema["kind"]
+    if kind == 'remote_ref':
+        from .sv_scan import _source_handle_metadata
+        handle = _source_handle_metadata(actual, where=where)
+        if handle is not None and handle['target_type_name'] == schema.get('target_type_name'):
+            return
+        raise SVXInheritanceError(f'{where} handle target differs from the SvTypes declaration')
+    if kind == 'string' and actual.kind.name == 'StringType':
+        return
+    if kind == 'real' and actual.kind.name == 'FloatingType':
+        expected = {'ieee754-binary32': 'shortreal', 'ieee754-binary64': 'real'}.get(schema.get('format'))
+        if str(actual) == expected:
+            return
+    collection_kinds = {'array': 'FixedSizeUnpackedArrayType',
+                        'dyn_array': 'DynamicArrayType', 'queue': 'QueueType',
+                        'assoc_array': 'AssociativeArrayType'}
+    if kind in collection_kinds and actual.kind.name == collection_kinds[kind]:
+        if kind == 'array':
+            shape = schema.get('shape') or [schema.get('size')]
+            element = actual
+            for size in shape:
+                if (element.kind.name != 'FixedSizeUnpackedArrayType'
+                        or element.range.left != 0 or element.range.right != size - 1):
+                    raise SVXInheritanceError(f'{where} array dimensions differ from the SvTypes declaration')
+                element = element.elementType.canonicalType
+        else:
+            element = actual.elementType
+        if kind == 'queue' and actual.maxBound:
+            raise SVXInheritanceError(f'{where} bounded queue requires explicit declaration metadata')
+        if kind == 'assoc_array':
+            _validate_source_value_schema(actual.indexType, schema['key'], where=f'{where}.key')
+        _validate_source_value_schema(element, schema['value' if kind == 'assoc_array' else 'element'],
+                                      where=f'{where}.element')
+        return
     if kind in {"bits", "logic", "enum"}:
         if (not actual.isIntegral or actual.bitWidth != schema["width"]
                 or actual.isSigned != schema["signed"]
@@ -1144,7 +1185,11 @@ def _validate_source_value_schema(actual, schema, *, where):
             if items != tuple(tuple(item) for item in schema["items"]):
                 raise SVXInheritanceError(f"{where} enum members differ from the SvTypes declaration")
         return
-    if kind == "struct" and actual.kind.name == "PackedStructType":
+    if kind == "struct" and actual.kind.name in {"PackedStructType", "UnpackedStructType"}:
+        if type(schema.get('packed')) is not bool:
+            raise SVXInheritanceError(f'{where} struct schema requires explicit packed boolean; regenerate')
+        if schema['packed'] != (actual.kind.name == 'PackedStructType'):
+            raise SVXInheritanceError(f'{where} struct packing differs from the SvTypes declaration')
         members = tuple(member for member in actual if member.kind.name == "Field")
         fields = schema["fields"]
         if tuple(member.name for member in members) != tuple(field["name"] for field in fields):
@@ -1242,7 +1287,7 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
             if scope is None or scope['kind'] == 'compilation_unit':
                 result['sv'] = value_exports.native_reference(actual)
     if (value_exports is not None and value_exports.current_instance is not None
-            and (actual.kind.name == 'TypeAlias' or actual.canonicalType.kind.name in {'EnumType', 'PackedStructType'})):
+            and (actual.kind.name == 'TypeAlias' or actual.canonicalType.kind.name in {'EnumType', 'PackedStructType', 'UnpackedStructType'})):
         symbol, scope = value_exports.source_symbol(actual)
         if scope is not None and scope['kind'] == 'instance':
             from .value_exports import value_key

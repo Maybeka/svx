@@ -174,6 +174,9 @@ def parse_value_exports(items):
             raise SVXInheritanceError(f'invalid default class owners for {symbol!r}')
         if not isinstance(item['svtypes'], dict) or not isinstance(item['schema'], dict):
             raise SVXInheritanceError(f'{symbol} requires public SvTypes identity/schema objects')
+        from .struct_contract import validate_struct_metadata
+        validate_struct_metadata(item['svtypes'], where=f'{symbol}.identity')
+        validate_struct_metadata(item['schema'], where=f'{symbol}.schema')
         result.append(ValueExport(symbol, json.dumps(item['svtypes'], sort_keys=True),
                                   json.dumps(item['schema'], sort_keys=True),
                                   source_scope_json=json.dumps(scope, sort_keys=True) if scope is not None else None,
@@ -263,7 +266,9 @@ class ValueModules:
                       for field in schema['fields']}
             if not all(_identifier(field) for field in fields):
                 raise SVXInheritanceError(f'{declaration.symbol} has fields requiring explicit Python aliases')
-            annotation = type(class_name, (svtypes.SvStruct,), {'__module__': module_name, '__qualname__': declaration.qualname, **fields})
+            from .struct_contract import struct_base
+            base = struct_base(schema.get('packed'), where=declaration.symbol)
+            annotation = type(class_name, (base,), {'__module__': module_name, '__qualname__': declaration.qualname, **fields})
         else:
             annotation = _schema_annotation(schema, self.named)
         actual_identity = svtypes.type_spec_identity(annotation)
@@ -350,6 +355,10 @@ def merge_value_sources(manifest, sources, header):
         constants = [item for item in manifest.constants if item.module == module]
         lines = [f'import svtypes as {types_name}', f'import sys as {sys_name}',
                  f'{module_name} = {sys_name}.modules[__name__]', '']
+        from .struct_contract import CAPABILITY as STRUCT_CAPABILITY, validate_struct_metadata
+        if validate_struct_metadata([item.as_dict() for item in (*declarations, *constants)], where=module):
+            lines.append(f'{types_name}.require_runtime_compatible('
+                         f'({STRUCT_CAPABILITY!r},), {types_name}.runtime_capabilities())')
         nested = [item for item in (*declarations, *constants) if '.' in item.qualname]
         namespace_name = '_svx_value_namespace'
         while namespace_name in all_names:
@@ -427,7 +436,9 @@ def merge_value_sources(manifest, sources, header):
                 lines.append(f'    __qualname__ = {name!r}')
                 lines.extend(f'    {member} = {value}' for member, value in schema['items'])
             elif schema['type_name'] == module + '.' + name and schema['kind'] == 'struct':
-                lines.append(f'class {class_name}({types_name}.SvStruct):')
+                from .struct_contract import struct_base
+                base = struct_base(schema.get('packed'), where=module + '.' + name)
+                lines.append(f'class {class_name}({types_name}.{base.__name__}):')
                 lines.append(f'    __module__ = {module!r}')
                 lines.append(f'    __qualname__ = {name!r}')
                 lines.extend(f'    {field["name"]} = {expression(field["type"])}()' for field in schema['fields'])

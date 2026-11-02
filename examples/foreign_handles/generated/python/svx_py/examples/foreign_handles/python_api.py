@@ -34,8 +34,7 @@ register_contract(
                                                                                                          'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]'},
                                                                                  'svtypes': {'kind': 'remote_ref',
                                                                                              'target': 'sv://example_packet_pkg/Packet'}}),),
-                                                                  'external_targets': ('sv://example_packet_pkg/Packet',
-                                                                                       'sv://example_packet_pkg/Packet')},
+                                                                  'external_targets': ('sv://example_packet_pkg/Packet',)},
      'py://examples/foreign_handles/HandlePortal#exercise_bus': {'timing': 'function',
                                                                  'parameters': (('bus',
                                                                                  'input',
@@ -59,8 +58,7 @@ register_contract(
                                                                                                         'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]'},
                                                                                 'svtypes': {'kind': 'remote_ref',
                                                                                             'target': 'sv-vif://example_bus_if/master'}}),),
-                                                                 'external_targets': ('sv-vif://example_bus_if/master',
-                                                                                      'sv-vif://example_bus_if/master')}}
+                                                                 'external_targets': ('sv-vif://example_bus_if/master',)}}
 )
 # --- Construction contract ---
 register_constructor('py://examples/foreign_handles/HandlePortal', ())

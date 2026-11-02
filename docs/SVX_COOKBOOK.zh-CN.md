@@ -610,8 +610,15 @@ svx export --type export_driver_pkg::Mode export_driver_pkg::Packet \
 ```
 
 把输出的 python/ 放入导入路径，即可从 svx_mirror.export_driver_pkg 导入 Mode、
-Packet。它们是普通 SvTypes Enum/SvStruct 声明，可直接 pack/unpack；纯类型使用
+Packet。它们是普通 SvTypes Enum/SvPackedStruct 声明，可直接 pack/unpack；纯类型使用
 不需要 SVX 原生运行库。选择 SV 类时，其方法和字段依赖的值类型会自动带入。
+SV 的 `struct packed` 映射为 `SvPackedStruct`，普通 `struct` 映射为 `SvStruct`，
+无需把原工程结构体改成 packed。unpacked 成员可使用受支持的字符串、实数、嵌套
+结构体、容器和类句柄；结构体按值复制，内部句柄仍保持引用身份。已有 Python
+声明若原本要求 packed，应显式改为继承 `SvPackedStruct`，再重新生成旧 manifest
+和产物。新路径要求 SvTypes 公布 `svtypes.struct-kinds.v1`；不能用编码字节相同
+推断类型兼容。完整边界及往返测试见
+[结构体契约迁移](SVX_GENERATION_WORKFLOW.md#struct-kind-contract-migration)。
 普通类内的 parameter/localparam 也可单独选择，例如
 `--constant 'export_driver_pkg::Driver::*'`，随后访问 `Driver.DEFAULT_SEED`。
 未选择类时 Driver 只是值命名空间；同时选择类或按 package 导出时，常量会挂到
@@ -711,10 +718,8 @@ module tb_package_smoke;
     svx_exports_pkg::initialize();
     svx_load("my_tests.package_smoke");
     svx_start("package_smoke.run");
-    $finish;
-  end
-  final begin
     svx_shutdown();
+    $finish;
   end
 endmodule
 ```
@@ -738,8 +743,9 @@ SVX_LIB_DIR="$PWD/build" svx libs
 export PYTHONPATH="$PWD/examples/sv_export/generated/python:$PWD${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
-PYTHONPATH 必须传给实际仿真进程，而不只是生成工具。此处 shell 示例用于 POSIX
-终端；Windows 设置等价的进程环境变量，路径列表分隔符使用分号。工程自己的
+PYTHONPATH 必须传给实际仿真进程，而不只是生成工具。当前 svx_shutdown 是 task，
+本例在 $finish 前显式清理，不将 task 调用放入 final 块。此处 shell 示例用于
+POSIX 终端；Windows 设置等价的进程环境变量，路径列表分隔符使用分号。工程自己的
 编译与启动命令不由 SVX 替代。若改为 generated/svx 输出目录，需同时修改顶层
 include 和 Python 路径。成功时在 2ns 出现 PACKAGE_SMOKE_PASS，且没有异常或
 fatal；仅看进程退出码不能判定测试通过。

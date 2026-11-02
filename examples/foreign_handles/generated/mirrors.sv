@@ -1280,73 +1280,9 @@ package svx_external_handles_pkg;
       return 1;
     endfunction
   endclass : SVXExternal_sv_hvif_c_s_sexample_ubus_uif_smaster
-
+  typedef svx_class_reference_endpoint#(example_packet_pkg::Packet, "sv://example_packet_pkg/Packet") SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint;
   // sv_class: example_packet_pkg::Packet <-> RemoteRef[sv://example_packet_pkg/Packet].
-  class SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint implements svx_external_handle;
-    example_packet_pkg::Packet value;
-    longint unsigned object_id;
-
-    function new(example_packet_pkg::Packet value);
-      this.value = value;
-    endfunction
-
-    virtual function string svx_external_target_type();
-      return "sv://example_packet_pkg/Packet";
-    endfunction
-  endclass : SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint
-
-  class SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket implements svx_session_resource;
-    static SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint endpoints[$];
-    static SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket session_resource = new();
-
-    virtual function void clear_session();
-      endpoints.delete();
-    endfunction
-
-    static function remote_ref encode(example_packet_pkg::Packet value);
-      longint unsigned object_id;
-      SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint endpoint;
-      remote_ref reference;
-      svx_external_handle_registry::register_resource(session_resource);
-      // Preserve the concrete SV handle in this session; encode only a typed RemoteRef.
-      if (value == null) begin
-        reference = new("sv://example_packet_pkg/Packet", 0);
-        return reference;
-      end
-      foreach (endpoints[index]) begin
-        if (endpoints[index].value == value) begin
-          reference = new("sv://example_packet_pkg/Packet", endpoints[index].object_id);
-          return reference;
-        end
-      end
-      object_id = svx_external_handle_registry::allocate_object_id();
-      endpoint = new(value);
-      endpoint.object_id = object_id;
-      endpoints.push_back(endpoint);
-      svx_external_handle_registry::register_object(object_id, endpoint);
-      reference = new("sv://example_packet_pkg/Packet", object_id);
-      return reference;
-    endfunction
-
-    static function bit decode(input remote_ref reference, output example_packet_pkg::Packet value, output string error);
-      svx_external_handle raw;
-      SVXExternal_sv_c_s_sexample_upacket_upkg_sPacketEndpoint endpoint;
-      value = null;
-      error = "";
-      // Resolve this session-scoped RemoteRef back to the declared static SV type.
-      if (reference != null && reference.target_type_name != "" && reference.target_type_name != "sv://example_packet_pkg/Packet") begin
-        error = "external handle target mismatch";
-        return 0;
-      end
-      if (reference == null || reference.object_number == 0) return 1;
-      if (!svx_external_handle_registry::resolve(reference.object_number, "sv://example_packet_pkg/Packet", raw, error)) return 0;
-      if (!$cast(endpoint, raw)) begin
-        error = "external handle registry returned an incompatible typed endpoint";
-        return 0;
-      end
-      value = endpoint.value;
-      return 1;
-    endfunction
+  class SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket extends svx_class_reference#(example_packet_pkg::Packet, "sv://example_packet_pkg/Packet");
   endclass : SVXExternal_sv_c_s_sexample_upacket_upkg_sPacket
 endpackage : svx_external_handles_pkg
 

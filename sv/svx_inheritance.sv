@@ -693,6 +693,62 @@ task automatic svx_shutdown();
   svx_runtime_shutdown();
 endtask
 
+class svx_class_reference_endpoint #(type T=svx_external_handle, parameter string TARGET="")
+    implements svx_external_handle;
+  T value;
+  longint unsigned object_id;
+  function new(T value); this.value=value; endfunction
+  virtual function string svx_external_target_type(); return TARGET; endfunction
+endclass
+
+class svx_class_reference #(type T=svx_external_handle, parameter string TARGET="")
+    implements svx_session_resource;
+  typedef svx_class_reference_endpoint#(T, TARGET) endpoint_type;
+  static endpoint_type endpoints[$];
+  static svx_class_reference#(T, TARGET) session_resource=new();
+  virtual function void clear_session(); endpoints.delete(); endfunction
+
+  static function svtypes_pkg::remote_ref encode(T value);
+    endpoint_type endpoint;
+    svtypes_pkg::remote_ref reference;
+    longint unsigned object_id;
+    svx_external_handle_registry::register_resource(session_resource);
+    if (value == null) begin reference=new(TARGET, 0); return reference; end
+    foreach (endpoints[index]) begin
+      if (endpoints[index].value == value) begin
+        reference=new(TARGET, endpoints[index].object_id);
+        return reference;
+      end
+    end
+    endpoint=new(value);
+    object_id=svx_external_handle_registry::allocate_object_id();
+    endpoint.object_id=object_id;
+    endpoints.push_back(endpoint);
+    svx_external_handle_registry::register_object(object_id, endpoint);
+    reference=new(TARGET, object_id);
+    return reference;
+  endfunction
+
+  static function bit decode(svtypes_pkg::remote_ref reference, output T value, output string error);
+    svx_external_handle raw;
+    endpoint_type endpoint;
+    value=null;
+    error="";
+    if (reference != null && reference.target_type_name != "" && reference.target_type_name != TARGET) begin
+      error="external handle target mismatch";
+      return 0;
+    end
+    if (reference == null || reference.object_number == 0) return 1;
+    if (!svx_external_handle_registry::resolve(reference.object_number, TARGET, raw, error)) return 0;
+    if (!$cast(endpoint, raw)) begin
+      error="external handle registry returned an incompatible typed endpoint";
+      return 0;
+    end
+    value=endpoint.value;
+    return 1;
+  endfunction
+endclass
+
 export "DPI-C" task svx_invoke_object;
 export "DPI-C" task svx_invoke_static;
 export "DPI-C" task svx_release_object;

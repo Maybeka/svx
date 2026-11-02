@@ -143,12 +143,9 @@ def emit_owner_records(manifest, source_scope, *, native_references=None, inline
             if native_struct_aliases and value.symbol in (native_references or {}):
                 # Keep SvTypes' field packer, but bind its value to the original
                 # native struct so output/inout and containers retain exact types.
-                marker = '} ' + model.__name__ + '_t;'
-                declaration, separator, packer = text.partition(marker)
-                if not declaration.startswith('typedef struct packed {') or not separator:
-                    from .errors import SVXInheritanceError
-                    raise SVXInheritanceError('SvTypes struct codegen does not expose its expected typed packer')
-                text = 'typedef ' + native_references[value.symbol] + ' ' + model.__name__ + '_t;' + packer
+                from .struct_contract import bind_native_struct_declaration
+                text = bind_native_struct_declaration(text, model.__name__, native_references[value.symbol],
+                                                      packed=data['schema']['packed'], schema=data['schema'])
             lines.append(text)
     lines.extend(_manifest_sv_collection_typedefs(manifest))
     lines.extend(record.to_sv_obj(0) for record in _manifest_sv_record_types(manifest))

@@ -381,9 +381,41 @@ read/modify/write its whole parent.
 
 --exclude-type removes optional value targets, but an excluded type needed by a
 selected signature or value declaration rejects with the dependency location.
-Current SvTypes boundaries still apply: unpacked structs, unions, X/Z enum
+Current SvTypes boundaries still apply: unions, X/Z enum
 literals/four-state enums, unsupported container bounds/range orientations, and
 enum names colliding with SvTypes interfaces are not silently approximated.
+
+### Struct-Kind Contract Migration
+
+The public contract uses SvStruct for unpacked values and SvPackedStruct for
+packed values. Existing Python declarations intended to remain packed must
+migrate explicitly; reusing the old base would change their SV semantics.
+Structs remain non-null by-value composites, not class handles. A handle member
+retains its own reference semantics without giving the enclosing struct identity.
+
+The new path requires svtypes.struct-kinds.v1. Boundary identities and source
+schemas must recursively carry an explicit packed boolean; encoding fingerprints
+alone cannot distinguish the two SV types. Missing packing metadata requires
+regeneration, not a guessed default. Generated type modules check capability on
+import, and manifests require it for both direct and nested struct boundaries.
+Do not enable the capability locally to bypass an incomplete dependency.
+
+Source discovery and generation cover nested values, strings, reals, supported
+collections and struct constants. Native structs retain their original typedef;
+SvTypes supplies the byte packers. Native class-handle members and their supported
+containers convert through the same typed session registry as ordinary handle
+arguments, retaining shared references and null without cloning referents.
+
+Real dependency integration verifies function parameters/returns, task output/
+inout, whole/local field writes, by-value copy isolation, X/Z preservation and
+SV-to-Python virtual callbacks with super(). The source and assertions are in
+[struct_kinds.sv](../tests/integration/struct_kinds.sv) and
+[struct_kinds_entry.py](../tests/integration/struct_kinds_entry.py). Standalone
+native codec tests additionally check shared/null handles in fixed/dynamic arrays,
+queues and associative arrays. Development capability fixtures are not used as
+runtime qualification. Constraint/randomization/coverage backend qualification
+is separate from this export and value-transport contract.
+
 Package export also selects owned parameter/localparam values. --constant
 selects them independently, with qualified/unique short names or patterns;
 --exclude-constant removes optional snapshots. Imported parameters may be used
@@ -584,7 +616,9 @@ layouts reject explicitly rather than emitting fake package references.
 Unit classes use the workflow below; ordinary class parameter/localparam snapshots
 are selectable independently, while parameterized $unit value ownership remains unfinished.
 Existing SvTypes value-kind
-limits still apply, including unsupported four-state enums/unpacked structs.
+limits still apply, including unsupported four-state enums. Struct-kind migration
+and its qualification status are described above; unpacked layout must never be
+silently treated as packed.
 
 ## Instance-Owned Values
 

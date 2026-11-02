@@ -363,13 +363,13 @@ def test_inline_external_adapter_renderer_uses_one_owner_and_selected_binding():
     lines = _emit_sv_external_handle_adapters(model, package_name=None, bindings=(binding,))
     assert not any(line.startswith('package ') or line.startswith('endpackage') for line in lines)
     text = '\n'.join(lines)
-    assert text.count('class SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacketEndpoint implements') == 1
+    assert text.count('class SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket extends svx_class_reference#(') == 1
     assert 'virtual external_bus_if' not in text
     original = '\n'.join(_emit_sv_external_handle_adapters(model))
     assert 'package svx_external_handles_pkg;' in original
     assert 'endpackage : svx_external_handles_pkg' in original
     source = inline_sources()['source.sv']
-    assert source.count('class SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacketEndpoint implements') == 1
+    assert source.count('class SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket extends svx_class_reference#(') == 1
     assert source.count('class SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smasterEndpoint implements') == 1
     assert source.count('typedef external_handle_test_pkg::SVXExternal_') == 4
 
