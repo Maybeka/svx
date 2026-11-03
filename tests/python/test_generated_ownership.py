@@ -266,6 +266,6 @@ def test_source_body_iteration_preserves_manifest_and_all_generated_timestamps(t
     command(generation)
     revised = snapshot()
     changed = {name for name in original if original[name] != revised[name]}
-    assert changed == {"manifest.json", "manifest.json.svx-discovery.json", "mirrors.sv", "artifacts.json", "python/svx_py/iteration_driver.py"}
+    assert changed == {"manifest.json", "manifest.json.svx-discovery.json", "mirrors.sv", "artifacts.json", ".mirrors.sv.svx-generated.sha256.json", "python/svx_py/iteration_driver.py", "python/svx_support/svx_py/iteration_driver.py", "python/.svx-generated-python.json.sha256.json"}
     assert revised["python/svx_py/iteration_other.py"] == original["python/svx_py/iteration_other.py"]
     command([*generation, "--check"])

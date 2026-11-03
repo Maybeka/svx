@@ -125,7 +125,8 @@ def _snapshot(root, args, options, proof):
         raise ValueError('source observations no longer match generated provenance')
     if inventory['generation_inputs']['manifest']['sha256'] != file_digest(manifest):
         raise ValueError('artifact manifest changed during cache observation')
-    sv = [item['path'] for item in inventory['artifacts'] if item['language'] == 'systemverilog']
+    sv = [item['path'] for item in inventory['artifacts']
+          if item['language'] == 'systemverilog' and Path(item['path']).suffix == '.sv']
     if args.integrated:
         from .source_layout import integrated_source_paths
         expected_sv = ['sv/' + path for path in integrated_source_paths(
@@ -135,8 +136,13 @@ def _snapshot(root, args, options, proof):
     if sv != expected_sv:
         raise ValueError('export layout changed during cache observation')
     files = {manifest, evidence, artifact, root / 'python/.svx-generated-python.json'}
+    files.add(root / 'python/.svx-generated-python.json.sha256.json')
     if args.integrated:
         files.add(root / 'sv/.svx-generated-sv.json')
+        files.add(root / 'sv/.svx-generated-sv.json.sha256.json')
+    else:
+        files.add(root / '.svx-generated-sv.json')
+        files.add(root / '.svx-generated-sv.json.sha256.json')
     for item in inventory['artifacts']:
         path = _safe_output(root, item['path'])
         if file_digest(path) != item['sha256']:

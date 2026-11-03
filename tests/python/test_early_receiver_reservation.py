@@ -230,6 +230,8 @@ def test_internal_factory_announces_id_before_construction_only_when_requested()
     from tests.integration.same_package_schema import manifest_data
     source = inheritance.parse_manifest(manifest_data()).classes[0]
     text = '\n'.join(inheritance._emit_sv_projection_factory(source, 'Target', announce_receiver=True))
-    assert text.index(inheritance._PYTHON_RECEIVER_EXPECT_PREFIX) < text.index('instance = new(')
+    assert text.index(inheritance._PYTHON_RECEIVER_EXPECT_PREFIX) < text.index('svx_instance = svx_core_construct(')
+    core = text.split('function Target svx_core_construct', 1)[1].split('endfunction', 1)[0]
+    assert 'svx_instance = new(object_id);' in core
     assert inheritance._PYTHON_RECEIVER_EXPECT_PREFIX not in '\n'.join(
         inheritance._emit_sv_projection_factory(source, 'Target'))

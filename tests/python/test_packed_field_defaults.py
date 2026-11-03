@@ -2,6 +2,7 @@ import sys
 from types import ModuleType
 
 import pytest
+import svtypes
 from svtypes import Array, Bit, Enum, Int, Logic, Real, ShortReal, Signed, String, SvPackedStruct
 
 from svx.declarations import inheritance_class, manifest_from_declarations
@@ -18,14 +19,19 @@ class DeclaredDefaultRecord(SvPackedStruct):
     flags = Logic[4]()
 
 
+_SHARED_FIELD_OPS = 'svtypes.generated-field-operations.v1' in svtypes.runtime_capabilities().provided
+_RECORD_DEFAULT = ('DeclaredDefaultRecord_packer::svtypes_default()' if _SHARED_FIELD_OPS
+                   else "'{tag: 8'h7, flags: 'x}")
+
+
 @pytest.mark.parametrize('descriptor, literal', [
     (String('quoted "value"\\path\n'), r'"quoted \"value\"\\path\n"'),
     (Real(2.5), '2.5'),
     (ShortReal(-1.25), '-1.25'),
     (DeclaredDefaultMode(DeclaredDefaultMode.ACTIVE), 'ACTIVE'),
-    (DeclaredDefaultRecord(), "'{tag: 8'h7, flags: 'x}"),
-    (Array[DeclaredDefaultRecord, 2](), "'{default: '{tag: 8'h7, flags: 'x}}"),
-    (Array[DeclaredDefaultRecord, (2, 3)](), "'{default: '{default: '{tag: 8'h7, flags: 'x}}}"),
+    (DeclaredDefaultRecord(), _RECORD_DEFAULT),
+    (Array[DeclaredDefaultRecord, 2](), "'{default: " + _RECORD_DEFAULT + '}'),
+    (Array[DeclaredDefaultRecord, (2, 3)](), "'{default: '{default: " + _RECORD_DEFAULT + '}}'),
 ])
 def test_other_declared_initializers_survive_the_manifest(descriptor, literal, monkeypatch):
     module = ModuleType('other_default_probe')

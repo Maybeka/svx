@@ -2,20 +2,56 @@
   "artifacts": [
     {
       "language": "python",
+      "module": "svx_bootstrap",
+      "path": "python/svx_bootstrap.py",
+      "sha256": "389e0851daf18ca18cebe320c265a2d5b5e05ec79ae53d359a46e40bb8cbc9dd"
+    },
+    {
+      "language": "python",
       "module": "svx_py",
       "path": "python/svx_py/__init__.py",
-      "sha256": "c8d51ff6c00dfcd1cb1e74a2af743bd14170bb76c874f0b0a3c5f19f8d32509d"
+      "sha256": "da7bb0ec5f4ae3727016793adb84f21d7fa314b114626ae8c0201a438e438f9c"
     },
     {
       "language": "python",
       "module": "svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "d53cc8e428ed46f467c589aa846e363351db543b0c88e578ff678b0111f5d20b"
+      "sha256": "86a027dbff3aaa0ab90e0d8612bb069b52bf17dd1a9cdadb245444381439261f"
+    },
+    {
+      "language": "python",
+      "module": "svx_support",
+      "path": "python/svx_support/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py",
+      "path": "python/svx_support/svx_py/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples",
+      "path": "python/svx_support/svx_py/examples/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples.python_owned_inheritance",
+      "path": "python/svx_support/svx_py/examples/python_owned_inheritance/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples.python_owned_inheritance.base_monitor",
+      "path": "python/svx_support/svx_py/examples/python_owned_inheritance/base_monitor.py",
+      "sha256": "e43881e8076707596bfcd46554148f5ae56df76c3a09ea8d6e16508027e1a466"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "5af48fb42ceca2b211dc5f49a55315c12a53e7163548e95bbdc1bcef37e24fed"
+      "sha256": "bb0abc8ba27d465fcd113a79f2a40d51f4d72f4602142e907aca8f2187679e3e"
     }
   ],
   "callables": [
@@ -43,7 +79,7 @@
           "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
           "unified_type_name": "svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response"
         },
-        "sv_class": "SVXCall_9a2f5982598a02ada022_Response",
+        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response",
         "unified_type_name": "svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response"
       }
     }
@@ -67,7 +103,7 @@
           "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
           "unified_type_name": "svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request"
         },
-        "sv_class": "SVXCall_39a3c03013ca5ac1a853_Request",
+        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request",
         "unified_type_name": "svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request"
       }
     }
@@ -95,6 +131,47 @@
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
     "schema_version": "2.0.0"
+  },
+  "member_locations": {
+    "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify": [
+      {
+        "language": "python",
+        "line": 38,
+        "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 584,
+        "path": "inheritance_mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 628,
+        "path": "inheritance_mirrors.sv"
+      }
+    ],
+    "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample": [
+      {
+        "language": "python",
+        "line": 35,
+        "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 549,
+        "path": "inheritance_mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 614,
+        "path": "inheritance_mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 651,
+        "path": "inheritance_mirrors.sv"
+      }
+    ]
   },
   "required_runtime_capabilities": [
     "svtypes.checked-encoding-descriptor.v1",

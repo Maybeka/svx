@@ -75,3 +75,5 @@ def test_instance_class_handles_keep_their_actual_owner_without_exporting_item(t
     assert len(targets) == 3
     artifacts = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     assert artifacts['systemverilog_compile_order'][0] == 'sv/native_handles.sv'
+    source_text = (output / 'sv/source.sv').read_text(encoding='utf-8')
+    assert '#(instance::' not in source_text

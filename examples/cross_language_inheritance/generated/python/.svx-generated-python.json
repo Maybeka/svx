@@ -1,4 +1,8 @@
 [
+  "svx_bootstrap.py",
   "svx_mirror/__init__.py",
-  "svx_mirror/example_driver_pkg.py"
+  "svx_mirror/example_driver_pkg.py",
+  "svx_support/__init__.py",
+  "svx_support/svx_mirror/__init__.py",
+  "svx_support/svx_mirror/example_driver_pkg.py"
 ]

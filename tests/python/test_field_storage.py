@@ -85,12 +85,29 @@ def test_nested_field_codegen_uses_public_typedef_context():
     from tests.integration.sv_field_mirror_schema import manifest_data
 
     text = emit_sv_mirrors(parse_manifest(manifest_data(include_nested_fields=True)))
+    assert 'function void svx_core_field_Base_nested_values(' in text
     assert 'typedef int __svx_field_nested_values_0_t [$];' in text
     assert 'queue_packer#(__svx_field_nested_values_0_t,' in text
     assert '__svx_field_nested_values_0_t field_value;' in text
     assert 'int [$] field_value;' not in text
-    assert 'this.nested_values[operation.path_index[0]][operation.path_index[1]]' in text
-    assert 'operation.path_index[1] < this.nested_values[operation.path_index[0]].size()' in text
+    assert '#(type(this.nested_values))::invoke(this.nested_values,' in text
+    assert '__svx_resident_value[operation.path_index[0]][operation.path_index[1]]' in text
+    assert 'operation.path_index[1] < __svx_resident_value[operation.path_index[0]].size()' in text
+
+
+def test_field_and_method_core_names_share_collision_scope():
+    from dataclasses import replace
+    from svx.inheritance import _emit_sv_projection_invoke, parse_manifest
+    from tests.integration.sv_field_mirror_schema import manifest_data
+
+    base = parse_manifest(manifest_data()).classes[0]
+    method = replace(base.methods[0], name='count', canonical_id='sv://p/field_Base#count')
+    child = replace(base, symbol='p::field_Base', canonical_id='sv://p/field_Base',
+                    fields=(), methods=(method,))
+    text = '\n'.join(_emit_sv_projection_invoke(
+        child, base_methods=(method,), inherited_sv_sources=(base,), generated_name='Mirror'))
+    assert 'function void svx_core_field_Base_count(' in text
+    assert 'function int svx_core_field_Base_count_2(' in text
 
 
 def test_deep_field_codegen_resolves_member_key_and_index_with_public_descriptors():

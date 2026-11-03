@@ -31,7 +31,7 @@ def test_python_proxy_initializes_after_its_sv_field_initializers():
 
 @pytest.mark.parametrize('fields', [False, True])
 @pytest.mark.parametrize('standalone', [False, True])
-def test_sv_origin_declaration_also_supports_python_construction(monkeypatch, fields, standalone):
+def test_sv_origin_declaration_also_supports_python_construction(monkeypatch, generated_artifacts, fields, standalone):
     calls = []
     monkeypatch.setattr(_native, 'inheritance_create_sv',
                         lambda class_id, payload: calls.append((class_id, payload)) or 71)
@@ -40,7 +40,9 @@ def test_sv_origin_declaration_also_supports_python_construction(monkeypatch, fi
     if standalone:
         from dataclasses import replace
         manifest = replace(manifest, classes=manifest.classes[:1])
-    text = emit_python_mirrors(manifest)[PurePosixPath('svx_mirror/field_owner_pkg.py')]
+    sources = emit_python_mirrors(manifest)
+    generated_artifacts(sources)
+    text = sources[PurePosixPath('svx_mirror/field_owner_pkg.py')]
     namespace = {'__name__': 'tests.generated_sv_initiated_boundary'}
     exec(compile(text, '<SV-initiated boundary>', 'exec'), namespace)
     Base = namespace['Base']
@@ -53,10 +55,12 @@ def test_sv_origin_declaration_also_supports_python_construction(monkeypatch, fi
     assert projected == ([{'count': 'sv://field_owner_pkg/Base.count'}] if fields else [{}])
 
 
-def test_sv_initiated_boundary_initializer_accepts_already_bound_receiver(monkeypatch):
+def test_sv_initiated_boundary_initializer_accepts_already_bound_receiver(monkeypatch, generated_artifacts):
     monkeypatch.setattr(_native, 'inheritance_create_sv',
                         lambda *args: pytest.fail('reallocated an SV-origin receiver'))
-    text = emit_python_mirrors(boundary_manifest())[PurePosixPath('svx_mirror/field_owner_pkg.py')]
+    sources = emit_python_mirrors(boundary_manifest())
+    generated_artifacts(sources)
+    text = sources[PurePosixPath('svx_mirror/field_owner_pkg.py')]
     namespace = {'__name__': 'tests.generated_sv_initiated_bound_receiver'}
     exec(compile(text, '<SV-initiated boundary>', 'exec'), namespace)
     Base = namespace['Base']
@@ -67,7 +71,7 @@ def test_sv_initiated_boundary_initializer_accepts_already_bound_receiver(monkey
 
 
 @pytest.mark.parametrize('standalone', [False, True])
-def test_sv_initiated_boundary_preserves_parameter_names_and_order(monkeypatch, standalone):
+def test_sv_initiated_boundary_preserves_parameter_names_and_order(monkeypatch, generated_artifacts, standalone):
     from svx import inheritance
     from svx import runtime
     import svtypes
@@ -86,7 +90,9 @@ def test_sv_initiated_boundary_preserves_parameter_names_and_order(monkeypatch, 
         data['classes'] = data['classes'][:1]
     monkeypatch.setattr(_native, 'inheritance_create_sv', lambda *args: 72)
     monkeypatch.setattr(_native, 'inheritance_bind', lambda *args: None)
-    text = emit_python_mirrors(parse_manifest(data))[PurePosixPath('svx_mirror/field_owner_pkg.py')]
+    sources = emit_python_mirrors(parse_manifest(data))
+    generated_artifacts(sources)
+    text = sources[PurePosixPath('svx_mirror/field_owner_pkg.py')]
     namespace = {'__name__': 'tests.generated_sv_initiated_signature'}
     exec(compile(text, '<SV-initiated signature>', 'exec'), namespace)
     Base = namespace['Base']

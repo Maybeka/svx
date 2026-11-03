@@ -30,7 +30,7 @@ from .roles import (
 from .primitives import delay, display, fork_join, fork_join_any, fork_join_none
 from .process import ProcessGroup, ProcessStatus
 from .test_runner import test
-from .inheritance import close_instance
+from .inheritance import close_instance, validate_generated_contracts
 from .object_handoff import publish_object
 from .declarations import (
     Function,
@@ -52,6 +52,7 @@ from .runtime import RuntimeState, state as runtime_state
 from . import waveform
 
 __all__ = [
+    "validate_generated_contracts",
     "ProcessGroup",
     "ProcessStatus",
     "FATAL",

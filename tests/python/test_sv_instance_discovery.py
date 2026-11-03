@@ -133,7 +133,10 @@ endinterface : owner
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     copied = '\n'.join((output/path).read_text(encoding='utf-8') for path in artifact['systemverilog_compile_order'])
     assert copied.index('class StaticGateway_0 extends Driver') < copied.index('endinterface : owner')
-    assert copied.count('Driver::sample(') == 4
+    assert copied.count('Driver::sample(') == 2
+    assert copied.count('static function int svx_core_Driver_sample(') == 2
+    support = '\n'.join(path.read_text(encoding='utf-8') for path in (output/'sv/support').rglob('*.svh'))
+    assert support.count('result = svx_core_Driver_sample();') == 4
     assert 'SVXSourceType::sample(' not in copied
     assert all('initialize_owner(' + json.dumps(binding['static_initialization_key']) + ')' in copied
                for binding in artifact['instance_bindings'])

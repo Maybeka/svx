@@ -110,6 +110,7 @@ python -m examples.project_migration.verify run/00_sv.log --stage 00_sv
 `01_entry/tb.sv` 相对基线的实质变化是：
 
 ```diff
++ `include "svtypes_pkg.sv"
 + `include "sv/svx_pkg.sv"
 + import svx_pkg::*;
 + svx_init();

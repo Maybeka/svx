@@ -23,6 +23,8 @@ def test_field_dispatch_qualifies_members_that_shadow_generated_locals(name):
     binding = data['classes'][0]['fields'][0]['type']
     data['classes'][0]['fields'] = [{'name': name, 'type': binding}]
     text = emit_sv_mirrors(parse_manifest(data))
+    assert f'#(type(this.{name}))::invoke(this.{name},' in text
+    text = text.replace('__svx_resident_value', f'this.{name}')
     assert f'int_packer::pack(this.{name}, bytes)' in text
     assert f'int_packer::unpack(this.{name}, bytes, field_offset)' in text
     assert f'int_packer::unpack(this.{name}, operation.payload, field_offset)' in text
@@ -52,6 +54,8 @@ def test_addressed_sequence_dispatch_qualifies_every_member_access(name, kind):
     }
     data['classes'][0]['fields'] = [{'name': name, 'type': binding}]
     text = emit_sv_mirrors(parse_manifest(data))
+    assert f'#(type(this.{name}))::invoke(this.{name},' in text
+    text = text.replace('__svx_resident_value', f'this.{name}')
     if kind == 'assoc_array':
         assert f'int_packer::pack(this.{name}[field_key], bytes)' in text
         assert f'this.{name}[field_key] = field_value;' in text
@@ -95,8 +99,9 @@ def test_fixed_array_field_bounds_are_valid_systemverilog():
     }}]
     text = emit_sv_mirrors(parse_manifest(data))
     bounds = re.findall(r'operation.path_index\[0\] < (.*?)\) begin', text)
-    assert len(bounds) == 6  # deep resolver plus read/set in both gateways
+    assert len(bounds) == 3  # one shared ref kernel serves both gateways
     for bound in bounds:
+        bound = bound.replace('__svx_resident_value', 'this.bytes')
         compilation = Compilation()
         compilation.addSyntaxTree(SyntaxTree.fromText(
             'class Probe; int bytes[3]; function bit check(longint unsigned index); '
@@ -124,15 +129,17 @@ def test_constructorless_field_view_preserves_existing_id_contract():
     assert 'class Base extends' not in emit_sv_mirrors(manifest)
 
 
-def generated_view():
-    text = emit_python_mirrors(existing_field_manifest())[
+def generated_view(install):
+    sources = emit_python_mirrors(existing_field_manifest())
+    install(sources)
+    text = sources[
         PurePosixPath('svx_mirror/field_owner_pkg.py')]
     namespace = {'__name__': 'tests.generated_existing_field_mirror'}
     exec(compile(text, '<generated existing field mirror>', 'exec'), namespace)
     return namespace['Base']
 
 
-def test_existing_field_view_binds_without_allocation_and_retires_storage(monkeypatch):
+def test_existing_field_view_binds_without_allocation_and_retires_storage(monkeypatch, generated_artifacts):
     registry = {}
     class Transport:
         payload = Int().pack(11)
@@ -147,7 +154,7 @@ def test_existing_field_view_binds_without_allocation_and_retires_storage(monkey
     monkeypatch.setattr(field_storage, 'SVXFieldStorage', lambda: storage_type(transport))
     monkeypatch.setattr(_native, 'inheritance_bind', lambda key, value: registry.update({key: value}))
     monkeypatch.setattr(_native, 'inheritance_create_sv', lambda *args: pytest.fail('allocated a second endpoint'))
-    Base = generated_view()
+    Base = generated_view(generated_artifacts)
     value = Base(71)
     assert registry[71] is value
     retained = value.count
@@ -159,13 +166,13 @@ def test_existing_field_view_binds_without_allocation_and_retires_storage(monkey
         _ = retained.value
 
 
-def test_existing_field_view_failed_binding_does_not_destroy_sv_endpoint(monkeypatch):
+def test_existing_field_view_failed_binding_does_not_destroy_sv_endpoint(monkeypatch, generated_artifacts):
     registry = {}
     retired = []
     monkeypatch.setattr(_native, 'inheritance_bind', lambda key, value: registry.update({key: value}))
     monkeypatch.setattr(_native, 'inheritance_unbind', lambda key: (retired.append(key), registry.pop(key)))
     monkeypatch.setattr(_native, 'inheritance_close', lambda *args: pytest.fail('destroyed existing SV endpoint'))
-    Base = generated_view()
+    Base = generated_view(generated_artifacts)
     original = ValueError('binding failed')
     def fail(self):
         raise original
@@ -177,7 +184,7 @@ def test_existing_field_view_failed_binding_does_not_destroy_sv_endpoint(monkeyp
     assert retired == [71]
 
 
-def test_existing_field_view_duplicate_binding_preserves_previous_receiver(monkeypatch):
+def test_existing_field_view_duplicate_binding_preserves_previous_receiver(monkeypatch, generated_artifacts):
     old = object()
     registry = {71: old}
     def bind(key, value):
@@ -185,15 +192,15 @@ def test_existing_field_view_duplicate_binding_preserves_previous_receiver(monke
     monkeypatch.setattr(_native, 'inheritance_bind', bind)
     monkeypatch.setattr(_native, 'inheritance_unbind', lambda *args: pytest.fail('removed previous receiver'))
     with pytest.raises(RuntimeError, match='duplicate binding'):
-        generated_view()(71)
+        generated_view(generated_artifacts)(71)
     assert registry[71] is old
 
 
-def test_existing_field_view_subclass_does_not_change_constructor_selection(monkeypatch):
+def test_existing_field_view_subclass_does_not_change_constructor_selection(monkeypatch, generated_artifacts):
     from svx import inheritance
     monkeypatch.setattr(inheritance, 'register_python_subclass',
                         lambda *args: pytest.fail('changed constructor selection'))
-    Base = generated_view()
+    Base = generated_view(generated_artifacts)
     class Derived(Base):
         pass
     assert issubclass(Derived, Base)

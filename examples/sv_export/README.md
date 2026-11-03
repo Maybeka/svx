@@ -179,7 +179,8 @@ svx export --package export_driver_pkg --integrated \
 
 For that variant, change the generated include in tb_package_calls.sv to
 `.tmp/sv-export-integrated/sv/source.sv` and compile that top without drivers.sv.
-Use the printed Python path and artifact manifest. The same package_calls.py
+Add .tmp/sv-export-integrated/sv to the include path and use the printed Python
+path and SVX_BOOTSTRAP entry. The same package_calls.py
 checks and3ns pass markers apply. Native classes, enums and interface definitions
 are present exactly once, before the ordinary generated call records/bridges.
 Both layouts have been compiled and run. See
@@ -187,11 +188,14 @@ Both layouts have been compiled and run. See
 
 For the default separate layout:
 
-Compile drivers.sv before tb.sv, with the repository root on the include path.
+Compile drivers.sv before tb.sv, with the repository root and
+examples/sv_export/generated on the include path.
 The top includes SVX and generated mirrors, so do not compile those packages
 again. Add examples/sv_export/generated/python and the repository root to the
 simulation process's Python path, and load the ready native runtime as described
 in the shared run guide.
+Set SVX_BOOTSTRAP to examples/sv_export/generated/python/svx_bootstrap.py and
+leave SVX_ARTIFACT_MANIFEST unset for ordinary execution.
 
 entry.py creates a real SV Driver, reads/writes its inherited count field,
 calls a two-nanosecond task with output/inout holders, and calls a static method.

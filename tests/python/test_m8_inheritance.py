@@ -1,6 +1,6 @@
 import json
 import sys
-from dataclasses import make_dataclass
+from dataclasses import make_dataclass, replace
 from io import StringIO
 from pathlib import Path
 from types import ModuleType
@@ -126,7 +126,7 @@ def test_generated_python_bridge_preserves_collision_parameter_names(monkeypatch
 
 
 @pytest.mark.parametrize("shape", ["standalone", "projection", "reverse"])
-def test_generated_constructor_preserves_collision_parameters(monkeypatch, shape):
+def test_generated_constructor_preserves_collision_parameters(monkeypatch, tmp_path, shape):
     import inspect
     from types import ModuleType, SimpleNamespace
 
@@ -172,6 +172,14 @@ def test_generated_constructor_preserves_collision_parameters(monkeypatch, shape
     # This test isolates executable Python construction from the independently
     # failing public RecordSchema handling of underscore-prefixed wire fields.
     generated = emit_python_mirrors(parse_manifest(data))
+    for path, source_text in generated.items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source_text, encoding='utf-8')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    for name in list(sys.modules):
+        if name == 'svx_support' or name.startswith('svx_support.'):
+            monkeypatch.delitem(sys.modules, name)
     text = next(text for path, text in generated.items() if path.name != "__init__.py")
     namespace = {}
     exec(compile(text, "constructor_collisions.py", "exec"), namespace)
@@ -212,8 +220,9 @@ def test_sv_owned_fields_bind_to_inherited_storage_without_shadowing():
     sv_text = emit_sv_mirrors(manifest)
     assert "extends field_owner_pkg::Base" in sv_text
     assert "int count;" not in sv_text
-    assert "int_packer::pack(this.count, bytes)" in sv_text
-    assert "int_packer::unpack(this.count, bytes, field_offset)" in sv_text
+    assert '#(type(this.count))::invoke(this.count,' in sv_text
+    assert "int_packer::pack(__svx_resident_value, bytes)" in sv_text
+    assert "int_packer::unpack(__svx_resident_value, bytes, field_offset)" in sv_text
 
 
 @pytest.mark.parametrize("annotation,kind", [
@@ -353,16 +362,24 @@ def test_manifest_emits_language_specific_mirrors():
         "svx_py/checks.py",
         "svx_mirror/__init__.py",
         "svx_mirror/tb_pkg.py",
+        "svx_bootstrap.py",
+        "svx_support/__init__.py",
+        "svx_support/svx_mirror/__init__.py",
+        "svx_support/svx_mirror/tb_pkg.py",
+        "svx_support/svx_py/__init__.py",
+        "svx_support/svx_py/checks.py",
     }
     mirror_text = next(text for path, text in python_files.items() if str(path) == "svx_mirror/tb_pkg.py")
     assert "class BaseDriver" in mirror_text
     assert "def drive(self, address):" in mirror_text
-    assert "'unified_type_name': 'svtypes.Int'" in mirror_text
+    support_text = python_files[Path('svx_support/svx_mirror/tb_pkg.py')]
+    assert "'unified_type_name': 'svtypes.Int'" in support_text
     assert "svtypes.Int()" not in mirror_text
     assert "# Manifest: https://svx.dev/schema/inheritance-manifest/v2 v2.0.0; generator ABI 2." in mirror_text
     assert "# Role: Python mirrors for SystemVerilog-owned classes." in mirror_text
     assert "# --- SvTypes call contracts (private bridge metadata) ---" in mirror_text
-    assert "register_contract(\n    {" in mirror_text
+    assert 'from svx_support.svx_mirror.tb_pkg import register_contracts_0' in mirror_text
+    assert 'register_contract(' in support_text
 
     sv_text = emit_sv_mirrors(manifest)
     assert "// Layout: SvTypes records, typed external handles, public projections, then lineage helpers." in sv_text
@@ -549,6 +566,9 @@ def test_sv_generation_implements_completion_time_copy_out():
     assert "input int source, inout int changed, output int observed" in text
     assert "package svx_call_records_pkg;" in text
     outbound = text.split("virtual task drive", 1)[1].split("endtask", 1)[0]
+    assert '__svx_support_' in outbound and 'request_value' not in outbound
+    helper = '__svx_support_' + inheritance._call_record_class_name(method['canonical_id'], 'callback').removeprefix('SVXCall_')
+    outbound = text.split('task '+helper, 1)[1].split('endtask', 1)[0]
     assert "request_value.source = source;" in outbound
     assert "request_value.changed = changed;" in outbound
     assert "request_value.observed" not in outbound
@@ -618,6 +638,23 @@ def test_static_sv_member_uses_a_class_dispatcher_not_an_instance():
     assert "BaseDriver::static_value()" in sv_text
     assert "class BaseDriverStaticDispatcher implements svx_static_dispatchable, svx_static_function_dispatchable;" in sv_text
     assert "register_static(\"sv://tb_pkg/BaseDriver\"" in sv_text
+
+
+def test_ancestor_invocation_uses_short_class_aliases_without_name_collisions():
+    source = parse_manifest(manifest_data()).classes[0]
+    other_method = replace(source.methods[0], canonical_id='sv://other_pkg/BaseDriver#drive')
+    other = replace(source, canonical_id='sv://other_pkg/BaseDriver',
+                    symbol='other_pkg::BaseDriver', methods=(other_method,))
+    code = '\n'.join(inheritance._emit_sv_projection_invoke(
+        source, base_methods=(), inherited_sv_sources=(source, other), generated_name='Child'))
+    assert 'typedef tb_pkg::BaseDriver BaseDriver;' in code
+    assert 'typedef other_pkg::BaseDriver svx_BaseDriver;' in code
+    assert 'BaseDriver::drive(address);' in code
+    assert 'svx_BaseDriver::drive(address);' in code
+    assert 'task svx_core_BaseDriver_drive(' in code
+    assert 'task svx_core_BaseDriver_drive_2(' in code
+    assert 'tb_pkg::BaseDriver::drive(' not in code
+    assert 'other_pkg::BaseDriver::drive(' not in code
 
 
 def test_manifest_rejects_static_virtual_method():
@@ -1809,7 +1846,8 @@ def test_generated_python_root_factory_encapsulates_typed_constructor():
     assert "class BaseMonitorFactory #(type Implementation = BaseMonitor)" in source
     assert "constructor_request = BaseMonitor::svx_decode_constructor_request(request);" in source
     assert "Implementation svx_instance;" in source
-    assert "svx_instance = new(object_id, constructor_request.seed);" in source
+    assert "svx_instance = svx_core_construct(object_id, constructor_request.seed);" in source
+    assert "svx_instance = new(object_id, seed);" in source
     assert 'svx_inheritance_registry::register_factory("py://checks/BaseMonitor", this);' in source
 
 
@@ -1864,7 +1902,8 @@ def test_constructor_handle_generation_preserves_native_types_and_decodes_both_f
     assert "svx_mirror/external_handle_test_pkg.py" not in {str(path) for path in python}
     for module in ("svx_mirror/constructor_handle_pkg.py", "svx_py/tests/integration/constructor_handles_user.py"):
         text = python[Path(module)]
-        assert "external_targets=('sv://external_handle_test_pkg/Packet', 'sv-vif://external_bus_if/master')" in text
+        support = python[Path('svx_support') / module]
+        assert "external_targets=('sv://external_handle_test_pkg/Packet', 'sv-vif://external_bus_if/master')" in support
         compile(text, module, "exec")
 
 
@@ -1905,13 +1944,21 @@ def test_real_constructor_external_vif_reference_is_decoded_before_python_init(m
         implementation.register_constructor(class_id, (("vif", reference),), external_targets=[target])
 
 
-def test_constructor_vif_without_operations_still_has_a_transport_view(monkeypatch):
+def test_constructor_vif_without_operations_still_has_a_transport_view(monkeypatch, tmp_path):
     from tests.integration.constructor_handles_schema import manifest_data as handle_manifest
 
     data = handle_manifest()
     data["classes"][0]["constructor"]["parameters"][1]["handle"]["operations"] = []
     model = parse_manifest(data)
     sources = emit_python_mirrors(model)
+    for path, text in sources.items():
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding='utf-8')
+    monkeypatch.syspath_prepend(str(tmp_path))
+    for name in list(sys.modules):
+        if name == 'svx_support' or name.startswith('svx_support.'):
+            monkeypatch.delitem(sys.modules, name)
     source = sources[Path("svx_vif/external_bus_if/master.py")]
     monkeypatch.setattr(inheritance, "_vif_views", {})
     namespace = {}
@@ -1957,7 +2004,7 @@ def test_alternating_artifact_manifest_covers_generated_ancestor_contracts():
     assert {item["unified_type_name"] for item in metadata["types"]} == {"svtypes.Int"}
 
     python_files = emit_python_mirrors(model)
-    base_module = python_files[next(path for path in python_files if str(path) == "svx_mirror/chain_pkg.py")]
+    base_module = python_files[Path('svx_support/svx_mirror/chain_pkg.py')]
     assert "'py://tests/integration/alternating_chain/B#b_check':" in base_module
     assert "class B(" not in base_module
     bproxy = emit_sv_mirrors(model).split("class B extends A", 1)[1].split("endclass : B", 1)[0]
@@ -1982,10 +2029,11 @@ def test_native_handle_fields_preserve_metadata_and_use_typed_endpoints():
     source = emit_sv_mirrors(model)
     for field in cls.fields:
         adapter = inheritance._handle_adapter_name(field.handle)
-        assert f"{adapter}::encode(this.{field.name})" in source
+        assert f'#(type(this.{field.name}))::invoke(this.{field.name},' in source
+        assert f"{adapter}::encode(__svx_resident_value)" in source
         assert f"{adapter}::decode(field_wire, field_native, error)" in source
         assert f'field_wire = new("{field.handle.target_type_name}");' in source
-        assert f"this.{field.name} = field_native;" in source
+        assert "__svx_resident_value = field_native;" in source
         assert f"::unpack({field.name}," not in source
         assert inheritance._sv_field_declaration(field) == f"{field.handle.sv_type} {field.name}"
     invalid = handles_manifest()
@@ -2044,8 +2092,13 @@ def test_void_function_with_output_named_result_preserves_prototype(monkeypatch)
 def test_generated_void_function_callback_has_function_termination():
     from tests.integration.parameterized_mirror_schema import manifest_data as parameterized_manifest
 
-    source = emit_sv_mirrors(parse_manifest(parameterized_manifest()))
+    model = parse_manifest(parameterized_manifest())
+    source = emit_sv_mirrors(model)
     method = source.split("virtual function void observe(output int result);", 1)[1].split("    endfunction", 1)[0]
+    assert '__svx_support_' in method and 'svx_inheritance_call_python_function' not in method
+    observe = next(method for cls in model.classes for method in cls.methods if method.name == 'observe')
+    helper = '__svx_support_' + inheritance._call_record_class_name(observe.canonical_id, 'callback').removeprefix('SVXCall_')
+    method = source.split('function void '+helper, 1)[1].split('    endfunction', 1)[0]
     assert "svx_inheritance_call_python_function" in method
     assert "endtask" not in method
 

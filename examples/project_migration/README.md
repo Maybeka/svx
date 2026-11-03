@@ -115,6 +115,7 @@ before SVX is installed.
 `01_entry/tb.sv` adds runtime setup and teardown around the original flow:
 
 ```diff
++ `include "svtypes_pkg.sv"
 + `include "sv/svx_pkg.sv"
 + import svx_pkg::*;
 + svx_init();

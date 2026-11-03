@@ -50,6 +50,7 @@ def bind_native_struct_declaration(text, model_name, reference, *, packed, schem
 
 def _native_handle_struct(text, name, reference, schema, indent):
     import re
+    import svtypes
 
     wire = 'SVXStructWire_' + name
     text = re.sub(r'\b' + re.escape(name) + r'_(t|packer)\b',
@@ -73,7 +74,17 @@ def _native_handle_struct(text, name, reference, schema, indent):
              f'  static function void unpack(ref {name}_t value, ref byte unsigned bytes[$], ref int offset);',
              f'    {wire}_t wire_value;', '    string error;',
              f'    {wire}_packer::unpack(wire_value, bytes, offset);', *decode,
-             '  endfunction', 'endclass']
+             '  endfunction']
+    if 'svtypes.generated-field-operations.v1' in svtypes.runtime_capabilities().provided:
+        lines.extend([
+            f'  static function string svtypes_format(input {name}_t value);',
+            f'    {wire}_t wire_value;', *encode,
+            f'    return {wire}_packer::svtypes_format(wire_value);', '  endfunction',
+            f'  static function void svtypes_apply_plusargs(ref {name}_t value, input string prefix = "");',
+            f'    {wire}_t wire_value;', '    string error;', *encode,
+            f'    {wire}_packer::svtypes_apply_plusargs(wire_value, prefix);', *decode,
+            '  endfunction'])
+    lines.append('endclass')
     return '\n'.join(indent + line if index else line for index, line in enumerate(lines))
 
 

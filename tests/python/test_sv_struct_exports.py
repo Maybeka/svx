@@ -31,7 +31,11 @@ def test_native_runtime_fixture_generation_only(tmp_path, monkeypatch):
         'read', 'echo', 'exchange', 'echo_handles', 'read_handles', 'handles_match',
         'transform', 'invoke_transform', 'invoke_exchange'}
     native = (output / 'mirrors.sv').read_text(encoding='utf-8')
+    native += '\n' + '\n'.join(path.read_text(encoding='utf-8') for path in (output / 'support').rglob('*.svh'))
     assert 'typedef struct_kinds_pkg::Data SVXValue_16_struct_kinds_pkg_Data_t;' in native
+    if 'svtypes.generated-field-operations.v1' in capabilities.provided:
+        assert 'static function string svtypes_format(input SVXValue_16_struct_kinds_pkg_Handles_t value);' in native
+        assert 'static function void svtypes_apply_plusargs(ref SVXValue_16_struct_kinds_pkg_Handles_t value' in native
     assert 'this.value.item.object_number' not in native
     assert 'this.svx_return_value.item.object_number' not in native
 
@@ -54,6 +58,24 @@ def test_same_named_struct_packing_change_invalidates_export(tmp_path, monkeypat
     second = json.loads((output / 'inheritance.json').read_text())['value_types'][0]
     assert first['svtypes']['packed'] is True and second['svtypes']['packed'] is False
     assert first['schema'] != second['schema']
+
+
+def test_native_handle_adapter_respects_field_operations_capability(monkeypatch):
+    from svx.struct_contract import _native_handle_struct
+
+    schema = {'fields': [{'name': 'item', 'type': {
+        'kind': 'remote_ref', 'target_type_name': 'sv://p/Item'}}]}
+    source = 'typedef struct { int item; } Sample_t;\nclass Sample_packer; endclass'
+    provided = svtypes.runtime_capabilities().provided
+    monkeypatch.setattr(svtypes, 'runtime_capabilities', lambda: SimpleNamespace(
+        provided=tuple(cap for cap in provided if cap != 'svtypes.generated-field-operations.v1')))
+    old = _native_handle_struct(source, 'Sample', 'p::Sample', schema, '')
+    assert 'svtypes_format(' not in old and 'svtypes_apply_plusargs(' not in old
+    monkeypatch.setattr(svtypes, 'runtime_capabilities', lambda: SimpleNamespace(
+        provided=(*provided, 'svtypes.generated-field-operations.v1')))
+    new = _native_handle_struct(source, 'Sample', 'p::Sample', schema, '')
+    assert 'static function string svtypes_format(' in new
+    assert 'static function void svtypes_apply_plusargs(' in new
 
 
 @pytest.fixture

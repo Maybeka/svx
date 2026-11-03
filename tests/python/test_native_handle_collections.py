@@ -91,31 +91,37 @@ def test_collection_adapter_names_keep_shape_without_repeating_target(tmp_path):
 
 def test_collection_field_root_uses_wire_container_not_native_source_alias(tmp_path):
     text = emit_sv_mirrors(discover(tmp_path))
+    for name in ('handles', 'groups'):
+        assert f'#(type(this.{name}))::invoke(this.{name},' in text
+    text = text.replace('__svx_resident_value', 'this.handles')
     assert '::wire_type field_wire;' in text
     assert 'collection_types::queue_t field_wire;' not in text
     assert 'collection_types::nested_t field_wire;' not in text
     assert '::decode(field_wire, field_native, error)' in text
     assert 'this.handles = field_native;' in text
-    assert 'this.groups = field_native;' in text
+    assert text.count('this.handles = field_native;') >= 2
     root_set = text.split('"sv://collection_types/Owner.handles@svx_field_set": begin', 1)[1]
     root_set = root_set.split('"sv://collection_types/Owner.handles@svx_field_operation": begin', 1)[0]
     assert 'field_wire = new(' not in root_set
     assert 'this.handles[operation.path_index[0]] = field_native;' in text
-    assert 'this.groups[field_key_0][operation.path_index[1]] = field_native;' in text
+    assert 'this.handles[field_key_0][operation.path_index[1]] = field_native;' in text
 
 
 def test_handle_field_mutations_use_native_temporaries_and_addressed_containers(tmp_path):
     text = emit_sv_mirrors(discover(tmp_path))
+    for name in ('handles', 'groups', 'matrix', 'dynamic_handles'):
+        assert f'#(type(this.{name}))::invoke(this.{name},' in text
+    text = text.replace('__svx_resident_value', 'this.handles')
     assert 'this.handles.push_back(field_element);' in text
     assert 'this.handles.insert(operation.path_index[0], field_element);' in text
     assert 'this.handles.delete(operation.path_index[0]);' in text
-    assert 'this.groups[field_key_0].push_back(field_element);' in text
-    assert 'this.groups.delete(field_key_0);' in text
-    assert 'this.matrix.push_back(field_element);' in text
-    assert 'this.matrix[operation.path_index[0]].push_back(field_element);' in text
+    assert 'this.handles[field_key_0].push_back(field_element);' in text
+    assert 'this.handles.delete(field_key_0);' in text
+    assert 'this.handles.push_back(field_element);' in text
+    assert 'this.handles[operation.path_index[0]].push_back(field_element);' in text
     assert '::decode_0(field_wire, field_element, error)) begin' in text
-    assert 'field_sequence = new[this.dynamic_handles.size() + 1](this.dynamic_handles);' in text
-    assert 'this.dynamic_handles = new[field_length](this.dynamic_handles);' in text
+    assert 'field_sequence = new[this.handles.size() + 1](this.handles);' in text
+    assert 'this.handles = new[field_length](this.handles);' in text
     assert 'while (this.handles.size() < field_length) this.handles.push_back(field_default);' in text
     assert '::decode(field_wire, field_element, error)) begin' in text
 

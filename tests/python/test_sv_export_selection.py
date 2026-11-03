@@ -194,6 +194,18 @@ def test_invalid_selection_reports_input_problem(project, kwargs, message):
         manifest_from_declarations(sv_source_files=[source], **kwargs)
 
 
+def test_cross_package_ancestor_dispatch_uses_short_qualified_name(tmp_path):
+    source = Path('tests/integration/package_export_inheritance.sv')
+    root = tmp_path / 'generated'
+    args = ['export', '--package', 'export_base_pkg', 'export_driver_pkg',
+            '--sv-include-dir', '.', '--sv-source', str(source), '--out', str(root)]
+    assert main(args, out=io.StringIO()) == 0
+    text = (root / 'mirrors.sv').read_text(encoding='utf-8')
+    assert 'typedef export_base_pkg::Base Base;' in text
+    assert 'Base::status()' in text
+    assert 'export_base_pkg::Base::status()' not in text
+
+
 def test_export_reuses_original_filelist_and_generators(project, tmp_path):
     source, filelist = project
     root = tmp_path / 'generated output'

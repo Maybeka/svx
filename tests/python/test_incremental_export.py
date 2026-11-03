@@ -9,6 +9,7 @@ import sys
 import pytest
 
 from svx.cli import main
+from svx.errors import SVXInheritanceError
 from svx.source_selection import capture_selection, selection_context, validate_selection
 
 pytest.importorskip('pyslang')
@@ -80,7 +81,10 @@ def test_changed_generated_output_is_not_accepted_as_cache_hit(project):
     output = root / 'generated/mirrors.sv'
     original = output.read_text()
     output.write_text(original + '\n// user edit\n', encoding='utf-8')
-    assert 'generated outputs changed' in run(args)
+    with pytest.raises(SVXInheritanceError, match='recorded snapshot'):
+        run(args)
+    assert output.read_text() == original + '\n// user edit\n'
+    assert 'full export' in run(args + ['--overwrite-generated'])
     assert output.read_text() == original
 
 

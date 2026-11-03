@@ -58,7 +58,10 @@ def test_integrated_cli_generates_checks_and_preserves_unchanged_outputs(tmp_pat
     generated = tmp_path / 'sv' / 'source.sv'
     assert 'class IndependentLaterImpl extends mixed_source_pkg::_svx_proxy_Independent;' in generated.read_text()
     assert source_path.read_text() == source
-    assert generated.read_text().count('package svx_call_records_pkg;') == 1
+    assert 'package svx_call_records_pkg;' not in generated.read_text()
+    support = tmp_path / 'sv/support/source_call_records.svh'
+    assert support.read_text().count('package svx_call_records_pkg;') == 1
+    assert '`include "support/source_call_records.svh"' in generated.read_text()
     before = {path: (path.read_bytes(), path.stat().st_mtime_ns, path.stat().st_ino)
               for path in tmp_path.rglob('*') if path.is_file()}
     assert main(args + ['--check'], StringIO()) == 0

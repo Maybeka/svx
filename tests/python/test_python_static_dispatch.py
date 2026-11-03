@@ -154,9 +154,10 @@ def test_projected_static_source_resolves_declared_class_without_instance(genera
         inheritance._register_python_static_source(ROOT_ID, 'other.Source', (ROOT_ID + '#scale',))
 
 
-def test_public_static_emission_registers_source_without_constructing(generated_static, monkeypatch):
+def test_public_static_emission_registers_source_without_constructing(generated_static, monkeypatch, generated_artifacts):
     model, _, _ = generated_static
     sources = inheritance.emit_python_mirrors(model)
+    generated_artifacts(sources)
     source = next(text for path, text in sources.items() if path.name == 'static_root_source.py')
     namespace = {'__name__': 'public_static_companion'}
     exec(source, namespace)

@@ -1,6 +1,15 @@
 [
+  "svx_bootstrap.py",
   "svx_py/__init__.py",
   "svx_py/examples/foreign_handles/python_api.py",
+  "svx_support/__init__.py",
+  "svx_support/svx_py/__init__.py",
+  "svx_support/svx_py/examples/__init__.py",
+  "svx_support/svx_py/examples/foreign_handles/__init__.py",
+  "svx_support/svx_py/examples/foreign_handles/python_api.py",
+  "svx_support/svx_vif/__init__.py",
+  "svx_support/svx_vif/example_bus_if/__init__.py",
+  "svx_support/svx_vif/example_bus_if/master.py",
   "svx_vif/__init__.py",
   "svx_vif/example_bus_if/__init__.py",
   "svx_vif/example_bus_if/master.py"

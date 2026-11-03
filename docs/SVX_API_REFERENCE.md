@@ -16,6 +16,8 @@ The following names exported from `svx` are stable:
   `ConfigChannel`, `ReqRspChannel`, `req_channel`, `rsp_channel`, `mon_channel`,
   `config_channel`, and `reqrsp_channel`;
 - inheritance lifecycle: `close_instance`;
+- explicit generated-contract audit: `validate_generated_contracts` (see
+  [generated implementation edits](SVX_GENERATION_WORKFLOW.md#generated-implementation-edits));
 - inheritance declarations: `Task`, `Function`, `Input`, `Output`, `Inout`,
   `inheritance_parameter`, `inheritance_method`,
   `inheritance_class`, `sv_class_handle`, `virtual_interface_handle`,
@@ -402,7 +404,10 @@ implementation exceptions are not suppressed.
   `--check` verifies that all three requested output groups are current.
   `--sv-source` scans interface declarations for restricted VIF views.
   `--sv-integrated-dir DIR` emits source replacements in place of supplied
-  originals; it is mutually exclusive with `--sv-out` and `--sv-stage-dir`.
+  originals; it is mutually exclusive with `--sv-out`, `--sv-output-dir` and `--sv-stage-dir`.
+  `--sv-output-dir DIR` emits editable roots, support includes and a relative
+  `sources.f`; compile that list with `-F`. `--sv-out` retains single-text output.
+  `--overwrite-generated` explicitly permits replacing recorded manual edits.
   Direct SV inputs may retain independent units. Supported alternating chains
   use --sv-compilation-unit when the original build actually shares one unit.
   See [Generation And Incremental Builds](SVX_GENERATION_WORKFLOW.md)
@@ -731,6 +736,10 @@ classes/codecs; `parse_manifest` requires `source_path` when evidence is present
 A manifest without evidence remains valid as an explicitly maintained contract.
 
 Generated artifact manifests are generator/runtime validation metadata. Applications
+can use executable bootstrap startup without loading them; the legacy artifact
+startup path retains validation. Generated core implementations may be patched
+within the boundaries in the generation workflow. The support protocol remains private.
+Applications
 may inspect their public type-name mappings but must not hand-author private
 call records, fingerprints, paths or ownership inventories. Constructor records,
 dispatch functions, registration helpers and field operation envelopes remain

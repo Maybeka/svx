@@ -460,7 +460,8 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
                           certified_sources: dict) -> int:
     macro_config = _sv_macro_config(args)
     integrated_dir = getattr(args, 'sv_integrated_dir', None)
-    output_options = (args.sv_out, args.sv_stage_dir, integrated_dir)
+    editable_dir = getattr(args, 'sv_output_dir', None)
+    output_options = (args.sv_out, args.sv_stage_dir, integrated_dir, editable_dir)
     if sum(bool(option) for option in output_options) > 1:
         raise SystemExit("inheritance-gen accepts only one of --sv-out, --sv-stage-dir, --sv-integrated-dir")
     if integrated_dir and not args.sv_source:
@@ -480,7 +481,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         manifest = enrich_virtual_interface_manifest(
             manifest, sv_source_files=[Path(item) for item in args.sv_source], **macro_config
         )
-    stage_root = Path(integrated_dir or args.sv_stage_dir) if integrated_dir or args.sv_stage_dir else None
+    stage_root = Path(integrated_dir or args.sv_stage_dir or editable_dir) if any((integrated_dir, args.sv_stage_dir, editable_dir)) else None
     startup_metadata = {}
     if integrated_dir:
         from .source_layout import emit_integrated_sources, integrated_source_paths
@@ -508,6 +509,17 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         else:
             sv_text = emit_sv_mirrors(manifest)
         stage_sources = emit_sv_mirror_stages(manifest) if args.sv_stage_dir else None
+        if editable_dir:
+            stage_sources = {PurePosixPath('mirrors.sv'): sv_text}
+    if integrated_dir or editable_dir:
+        from .generated_layout import with_sv_support
+        from .sv_source_options import _source_parse_options
+        stage_sources = with_sv_support({PurePosixPath(path): text for path, text in stage_sources.items()},
+            parse_options=_source_parse_options(macro_config['sv_predefines'], macro_config['sv_undefines'],
+                                               macro_config['sv_include_dirs'], discover_proxies=True))
+    if integrated_dir:
+        from .generated_bootstrap import with_bootstrap
+        python_sources = with_bootstrap(python_sources)
     args._sv_startup_metadata = startup_metadata
     sv_outputs: dict[Path, str]
     if stage_sources is not None:
@@ -516,6 +528,12 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         sv_outputs = {Path(args.sv_out): sv_text}
     else:
         sv_outputs = {}
+    # A single-file SV output has no inventory, but still needs its own
+    # generation-time snapshot so local repairs are not silently overwritten.
+    single_sv = next(iter(sv_outputs), None) if stage_sources is None else None
+    single_inventory = f'.{single_sv.name}.svx-generated' if single_sv is not None else None
+    from .generated_ownership import baseline_name, baseline_text, protect_baseline
+    single_baseline = single_sv.parent / baseline_name(single_inventory) if single_sv is not None else None
     if args.check:
         mismatches: list[Path] = []
         inventories = [(Path(args.python_out) / ".svx-generated-python.json", python_sources)]
@@ -524,6 +542,13 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         for target, sources in inventories:
             if not target.is_file() or target.read_text(encoding="utf-8") != generated_inventory_text(sources):
                 mismatches.append(target)
+            from .generated_ownership import baseline_text
+            baseline = target.with_name(target.name+'.sha256.json')
+            if not baseline.is_file() or baseline.read_text(encoding='utf-8') != baseline_text(sources):
+                mismatches.append(baseline)
+        if single_sv is not None:
+            if not single_baseline.is_file() or single_baseline.read_text(encoding='utf-8') != baseline_text({single_sv.name: sv_outputs[single_sv]}):
+                mismatches.append(single_baseline)
         mismatches.extend(obsolete_generated_sources(
             Path(args.python_out), python_sources, ".svx-generated-python.json"
         ))
@@ -562,12 +587,15 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
             print(path, file=out)
         return 0
     if args.python_out:
-        validate_generated_sources(python_sources, Path(args.python_out), ".svx-generated-python.json")
+        validate_generated_sources(python_sources, Path(args.python_out), ".svx-generated-python.json",
+                                   overwrite=getattr(args, 'overwrite_generated', False))
     if stage_sources is not None:
-        validate_generated_sources(stage_sources, stage_root, ".svx-generated-sv.json")
+        validate_generated_sources(stage_sources, stage_root, ".svx-generated-sv.json",
+                                   overwrite=getattr(args, 'overwrite_generated', False))
     else:
         for sv_target, source in sv_outputs.items():
             validate_generated_sources({sv_target.name: source}, sv_target.parent)
+            validate_output_path(single_baseline)
     artifact_path = Path(args.artifact_manifest) if args.artifact_manifest else None
     artifact_text = None
     previous = None
@@ -586,11 +614,15 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
             consumed_sources=consumed,
         )
     targets = list(sv_outputs)
+    if single_baseline is not None:
+        targets.append(single_baseline)
     if args.python_out:
         targets.extend(Path(args.python_out) / path for path in python_sources)
         targets.append(Path(args.python_out) / ".svx-generated-python.json")
+        targets.append(Path(args.python_out) / ".svx-generated-python.json.sha256.json")
     if stage_sources is not None:
         targets.append(stage_root / ".svx-generated-sv.json")
+        targets.append(stage_root / ".svx-generated-sv.json.sha256.json")
     if artifact_path is not None:
         targets.append(artifact_path)
     resolved = set()
@@ -617,7 +649,25 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
     if stage_sources is not None:
         removable.extend(obsolete_generated_sources(
             stage_root, stage_sources, ".svx-generated-sv.json"))
+    from .generated_ownership import protect_manual_edits
+    expected_sources = dict(sv_outputs)
+    if args.python_out:
+        expected_sources.update({Path(args.python_out)/path: text for path, text in python_sources.items()})
+    protect_manual_edits(previous, artifact_path, [*targets, *removable],
+                         overwrite=getattr(args, 'overwrite_generated', False), expected_sources=expected_sources)
     _protect_generation_inputs([*targets, *removable], protected_inputs)
+    if single_sv is not None:
+        # A prior artifact manifest can establish ownership when a legacy
+        # single-file output does not yet have its own baseline.
+        entries = previous.get('artifacts', ()) if previous else ()
+        recorded = any(isinstance(entry, dict) and isinstance(entry.get('path'), str)
+                       and isinstance(entry.get('sha256'), str) and len(entry['sha256']) == 64
+                       and all(char in '0123456789abcdef' for char in entry['sha256'])
+                       and (artifact_path.parent / entry['path']).resolve() == single_sv.resolve()
+                       for entry in entries)
+        if single_baseline.exists() or not recorded:
+            protect_baseline(single_sv.parent, single_inventory, {single_sv.name: sv_outputs[single_sv]}, (),
+                             overwrite=getattr(args, 'overwrite_generated', False))
     recovered_obsolete = []
     if previous is not None:
         if args.python_out:
@@ -633,17 +683,20 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
     _protect_generation_inputs(recovered_obsolete, protected_inputs)
     _require_stable_generation_inputs(args, input_root, input_fingerprints, consumed_sources=consumed)
     if args.python_out:
-        written = write_generated_sources(python_sources, Path(args.python_out), ".svx-generated-python.json")
+        written = write_generated_sources(python_sources, Path(args.python_out), ".svx-generated-python.json",
+                                          overwrite=getattr(args, 'overwrite_generated', False))
         for path in written:
             print(path, file=out)
     if stage_sources is not None:
-        for target in write_generated_sources(stage_sources, stage_root, ".svx-generated-sv.json"):
+        for target in write_generated_sources(stage_sources, stage_root, ".svx-generated-sv.json",
+                                               overwrite=getattr(args, 'overwrite_generated', False)):
             print(target, file=out)
     else:
         for sv_target, source in sv_outputs.items():
             write_text_atomic(sv_target, source)
+            write_text_atomic(single_baseline, baseline_text({sv_target.name: source}))
             print(sv_target, file=out)
-    if not sv_outputs and sv_text.strip() != "// Generated by svx inheritance-gen. Do not edit.":
+    if not sv_outputs and sv_text.strip() != "// Generated by svx inheritance-gen.":
         print(sv_text, end="", file=out)
     for path in recovered_obsolete:
         path.unlink(missing_ok=True)
@@ -735,7 +788,13 @@ def _generated_artifact_text(
             {'sources': [relative(source) for source in item['sources']],
              'output': relative(item['output'])}
             for item in args._source_replacements]
-        description['systemverilog_compile_order'] = [relative(path) for path in sv_outputs]
+        description['systemverilog_compile_order'] = [relative(path) for path in sv_outputs if path.suffix == '.sv']
+    if getattr(args, 'sv_output_dir', None) or getattr(args, 'sv_integrated_dir', None):
+        include_root = Path(args.sv_output_dir or args.sv_integrated_dir)
+        relative = lambda value: Path(os.path.relpath(Path(value).resolve(), artifact_root)).as_posix()
+        description['systemverilog_compile_order'] = [relative(path) for path in sv_outputs if path.suffix == '.sv']
+        description['systemverilog_include_dirs'] = [relative(include_root)]
+        description['systemverilog_filelist'] = relative(include_root / 'sources.f')
     if generation_inputs is not None and consumed_sources is not None:
         imports = dict(getattr(args, '_generation_imports', {}))
         imports.update({path: next(iter(digests)) for path, digests in consumed_sources.items()
@@ -1181,9 +1240,10 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
         'inheritance-gen', '--manifest', str(manifest_path),
         '--python-out', str(root / 'python'),
         *(['--sv-integrated-dir', str(root / 'sv')] if integrated else
-          ['--sv-out', str(root / 'mirrors.sv')]),
+          ['--sv-output-dir', str(root)]),
         '--artifact-manifest', str(root / 'artifacts.json'),
         *(['--check'] if args.check else []),
+        *(['--overwrite-generated'] if getattr(args, 'overwrite_generated', False) else []),
     ])
     for name in ('sv_source', 'sv_filelist', 'sv_relative_filelist', 'sv_build_command',
                  'sv_build_directory', 'sv_include_dir', 'sv_compilation_unit',
@@ -1195,6 +1255,8 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
     if args.sv_elaboration == 'packages':
         print('SV elaboration: packages; design hierarchy omitted; retained explicit sources still preprocessed; DUT-only library requests skipped', file=out)
     print(f'Python path: {root / "python"}', file=out)
+    print(f'Python startup: SVX_BOOTSTRAP={root / "python/svx_bootstrap.py"} (without SVX_ARTIFACT_MANIFEST)', file=out)
+    print(f'SV generated filelist: -F {root / "sv/sources.f" if integrated else root / "sources.f"}', file=out)
     for target in manifest.classes:
         if target.language == 'sv':
             from .scoped_exports import scoped_public_module
@@ -1549,6 +1611,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument('--sv-integrated-dir',
                    help='directory for an integrated copy of ordered SV sources and generated bridges')
+    p.add_argument('--sv-output-dir',
+                   help='directory for editable SV roots, support includes and sources.f (compile with -F)')
     p.add_argument(
         "--artifact-manifest",
         help="output compatibility manifest for all generated artifacts",
@@ -1577,7 +1641,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--check", action="store_true", help="verify the output is current")
     p.set_defaults(func=_cmd_inheritance_manifest)
 
-    for command in sub.choices.values():
+    for name, command in sub.choices.items():
+        if name in {'export', 'inheritance-gen'}:
+            command.add_argument('--overwrite-generated', action='store_true',
+                                 help='explicitly replace manually edited files recorded in an artifact inventory')
         command.add_argument('--config', action='append', metavar='FILE',
                              help='user configuration file; repeat in order; requires --config-parser')
         command.add_argument('--config-parser', metavar='PYTHON',

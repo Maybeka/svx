@@ -38,7 +38,10 @@ def emit_instance_export_bridges(manifest, *, metadata=None, owner_insertions=No
         local = replace(manifest, classes=(source,), callables=())
         if any(owner.language != 'sv' for owner in _all_manifest_classes(local)):
             raise SVXInheritanceError('instance-bound class bridges currently require SV lineage')
-        handles = _manifest_handle_bindings(local)
+        # The manifest can also contain independently elaborated instances.
+        # Their unrelated value types must not create aliases in this owner.
+        handles = _manifest_handle_bindings(
+            replace(local, value_types=owner_value_dependencies(local)))
         if any(binding.kind == 'virtual_interface' for binding in handles):
             from .native_handles import uses_generic_handle
             if any(not uses_generic_handle(binding) for binding in handles

@@ -303,11 +303,13 @@ def _load_artifact_manifest(
                 f"expected {expected!r}, got {record.get('unified_type_name')!r}"
             )
         expected_class = _call_record_class_name(owner, kind)
-        if record.get("sv_class") != expected_class:
+        legacy_class = 'SVXCall_' + hashlib.sha256(f'{owner}:{kind}'.encode()).hexdigest()[:20] + '_' + kind.title()
+        if record.get("sv_class") not in {expected_class, legacy_class}:
             raise SVXError(
                 f"generated {kind} record class mismatch for {owner!r}: "
                 f"expected {expected_class!r}, got {record.get('sv_class')!r}"
             )
+        expected_class = record['sv_class']
         schema_type = getattr(svtypes, "RecordSchema", None)
         if schema_type is None:
             raise SVXError("SvTypes runtime does not expose public RecordSchema")
@@ -402,7 +404,25 @@ def _load_artifact_manifest(
         root_text = str(import_root)
         if root_text not in sys.path:
             sys.path.insert(0, root_text)
-    loaded = [importlib.import_module(module) for module, _ in python_modules]
+    _load_generated_modules(module for module, _ in python_modules)
+
+
+def _load_generated_modules(modules, *, import_root: Path | None = None) -> None:
+    """Load executable declarations, then finish cross-module target bindings.
+
+    This registration operation does not read artifact inventories or inspect
+    source hashes. Generated bootstraps can share the legacy loader's ordering.
+    """
+    names = tuple(modules)
+    if any(not isinstance(name, str) or not name or
+           any(not part.isidentifier() for part in name.split('.')) for name in names):
+        raise SVXError('generated module names must be qualified Python identifiers')
+    names = tuple(dict.fromkeys(names))
+    if import_root is not None:
+        root = str(import_root.resolve())
+        if root not in sys.path:
+            sys.path.insert(0, root)
+    loaded = [importlib.import_module(module) for module in names]
     # Source-managed modules can expose roots before importing later companions.
     # Finish their deferred target views only after every declaration module loads.
     for module in loaded:
@@ -412,7 +432,22 @@ def _load_artifact_manifest(
 
 
 def _load_configured_artifacts(capabilities: SvTypesCapabilities) -> None:
+    bootstrap = os.environ.get('SVX_BOOTSTRAP', '')
     configured = os.environ.get("SVX_ARTIFACT_MANIFEST", "")
+    if bootstrap and configured:
+        raise SVXError('configure SVX_BOOTSTRAP or SVX_ARTIFACT_MANIFEST, not both')
+    if bootstrap:
+        import runpy
+        for item in bootstrap.split(os.pathsep):
+            if not item:
+                continue
+            path = Path(item).expanduser().resolve()
+            namespace = runpy.run_path(str(path))
+            initialize = namespace.get('initialize')
+            if not callable(initialize):
+                raise SVXError(f'generated bootstrap has no initialize() function: {path}')
+            initialize()
+        return
     for item in configured.split(os.pathsep):
         if item:
             _load_artifact_manifest(Path(item).expanduser().resolve(), capabilities)

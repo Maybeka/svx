@@ -72,109 +72,6 @@ class MigrationRequest extends svtypes_pkg::sv_object;
     return __svtypes_ok;
   endfunction
 
-  static function svtypes_pkg::encoding_descriptor svtypes_encoding_descriptor();
-    svtypes_pkg::encoding_descriptor descriptor;
-    descriptor = new("project_migration.MigrationRequest", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 1);
-    return descriptor;
-  endfunction
-
-  static function svtypes_pkg::runtime_capabilities svtypes_runtime_capabilities();
-    return svtypes_pkg::get_runtime_capabilities();
-  endfunction
-
-  virtual function void apply_plusargs(string prefix = "");
-    string __svtypes_key;
-    bit __svtypes_repeated;
-    __svtypes_repeated = svtypes_pkg::begin_plusarg_object(__svtypes_object_number);
-    if (__svtypes_repeated) begin
-      svtypes_pkg::end_plusarg_object();
-      return;
-    end
-    __svtypes_key = (prefix == "") ? "tag=%d" : {prefix, ".tag=%d"};
-    if ($test$plusargs((prefix == "") ? "tag" : {prefix, ".tag"}) && !$value$plusargs(__svtypes_key, tag)) $fatal(2, "Malformed plusarg tag");
-    __svtypes_key = (prefix == "") ? "stop=%h" : {prefix, ".stop=%h"};
-    if ($test$plusargs((prefix == "") ? "stop" : {prefix, ".stop"}) && !$value$plusargs(__svtypes_key, stop)) $fatal(2, "Malformed plusarg stop");
-    __svtypes_key = (prefix == "") ? "write=%h" : {prefix, ".write=%h"};
-    if ($test$plusargs((prefix == "") ? "write" : {prefix, ".write"}) && !$value$plusargs(__svtypes_key, write)) $fatal(2, "Malformed plusarg write");
-    __svtypes_key = (prefix == "") ? "address=%h" : {prefix, ".address=%h"};
-    if ($test$plusargs((prefix == "") ? "address" : {prefix, ".address"}) && !$value$plusargs(__svtypes_key, address)) $fatal(2, "Malformed plusarg address");
-    __svtypes_key = (prefix == "") ? "data=%h" : {prefix, ".data=%h"};
-    if ($test$plusargs((prefix == "") ? "data" : {prefix, ".data"}) && !$value$plusargs(__svtypes_key, data)) $fatal(2, "Malformed plusarg data");
-    svtypes_pkg::end_plusarg_object();
-  endfunction
-
-  virtual function string svtypes_sprint();
-    string result;
-    bit repeated;
-    repeated = svtypes_pkg::begin_dump_object(__svtypes_object_number);
-    if (repeated) begin
-      result = $sformatf("<ref#%0d>", __svtypes_object_number);
-      svtypes_pkg::end_dump_object();
-      return result;
-    end
-    result = $sformatf("MigrationRequest#%0d{", __svtypes_object_number);
-    result = {result, "tag="};
-    result = {result, $sformatf("%0d", this.tag)};
-    result = {result, ", stop="};
-    result = {result, $sformatf("%0h", this.stop)};
-    result = {result, ", write="};
-    result = {result, $sformatf("%0h", this.write)};
-    result = {result, ", address="};
-    result = {result, $sformatf("%0h", this.address)};
-    result = {result, ", data="};
-    result = {result, $sformatf("%0h", this.data)};
-    result = {result, "}"};
-    svtypes_pkg::end_dump_object();
-    return result;
-  endfunction
-
-  virtual function void svtypes_display();
-    $display("%s", svtypes_sprint());
-  endfunction
-
-  virtual function void pack(ref byte unsigned bytes[$]);
-    svtypes_pkg::begin_pack_graph();
-    svtypes_pkg::pack_object_value(this, bytes);
-    svtypes_pkg::end_pack_graph();
-  endfunction
-
-  virtual function void pack_body(ref byte unsigned bytes[$]);
-    ensure_svtypes_object_number();
-    svtypes_pkg::register_object(this);
-    svtypes_pkg::pack_object_header("project_migration.MigrationRequest", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 5, __svtypes_object_number, bytes);
-    svtypes_pkg::int_packer::pack(tag, bytes);
-    svtypes_pkg::bit_packer#(bit [0:0])::pack(stop, bytes);
-    svtypes_pkg::bit_packer#(bit [0:0])::pack(write, bytes);
-    svtypes_pkg::bit_packer#(bit [7:0])::pack(address, bytes);
-    svtypes_pkg::bit_packer#(bit [31:0])::pack(data, bytes);
-  endfunction
-
-  virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
-    byte unsigned present;
-    svtypes_pkg::require_available(bytes, offset, 1, "object presence");
-    present = bytes[offset];
-    offset += 1;
-    if (present == 8'h02) begin
-      $fatal(2, "SvTypes cannot unpack root reference into existing MigrationRequest object");
-    end
-    if (present != 8'h01) begin
-      $fatal(2, "SvTypes cannot unpack null into existing MigrationRequest object");
-    end
-    unpack_body(bytes, offset);
-  endfunction
-
-  virtual function void unpack_body(ref byte unsigned bytes[$], ref int offset);
-    longint unsigned incoming_svtypes_object_number;
-    svtypes_pkg::unpack_object_header("project_migration.MigrationRequest", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 5, incoming_svtypes_object_number, bytes, offset);
-    __svtypes_object_number = incoming_svtypes_object_number;
-    svtypes_pkg::register_object(this);
-    svtypes_pkg::int_packer::unpack(tag, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [0:0])::unpack(stop, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [0:0])::unpack(write, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [7:0])::unpack(address, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [31:0])::unpack(data, bytes, offset);
-  endfunction
-
   class MigrationRequest__svtypes_coverage;
     covergroup cg with function sample(MigrationRequest item);
       option.at_least = 1;
@@ -438,6 +335,122 @@ class MigrationRequest extends svtypes_pkg::sv_object;
       return cg.get_coverage();
     endfunction
   endclass
+
+  // SvTypes support: descriptors, plusargs, display, and wire codecs.
+
+  static function svtypes_pkg::encoding_descriptor svtypes_encoding_descriptor();
+    svtypes_pkg::encoding_descriptor descriptor;
+    descriptor = new("project_migration.MigrationRequest", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 1);
+    return descriptor;
+  endfunction
+
+  static function svtypes_pkg::runtime_capabilities svtypes_runtime_capabilities();
+    return svtypes_pkg::get_runtime_capabilities();
+  endfunction
+
+  // One ordered field list for wire operations, display and plusargs.
+  function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
+    int count = 0;
+    svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.tag, "tag", 1'b1, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.stop)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.stop)-1:0]))::apply(this.stop, "stop", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.write)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.write)-1:0]))::apply(this.write, "write", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.address)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.address)-1:0]))::apply(this.address, "address", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.data)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.data)-1:0]))::apply(this.data, "data", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    return count;
+  endfunction
+
+  virtual function void apply_plusargs(string prefix = "");
+    string __svtypes_key;
+    bit __svtypes_repeated;
+    byte unsigned __svtypes_bytes[$];
+    int __svtypes_offset = 0;
+    string __svtypes_result = "";
+    __svtypes_repeated = svtypes_pkg::begin_plusarg_object(__svtypes_object_number);
+    if (__svtypes_repeated) begin
+      svtypes_pkg::end_plusarg_object();
+      return;
+    end
+    __svtypes_apply_fields(4, __svtypes_bytes, __svtypes_offset, __svtypes_result, prefix);
+    svtypes_pkg::end_plusarg_object();
+  endfunction
+
+  virtual function string svtypes_sprint();
+    string result;
+    bit repeated;
+    byte unsigned __svtypes_bytes[$];
+    int __svtypes_offset = 0;
+    string __svtypes_result = "";
+    repeated = svtypes_pkg::begin_dump_object(__svtypes_object_number);
+    if (repeated) begin
+      result = $sformatf("<ref#%0d>", __svtypes_object_number);
+      svtypes_pkg::end_dump_object();
+      return result;
+    end
+    result = $sformatf("MigrationRequest#%0d{", __svtypes_object_number);
+    __svtypes_apply_fields(3, __svtypes_bytes, __svtypes_offset, __svtypes_result);
+    result = {result, __svtypes_result};
+    result = {result, "}"};
+    svtypes_pkg::end_dump_object();
+    return result;
+  endfunction
+
+  virtual function void svtypes_display();
+    $display("%s", svtypes_sprint());
+  endfunction
+
+  // Ordered wire fields shared by pack and unpack.
+  function int __svtypes_transfer_fields(ref byte unsigned bytes[$], ref int offset, input bit decode, input bit count_only = 0);
+    int count = 0;
+    string __svtypes_result = "";
+    count = __svtypes_apply_fields(count_only ? 0 : (decode ? 2 : 1), bytes, offset, __svtypes_result);
+    return count;
+  endfunction
+
+  function int __svtypes_wire_field_count();
+    byte unsigned unused_bytes[$];
+    int unused_offset = 0;
+    return __svtypes_transfer_fields(unused_bytes, unused_offset, 0, 1);
+  endfunction
+
+  virtual function void pack(ref byte unsigned bytes[$]);
+    svtypes_pkg::begin_pack_graph();
+    svtypes_pkg::pack_object_value(this, bytes);
+    svtypes_pkg::end_pack_graph();
+  endfunction
+
+  virtual function void pack_body(ref byte unsigned bytes[$]);
+    int __svtypes_offset = 0;
+    int __svtypes_header_start = bytes.size();
+    int __svtypes_count;
+    ensure_svtypes_object_number();
+    svtypes_pkg::register_object(this);
+    svtypes_pkg::pack_object_header("project_migration.MigrationRequest", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 0, __svtypes_object_number, bytes);
+    __svtypes_count = __svtypes_transfer_fields(bytes, __svtypes_offset, 0);
+    bytes[__svtypes_header_start + 6] = __svtypes_count[7:0];
+    bytes[__svtypes_header_start + 7] = __svtypes_count[15:8];
+  endfunction
+
+  virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
+    byte unsigned present;
+    svtypes_pkg::require_available(bytes, offset, 1, "object presence");
+    present = bytes[offset];
+    offset += 1;
+    if (present == 8'h02) begin
+      $fatal(2, "SvTypes cannot unpack root reference into existing MigrationRequest object");
+    end
+    if (present != 8'h01) begin
+      $fatal(2, "SvTypes cannot unpack null into existing MigrationRequest object");
+    end
+    unpack_body(bytes, offset);
+  endfunction
+
+  virtual function void unpack_body(ref byte unsigned bytes[$], ref int offset);
+    longint unsigned incoming_svtypes_object_number;
+    svtypes_pkg::unpack_object_header("project_migration.MigrationRequest", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", svtypes_pkg::strict_decode_diagnostics() ? __svtypes_wire_field_count() : 0, incoming_svtypes_object_number, bytes, offset);
+    __svtypes_object_number = incoming_svtypes_object_number;
+    svtypes_pkg::register_object(this);
+    __svtypes_transfer_fields(bytes, offset, 1);
+  endfunction
 endclass
 
 class MigrationResponse extends svtypes_pkg::sv_object;
@@ -491,97 +504,6 @@ class MigrationResponse extends svtypes_pkg::sv_object;
     __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
     __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
     return __svtypes_ok;
-  endfunction
-
-  static function svtypes_pkg::encoding_descriptor svtypes_encoding_descriptor();
-    svtypes_pkg::encoding_descriptor descriptor;
-    descriptor = new("project_migration.MigrationResponse", "051000b62407a733c3b7692a62a481d3d7217358946a4bf18270e6586c2b0501", 1);
-    return descriptor;
-  endfunction
-
-  static function svtypes_pkg::runtime_capabilities svtypes_runtime_capabilities();
-    return svtypes_pkg::get_runtime_capabilities();
-  endfunction
-
-  virtual function void apply_plusargs(string prefix = "");
-    string __svtypes_key;
-    bit __svtypes_repeated;
-    __svtypes_repeated = svtypes_pkg::begin_plusarg_object(__svtypes_object_number);
-    if (__svtypes_repeated) begin
-      svtypes_pkg::end_plusarg_object();
-      return;
-    end
-    __svtypes_key = (prefix == "") ? "tag=%d" : {prefix, ".tag=%d"};
-    if ($test$plusargs((prefix == "") ? "tag" : {prefix, ".tag"}) && !$value$plusargs(__svtypes_key, tag)) $fatal(2, "Malformed plusarg tag");
-    __svtypes_key = (prefix == "") ? "stop=%h" : {prefix, ".stop=%h"};
-    if ($test$plusargs((prefix == "") ? "stop" : {prefix, ".stop"}) && !$value$plusargs(__svtypes_key, stop)) $fatal(2, "Malformed plusarg stop");
-    __svtypes_key = (prefix == "") ? "data=%h" : {prefix, ".data=%h"};
-    if ($test$plusargs((prefix == "") ? "data" : {prefix, ".data"}) && !$value$plusargs(__svtypes_key, data)) $fatal(2, "Malformed plusarg data");
-    svtypes_pkg::end_plusarg_object();
-  endfunction
-
-  virtual function string svtypes_sprint();
-    string result;
-    bit repeated;
-    repeated = svtypes_pkg::begin_dump_object(__svtypes_object_number);
-    if (repeated) begin
-      result = $sformatf("<ref#%0d>", __svtypes_object_number);
-      svtypes_pkg::end_dump_object();
-      return result;
-    end
-    result = $sformatf("MigrationResponse#%0d{", __svtypes_object_number);
-    result = {result, "tag="};
-    result = {result, $sformatf("%0d", this.tag)};
-    result = {result, ", stop="};
-    result = {result, $sformatf("%0h", this.stop)};
-    result = {result, ", data="};
-    result = {result, $sformatf("%0h", this.data)};
-    result = {result, "}"};
-    svtypes_pkg::end_dump_object();
-    return result;
-  endfunction
-
-  virtual function void svtypes_display();
-    $display("%s", svtypes_sprint());
-  endfunction
-
-  virtual function void pack(ref byte unsigned bytes[$]);
-    svtypes_pkg::begin_pack_graph();
-    svtypes_pkg::pack_object_value(this, bytes);
-    svtypes_pkg::end_pack_graph();
-  endfunction
-
-  virtual function void pack_body(ref byte unsigned bytes[$]);
-    ensure_svtypes_object_number();
-    svtypes_pkg::register_object(this);
-    svtypes_pkg::pack_object_header("project_migration.MigrationResponse", "051000b62407a733c3b7692a62a481d3d7217358946a4bf18270e6586c2b0501", 3, __svtypes_object_number, bytes);
-    svtypes_pkg::int_packer::pack(tag, bytes);
-    svtypes_pkg::bit_packer#(bit [0:0])::pack(stop, bytes);
-    svtypes_pkg::bit_packer#(bit [31:0])::pack(data, bytes);
-  endfunction
-
-  virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
-    byte unsigned present;
-    svtypes_pkg::require_available(bytes, offset, 1, "object presence");
-    present = bytes[offset];
-    offset += 1;
-    if (present == 8'h02) begin
-      $fatal(2, "SvTypes cannot unpack root reference into existing MigrationResponse object");
-    end
-    if (present != 8'h01) begin
-      $fatal(2, "SvTypes cannot unpack null into existing MigrationResponse object");
-    end
-    unpack_body(bytes, offset);
-  endfunction
-
-  virtual function void unpack_body(ref byte unsigned bytes[$], ref int offset);
-    longint unsigned incoming_svtypes_object_number;
-    svtypes_pkg::unpack_object_header("project_migration.MigrationResponse", "051000b62407a733c3b7692a62a481d3d7217358946a4bf18270e6586c2b0501", 3, incoming_svtypes_object_number, bytes, offset);
-    __svtypes_object_number = incoming_svtypes_object_number;
-    svtypes_pkg::register_object(this);
-    svtypes_pkg::int_packer::unpack(tag, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [0:0])::unpack(stop, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [31:0])::unpack(data, bytes, offset);
   endfunction
 
   class MigrationResponse__svtypes_coverage;
@@ -765,6 +687,120 @@ class MigrationResponse extends svtypes_pkg::sv_object;
       return cg.get_coverage();
     endfunction
   endclass
+
+  // SvTypes support: descriptors, plusargs, display, and wire codecs.
+
+  static function svtypes_pkg::encoding_descriptor svtypes_encoding_descriptor();
+    svtypes_pkg::encoding_descriptor descriptor;
+    descriptor = new("project_migration.MigrationResponse", "051000b62407a733c3b7692a62a481d3d7217358946a4bf18270e6586c2b0501", 1);
+    return descriptor;
+  endfunction
+
+  static function svtypes_pkg::runtime_capabilities svtypes_runtime_capabilities();
+    return svtypes_pkg::get_runtime_capabilities();
+  endfunction
+
+  // One ordered field list for wire operations, display and plusargs.
+  function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
+    int count = 0;
+    svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.tag, "tag", 1'b1, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.stop)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.stop)-1:0]))::apply(this.stop, "stop", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.data)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.data)-1:0]))::apply(this.data, "data", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    return count;
+  endfunction
+
+  virtual function void apply_plusargs(string prefix = "");
+    string __svtypes_key;
+    bit __svtypes_repeated;
+    byte unsigned __svtypes_bytes[$];
+    int __svtypes_offset = 0;
+    string __svtypes_result = "";
+    __svtypes_repeated = svtypes_pkg::begin_plusarg_object(__svtypes_object_number);
+    if (__svtypes_repeated) begin
+      svtypes_pkg::end_plusarg_object();
+      return;
+    end
+    __svtypes_apply_fields(4, __svtypes_bytes, __svtypes_offset, __svtypes_result, prefix);
+    svtypes_pkg::end_plusarg_object();
+  endfunction
+
+  virtual function string svtypes_sprint();
+    string result;
+    bit repeated;
+    byte unsigned __svtypes_bytes[$];
+    int __svtypes_offset = 0;
+    string __svtypes_result = "";
+    repeated = svtypes_pkg::begin_dump_object(__svtypes_object_number);
+    if (repeated) begin
+      result = $sformatf("<ref#%0d>", __svtypes_object_number);
+      svtypes_pkg::end_dump_object();
+      return result;
+    end
+    result = $sformatf("MigrationResponse#%0d{", __svtypes_object_number);
+    __svtypes_apply_fields(3, __svtypes_bytes, __svtypes_offset, __svtypes_result);
+    result = {result, __svtypes_result};
+    result = {result, "}"};
+    svtypes_pkg::end_dump_object();
+    return result;
+  endfunction
+
+  virtual function void svtypes_display();
+    $display("%s", svtypes_sprint());
+  endfunction
+
+  // Ordered wire fields shared by pack and unpack.
+  function int __svtypes_transfer_fields(ref byte unsigned bytes[$], ref int offset, input bit decode, input bit count_only = 0);
+    int count = 0;
+    string __svtypes_result = "";
+    count = __svtypes_apply_fields(count_only ? 0 : (decode ? 2 : 1), bytes, offset, __svtypes_result);
+    return count;
+  endfunction
+
+  function int __svtypes_wire_field_count();
+    byte unsigned unused_bytes[$];
+    int unused_offset = 0;
+    return __svtypes_transfer_fields(unused_bytes, unused_offset, 0, 1);
+  endfunction
+
+  virtual function void pack(ref byte unsigned bytes[$]);
+    svtypes_pkg::begin_pack_graph();
+    svtypes_pkg::pack_object_value(this, bytes);
+    svtypes_pkg::end_pack_graph();
+  endfunction
+
+  virtual function void pack_body(ref byte unsigned bytes[$]);
+    int __svtypes_offset = 0;
+    int __svtypes_header_start = bytes.size();
+    int __svtypes_count;
+    ensure_svtypes_object_number();
+    svtypes_pkg::register_object(this);
+    svtypes_pkg::pack_object_header("project_migration.MigrationResponse", "051000b62407a733c3b7692a62a481d3d7217358946a4bf18270e6586c2b0501", 0, __svtypes_object_number, bytes);
+    __svtypes_count = __svtypes_transfer_fields(bytes, __svtypes_offset, 0);
+    bytes[__svtypes_header_start + 6] = __svtypes_count[7:0];
+    bytes[__svtypes_header_start + 7] = __svtypes_count[15:8];
+  endfunction
+
+  virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
+    byte unsigned present;
+    svtypes_pkg::require_available(bytes, offset, 1, "object presence");
+    present = bytes[offset];
+    offset += 1;
+    if (present == 8'h02) begin
+      $fatal(2, "SvTypes cannot unpack root reference into existing MigrationResponse object");
+    end
+    if (present != 8'h01) begin
+      $fatal(2, "SvTypes cannot unpack null into existing MigrationResponse object");
+    end
+    unpack_body(bytes, offset);
+  endfunction
+
+  virtual function void unpack_body(ref byte unsigned bytes[$], ref int offset);
+    longint unsigned incoming_svtypes_object_number;
+    svtypes_pkg::unpack_object_header("project_migration.MigrationResponse", "051000b62407a733c3b7692a62a481d3d7217358946a4bf18270e6586c2b0501", svtypes_pkg::strict_decode_diagnostics() ? __svtypes_wire_field_count() : 0, incoming_svtypes_object_number, bytes, offset);
+    __svtypes_object_number = incoming_svtypes_object_number;
+    svtypes_pkg::register_object(this);
+    __svtypes_transfer_fields(bytes, offset, 1);
+  endfunction
 endclass
 
 class MigrationObservation extends svtypes_pkg::sv_object;
@@ -832,109 +868,6 @@ class MigrationObservation extends svtypes_pkg::sv_object;
     __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
     __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
     return __svtypes_ok;
-  endfunction
-
-  static function svtypes_pkg::encoding_descriptor svtypes_encoding_descriptor();
-    svtypes_pkg::encoding_descriptor descriptor;
-    descriptor = new("project_migration.MigrationObservation", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 1);
-    return descriptor;
-  endfunction
-
-  static function svtypes_pkg::runtime_capabilities svtypes_runtime_capabilities();
-    return svtypes_pkg::get_runtime_capabilities();
-  endfunction
-
-  virtual function void apply_plusargs(string prefix = "");
-    string __svtypes_key;
-    bit __svtypes_repeated;
-    __svtypes_repeated = svtypes_pkg::begin_plusarg_object(__svtypes_object_number);
-    if (__svtypes_repeated) begin
-      svtypes_pkg::end_plusarg_object();
-      return;
-    end
-    __svtypes_key = (prefix == "") ? "tag=%d" : {prefix, ".tag=%d"};
-    if ($test$plusargs((prefix == "") ? "tag" : {prefix, ".tag"}) && !$value$plusargs(__svtypes_key, tag)) $fatal(2, "Malformed plusarg tag");
-    __svtypes_key = (prefix == "") ? "stop=%h" : {prefix, ".stop=%h"};
-    if ($test$plusargs((prefix == "") ? "stop" : {prefix, ".stop"}) && !$value$plusargs(__svtypes_key, stop)) $fatal(2, "Malformed plusarg stop");
-    __svtypes_key = (prefix == "") ? "write=%h" : {prefix, ".write=%h"};
-    if ($test$plusargs((prefix == "") ? "write" : {prefix, ".write"}) && !$value$plusargs(__svtypes_key, write)) $fatal(2, "Malformed plusarg write");
-    __svtypes_key = (prefix == "") ? "address=%h" : {prefix, ".address=%h"};
-    if ($test$plusargs((prefix == "") ? "address" : {prefix, ".address"}) && !$value$plusargs(__svtypes_key, address)) $fatal(2, "Malformed plusarg address");
-    __svtypes_key = (prefix == "") ? "data=%h" : {prefix, ".data=%h"};
-    if ($test$plusargs((prefix == "") ? "data" : {prefix, ".data"}) && !$value$plusargs(__svtypes_key, data)) $fatal(2, "Malformed plusarg data");
-    svtypes_pkg::end_plusarg_object();
-  endfunction
-
-  virtual function string svtypes_sprint();
-    string result;
-    bit repeated;
-    repeated = svtypes_pkg::begin_dump_object(__svtypes_object_number);
-    if (repeated) begin
-      result = $sformatf("<ref#%0d>", __svtypes_object_number);
-      svtypes_pkg::end_dump_object();
-      return result;
-    end
-    result = $sformatf("MigrationObservation#%0d{", __svtypes_object_number);
-    result = {result, "tag="};
-    result = {result, $sformatf("%0d", this.tag)};
-    result = {result, ", stop="};
-    result = {result, $sformatf("%0h", this.stop)};
-    result = {result, ", write="};
-    result = {result, $sformatf("%0h", this.write)};
-    result = {result, ", address="};
-    result = {result, $sformatf("%0h", this.address)};
-    result = {result, ", data="};
-    result = {result, $sformatf("%0h", this.data)};
-    result = {result, "}"};
-    svtypes_pkg::end_dump_object();
-    return result;
-  endfunction
-
-  virtual function void svtypes_display();
-    $display("%s", svtypes_sprint());
-  endfunction
-
-  virtual function void pack(ref byte unsigned bytes[$]);
-    svtypes_pkg::begin_pack_graph();
-    svtypes_pkg::pack_object_value(this, bytes);
-    svtypes_pkg::end_pack_graph();
-  endfunction
-
-  virtual function void pack_body(ref byte unsigned bytes[$]);
-    ensure_svtypes_object_number();
-    svtypes_pkg::register_object(this);
-    svtypes_pkg::pack_object_header("project_migration.MigrationObservation", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 5, __svtypes_object_number, bytes);
-    svtypes_pkg::int_packer::pack(tag, bytes);
-    svtypes_pkg::bit_packer#(bit [0:0])::pack(stop, bytes);
-    svtypes_pkg::bit_packer#(bit [0:0])::pack(write, bytes);
-    svtypes_pkg::bit_packer#(bit [7:0])::pack(address, bytes);
-    svtypes_pkg::bit_packer#(bit [31:0])::pack(data, bytes);
-  endfunction
-
-  virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
-    byte unsigned present;
-    svtypes_pkg::require_available(bytes, offset, 1, "object presence");
-    present = bytes[offset];
-    offset += 1;
-    if (present == 8'h02) begin
-      $fatal(2, "SvTypes cannot unpack root reference into existing MigrationObservation object");
-    end
-    if (present != 8'h01) begin
-      $fatal(2, "SvTypes cannot unpack null into existing MigrationObservation object");
-    end
-    unpack_body(bytes, offset);
-  endfunction
-
-  virtual function void unpack_body(ref byte unsigned bytes[$], ref int offset);
-    longint unsigned incoming_svtypes_object_number;
-    svtypes_pkg::unpack_object_header("project_migration.MigrationObservation", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 5, incoming_svtypes_object_number, bytes, offset);
-    __svtypes_object_number = incoming_svtypes_object_number;
-    svtypes_pkg::register_object(this);
-    svtypes_pkg::int_packer::unpack(tag, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [0:0])::unpack(stop, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [0:0])::unpack(write, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [7:0])::unpack(address, bytes, offset);
-    svtypes_pkg::bit_packer#(bit [31:0])::unpack(data, bytes, offset);
   endfunction
 
   class MigrationObservation__svtypes_coverage;
@@ -1200,6 +1133,122 @@ class MigrationObservation extends svtypes_pkg::sv_object;
       return cg.get_coverage();
     endfunction
   endclass
+
+  // SvTypes support: descriptors, plusargs, display, and wire codecs.
+
+  static function svtypes_pkg::encoding_descriptor svtypes_encoding_descriptor();
+    svtypes_pkg::encoding_descriptor descriptor;
+    descriptor = new("project_migration.MigrationObservation", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 1);
+    return descriptor;
+  endfunction
+
+  static function svtypes_pkg::runtime_capabilities svtypes_runtime_capabilities();
+    return svtypes_pkg::get_runtime_capabilities();
+  endfunction
+
+  // One ordered field list for wire operations, display and plusargs.
+  function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
+    int count = 0;
+    svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.tag, "tag", 1'b1, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.stop)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.stop)-1:0]))::apply(this.stop, "stop", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.write)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.write)-1:0]))::apply(this.write, "write", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.address)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.address)-1:0]))::apply(this.address, "address", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    svtypes_pkg::bit_field_operations#(bit [$bits(this.data)-1:0], svtypes_pkg::bit_packer#(bit [$bits(this.data)-1:0]))::apply(this.data, "data", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+    return count;
+  endfunction
+
+  virtual function void apply_plusargs(string prefix = "");
+    string __svtypes_key;
+    bit __svtypes_repeated;
+    byte unsigned __svtypes_bytes[$];
+    int __svtypes_offset = 0;
+    string __svtypes_result = "";
+    __svtypes_repeated = svtypes_pkg::begin_plusarg_object(__svtypes_object_number);
+    if (__svtypes_repeated) begin
+      svtypes_pkg::end_plusarg_object();
+      return;
+    end
+    __svtypes_apply_fields(4, __svtypes_bytes, __svtypes_offset, __svtypes_result, prefix);
+    svtypes_pkg::end_plusarg_object();
+  endfunction
+
+  virtual function string svtypes_sprint();
+    string result;
+    bit repeated;
+    byte unsigned __svtypes_bytes[$];
+    int __svtypes_offset = 0;
+    string __svtypes_result = "";
+    repeated = svtypes_pkg::begin_dump_object(__svtypes_object_number);
+    if (repeated) begin
+      result = $sformatf("<ref#%0d>", __svtypes_object_number);
+      svtypes_pkg::end_dump_object();
+      return result;
+    end
+    result = $sformatf("MigrationObservation#%0d{", __svtypes_object_number);
+    __svtypes_apply_fields(3, __svtypes_bytes, __svtypes_offset, __svtypes_result);
+    result = {result, __svtypes_result};
+    result = {result, "}"};
+    svtypes_pkg::end_dump_object();
+    return result;
+  endfunction
+
+  virtual function void svtypes_display();
+    $display("%s", svtypes_sprint());
+  endfunction
+
+  // Ordered wire fields shared by pack and unpack.
+  function int __svtypes_transfer_fields(ref byte unsigned bytes[$], ref int offset, input bit decode, input bit count_only = 0);
+    int count = 0;
+    string __svtypes_result = "";
+    count = __svtypes_apply_fields(count_only ? 0 : (decode ? 2 : 1), bytes, offset, __svtypes_result);
+    return count;
+  endfunction
+
+  function int __svtypes_wire_field_count();
+    byte unsigned unused_bytes[$];
+    int unused_offset = 0;
+    return __svtypes_transfer_fields(unused_bytes, unused_offset, 0, 1);
+  endfunction
+
+  virtual function void pack(ref byte unsigned bytes[$]);
+    svtypes_pkg::begin_pack_graph();
+    svtypes_pkg::pack_object_value(this, bytes);
+    svtypes_pkg::end_pack_graph();
+  endfunction
+
+  virtual function void pack_body(ref byte unsigned bytes[$]);
+    int __svtypes_offset = 0;
+    int __svtypes_header_start = bytes.size();
+    int __svtypes_count;
+    ensure_svtypes_object_number();
+    svtypes_pkg::register_object(this);
+    svtypes_pkg::pack_object_header("project_migration.MigrationObservation", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", 0, __svtypes_object_number, bytes);
+    __svtypes_count = __svtypes_transfer_fields(bytes, __svtypes_offset, 0);
+    bytes[__svtypes_header_start + 6] = __svtypes_count[7:0];
+    bytes[__svtypes_header_start + 7] = __svtypes_count[15:8];
+  endfunction
+
+  virtual function void unpack(ref byte unsigned bytes[$], ref int offset);
+    byte unsigned present;
+    svtypes_pkg::require_available(bytes, offset, 1, "object presence");
+    present = bytes[offset];
+    offset += 1;
+    if (present == 8'h02) begin
+      $fatal(2, "SvTypes cannot unpack root reference into existing MigrationObservation object");
+    end
+    if (present != 8'h01) begin
+      $fatal(2, "SvTypes cannot unpack null into existing MigrationObservation object");
+    end
+    unpack_body(bytes, offset);
+  endfunction
+
+  virtual function void unpack_body(ref byte unsigned bytes[$], ref int offset);
+    longint unsigned incoming_svtypes_object_number;
+    svtypes_pkg::unpack_object_header("project_migration.MigrationObservation", "866b5f1fc03656fdc86b2daa5c5c73259f8b874d55b653843eacfa1dea1b7369", svtypes_pkg::strict_decode_diagnostics() ? __svtypes_wire_field_count() : 0, incoming_svtypes_object_number, bytes, offset);
+    __svtypes_object_number = incoming_svtypes_object_number;
+    svtypes_pkg::register_object(this);
+    __svtypes_transfer_fields(bytes, offset, 1);
+  endfunction
 endclass
 
 // SvTypes typed channel helpers

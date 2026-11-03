@@ -235,8 +235,9 @@ def test_ordinary_sv_middle_members_share_final_helper_without_extra_projection(
     source = sv[PurePosixPath('c.svh')]
     assert '"sv://sv_root_middle_pkg/Middle.middle@svx_field_read": begin' in source
     assert '"sv://sv_root_middle_pkg/Middle#check": begin' in source
-    assert 'sv_root_middle_pkg::Middle::check()' in source
-    assert 'sv_root_middle_pkg::Middle::middle_value()' in source
+    assert 'typedef sv_root_middle_pkg::Middle Middle;' in source
+    assert 'Middle::check()' in source
+    assert 'Middle::middle_value()' in source
     view = python[PurePosixPath('svx_mirror/sv_root_child_pkg.py')]
     assert "'middle': 'sv://sv_root_middle_pkg/Middle.middle'" in view
     assert '    middle = ' in view and '    def middle_value(self):' in view
@@ -280,7 +281,8 @@ def test_sv_prefix_keeps_logical_root_but_allocates_only_first_boundary_mirror()
     root = sv[PurePosixPath('a.svh')]
     assert 'class A extends sv_root_pkg::A' in root
     assert 'longint unsigned __svx_remote_object_id;' in root
-    assert 'sv_root_prefix_pkg::Z::prefix_value()' in root
+    assert 'typedef sv_root_prefix_pkg::Z Z;' in root
+    assert 'Z::prefix_value()' in root
     assert 'sv://sv_root_prefix_pkg/Z.prefix_count@svx_field_read' in root
     assert 'virtual function int prefix_virtual()' in root
     assert 'register_static("sv://sv_root_prefix_pkg/Z", this)' in root

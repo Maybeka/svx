@@ -2,20 +2,44 @@
   "artifacts": [
     {
       "language": "python",
+      "module": "svx_bootstrap",
+      "path": "python/svx_bootstrap.py",
+      "sha256": "d96c5bf10a7965eafc05b0fa58ae0c271c19b35016db4efe63fd90d60dacafdd"
+    },
+    {
+      "language": "python",
       "module": "svx_mirror",
       "path": "python/svx_mirror/__init__.py",
-      "sha256": "814c008a5efae4f9e91f4ea29b30a861368ab2bfe10265d7b57a2c6006ad1724"
+      "sha256": "d1ca7746a9614fb4e85c779732540404e346026ffa1df48a4784c160f50973cd"
     },
     {
       "language": "python",
       "module": "svx_mirror.example_driver_pkg",
       "path": "python/svx_mirror/example_driver_pkg.py",
-      "sha256": "2f6ce8705bb4cde1dc8d561786b06b99358de3f99547b53c49c310a15c4429ca"
+      "sha256": "0bc44cb1bd1ac2cc0c16fe6d8423f284980a2ff461a32dc903a38336c5687e6e"
+    },
+    {
+      "language": "python",
+      "module": "svx_support",
+      "path": "python/svx_support/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_mirror",
+      "path": "python/svx_support/svx_mirror/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_mirror.example_driver_pkg",
+      "path": "python/svx_support/svx_mirror/example_driver_pkg.py",
+      "sha256": "c74bf952c3c33af921f05b9507fb23b0d18ce1cf2f4291139168a49953a85087"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "0ad12af3ee193499502d4304607756041dfbe84dbaf47f1499304608975d1fa9"
+      "sha256": "7597962a8c3962dd289c393c423aec235ac9d53680c3daddf19eb322eebeb05c"
     }
   ],
   "callables": [
@@ -68,6 +92,30 @@
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
     "schema_version": "2.0.0"
+  },
+  "member_locations": {
+    "sv://example_driver_pkg/BaseDriver#drive": [
+      {
+        "language": "python",
+        "line": 76,
+        "path": "python/svx_mirror/example_driver_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 46,
+        "path": "inheritance_mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 69,
+        "path": "inheritance_mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 81,
+        "path": "inheritance_mirrors.sv"
+      }
+    ]
   },
   "required_runtime_capabilities": [
     "svtypes.checked-encoding-descriptor.v1",

@@ -95,7 +95,7 @@ def test_inner_constructor_failure_can_unwind_waiting_outer_constructor():
 
 @pytest.mark.parametrize("failure_stage", [None, "before", "after"])
 @pytest.mark.parametrize("preallocated", [False, True])
-def test_generated_mirror_captures_typed_arguments_and_resumes_original_initializer(monkeypatch, failure_stage, preallocated):
+def test_generated_mirror_captures_typed_arguments_and_resumes_original_initializer(monkeypatch, generated_artifacts, failure_stage, preallocated):
     from types import SimpleNamespace
     import svtypes
     import svx
@@ -134,6 +134,7 @@ def test_generated_mirror_captures_typed_arguments_and_resumes_original_initiali
                   declarations.inheritance_parameter("label", svtypes.String)]
     source["constructor"]["parameters"] = parameters
     generated = inheritance.emit_python_mirrors(inheritance.parse_manifest(data))
+    generated_artifacts(generated)
     namespace = {}
     text = next(text for path, text in generated.items() if path.name != "__init__.py")
     exec(compile(text, "natural_constructor_mirror.py", "exec"), namespace)

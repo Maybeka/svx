@@ -1,3 +1,4 @@
+`include "svtypes_pkg.sv"
 `include "sv/svx_pkg.sv"
 `include "examples/project_migration/common/legacy_types.svh"
 `include "examples/project_migration/common/dut.sv"

@@ -169,17 +169,21 @@ svx export --package export_driver_pkg --integrated \
 
 将 tb_package_calls.sv 中的生成文件 include 改为
 `.tmp/sv-export-integrated/sv/source.sv`，只编译这个顶层，不再单独编译 drivers.sv。
-使用 CLI 打印的 Python 路径和 artifact manifest，仍执行 package_calls.py，
+include 路径加入 .tmp/sv-export-integrated/sv，使用 CLI 打印的 Python 路径与
+SVX_BOOTSTRAP 入口，仍执行 package_calls.py，
 检查相同3ns结果和 pass marker。原生类、枚举、interface 仅定义一次，调用记录
 和桥接在其后生成。两种布局均已实际编译运行。完整规则见
 [集成源码输出](../../docs/SVX_GENERATION_WORKFLOW.md#integrated-source-output)。
 
 默认分离布局的步骤如下：
 
-编译顺序是 drivers.sv、tb.sv，include 路径包含仓库根目录。顶层已经包含 SVX
+编译顺序是 drivers.sv、tb.sv，include 路径包含仓库根目录和
+examples/sv_export/generated。顶层已经包含 SVX
 与生成的 mirror，不要重复编译这些 package。仿真进程的 Python 路径需要包含
 examples/sv_export/generated/python 和仓库根目录；按照通用指南加载已准备好的
 原生运行库。
+普通运行设置 SVX_BOOTSTRAP 为 examples/sv_export/generated/python/svx_bootstrap.py，
+不要同时设置 SVX_ARTIFACT_MANIFEST。
 
 entry.py 创建真实 SV Driver，读写继承的 count 字段，调用耗时2ns且带有
 output/inout 参数的 task，并调用静态方法。

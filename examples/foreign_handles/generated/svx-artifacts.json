@@ -2,38 +2,92 @@
   "artifacts": [
     {
       "language": "python",
+      "module": "svx_bootstrap",
+      "path": "python/svx_bootstrap.py",
+      "sha256": "f0e9e9220de96f4608e2131e05c56b86a420b3d6e671a35eeb230ae4cd68c636"
+    },
+    {
+      "language": "python",
       "module": "svx_py",
       "path": "python/svx_py/__init__.py",
-      "sha256": "c8d51ff6c00dfcd1cb1e74a2af743bd14170bb76c874f0b0a3c5f19f8d32509d"
+      "sha256": "da7bb0ec5f4ae3727016793adb84f21d7fa314b114626ae8c0201a438e438f9c"
     },
     {
       "language": "python",
       "module": "svx_py.examples.foreign_handles.python_api",
       "path": "python/svx_py/examples/foreign_handles/python_api.py",
-      "sha256": "0aa66900fe7be0d12e721f2e946f26a24cdebdcbd2bba50729eb0784849e1548"
+      "sha256": "4f6f1c3da8db4164c55172ba6f2735e9cc4190ba13dae59c562edb4a05c53778"
+    },
+    {
+      "language": "python",
+      "module": "svx_support",
+      "path": "python/svx_support/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py",
+      "path": "python/svx_support/svx_py/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples",
+      "path": "python/svx_support/svx_py/examples/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples.foreign_handles",
+      "path": "python/svx_support/svx_py/examples/foreign_handles/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples.foreign_handles.python_api",
+      "path": "python/svx_support/svx_py/examples/foreign_handles/python_api.py",
+      "sha256": "94870eedea17140d83ab0f7ff3fc9c09ed2967b38423281870b5c607de378420"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_vif",
+      "path": "python/svx_support/svx_vif/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_vif.example_bus_if",
+      "path": "python/svx_support/svx_vif/example_bus_if/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_vif.example_bus_if.master",
+      "path": "python/svx_support/svx_vif/example_bus_if/master.py",
+      "sha256": "8aa7c81a1585cf15a25b32fc5bf917031056d22bd9c45c54904f3573bfc9d549"
     },
     {
       "language": "python",
       "module": "svx_vif",
       "path": "python/svx_vif/__init__.py",
-      "sha256": "aef6ca123df751e1e11d4e403bfd83ed491473b31826606956b66d003f5c2b3e"
+      "sha256": "dfd40ff31e9dcfe779f001dc38535e16884bdacc36eac390ab76e32cb1653823"
     },
     {
       "language": "python",
       "module": "svx_vif.example_bus_if",
       "path": "python/svx_vif/example_bus_if/__init__.py",
-      "sha256": "aef6ca123df751e1e11d4e403bfd83ed491473b31826606956b66d003f5c2b3e"
+      "sha256": "dfd40ff31e9dcfe779f001dc38535e16884bdacc36eac390ab76e32cb1653823"
     },
     {
       "language": "python",
       "module": "svx_vif.example_bus_if.master",
       "path": "python/svx_vif/example_bus_if/master.py",
-      "sha256": "cdb4bdd62ec23c99debb9d6720c2dfff492c43eca1e0f3982f7dbd20412083e7"
+      "sha256": "99e87384b0e3b0ea750237b9609a702c13381bc90adf192e53aed684b0f05997"
     },
     {
       "language": "systemverilog",
       "path": "mirrors.sv",
-      "sha256": "a8db59176023d881c45d47e7a1bdc7df09190934282a4cb099486469ae41a3c9"
+      "sha256": "8d93fee4c56d38136ca9d188ae647af729e393ed63eb0782782da00b025c34a6"
     }
   ],
   "callables": [
@@ -52,7 +106,7 @@
           "encoding_fingerprint": "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b",
           "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.request"
         },
-        "sv_class": "SVXCall_0b6441f07486f0ac15e8_Request",
+        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_foreign_x5f_handles_x2f_HandlePortal_x23_exercise_x5f_bus_Request",
         "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.request"
       },
       "response_fields": [
@@ -68,7 +122,7 @@
           "encoding_fingerprint": "b86f714459126814047bd0e5798a8f0a7e7825fadf5bc56aecbed9e512db776b",
           "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.response"
         },
-        "sv_class": "SVXCall_6bb62ea46d23364d236c_Response",
+        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_foreign_x5f_handles_x2f_HandlePortal_x23_exercise_x5f_bus_Response",
         "unified_type_name": "svx.call.dff193ae9f6651579aa2c5f6d6f8be83783bbcfcd50c28f1e81787c0d3714844.response"
       }
     },
@@ -87,7 +141,7 @@
           "encoding_fingerprint": "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba",
           "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.request"
         },
-        "sv_class": "SVXCall_ce732f2bbaebb926684d_Request",
+        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_foreign_x5f_handles_x2f_HandlePortal_x23_retain_x5f_packet_Request",
         "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.request"
       },
       "response_fields": [
@@ -103,7 +157,7 @@
           "encoding_fingerprint": "b1800067fe651b12979ff5243f7de45b493787a9e6a9e940d38b77ea2b954fba",
           "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.response"
         },
-        "sv_class": "SVXCall_7e64c571b8c6a2bf1d36_Response",
+        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_foreign_x5f_handles_x2f_HandlePortal_x23_retain_x5f_packet_Response",
         "unified_type_name": "svx.call.92406aabf22a3bb8bdcaf79e282d108e06cfd36ea4f7c2de2e4df2652fd0e2fc.response"
       }
     }
@@ -163,6 +217,52 @@
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
     "schema_version": "2.0.0"
+  },
+  "member_locations": {
+    "py://examples/foreign_handles/HandlePortal#exercise_bus": [
+      {
+        "language": "python",
+        "line": 38,
+        "path": "python/svx_py/examples/foreign_handles/python_api.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 1606,
+        "path": "mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 1679,
+        "path": "mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 1741,
+        "path": "mirrors.sv"
+      }
+    ],
+    "py://examples/foreign_handles/HandlePortal#retain_packet": [
+      {
+        "language": "python",
+        "line": 35,
+        "path": "python/svx_py/examples/foreign_handles/python_api.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 1564,
+        "path": "mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 1655,
+        "path": "mirrors.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 1717,
+        "path": "mirrors.sv"
+      }
+    ]
   },
   "required_runtime_capabilities": [
     "svtypes.checked-encoding-descriptor.v1",

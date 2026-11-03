@@ -8,6 +8,71 @@ arguments in the project's build script, not in several copied check recipes.
 
 ## Choose The Operation
 
+### Generated Implementation Edits
+
+`svx export` writes editable Python/SV implementations separately from execution
+support. Python contracts live under `python/svx_support`; SV call records live
+under `support/` beside the generated SV roots. Keep those support files when
+building; they are executable dependencies, not optional diagnostic sidecars.
+Generated VIF endpoints expose short `svx_core_*` functions/tasks containing the
+actual signal access or native method call. Their payload dispatch methods live
+in support includes in the same class scope. For a contract-preserving access
+repair, edit the core function rather than the request/response machinery.
+Mirrored class methods, static methods and exported package functions/tasks use
+the same layout. Their SV core names include the source class or package and
+member name; a numeric suffix distinguishes collisions.
+Class fields similarly have a short `svx_core_field_*` binding to the original
+SV variable by `ref`. Path operations live in type-parameterized support kernels;
+the binding does not allocate another field or copy the complete value.
+For a selected method, the optional artifact inventory's `member_locations`
+table points to its generated Python call and SV core operation. These are
+generation-time locations, not runtime authority; manual edits can shift lines.
+
+Compile the generated roots using `-F generated/sources.f` (or
+`-F generated/sv/sources.f` for integrated output). The filelist owns their order
+and include search path. Do not compile `.svh` fragments as separate units.
+Keep the original project inputs and framework runtime in their existing build
+positions; the generated filelist is not a replacement for the entire build.
+
+For startup without an artifact inventory, set `SVX_BOOTSTRAP` to
+`generated/python/svx_bootstrap.py` and leave `SVX_ARTIFACT_MANIFEST` unset.
+Call the generated SV initialization entry after `svx_init()` as usual.
+The bootstrap imports declarations and finishes deferred bindings without
+reading artifact JSON or comparing generated-file hashes. The legacy artifact
+startup path retains its existing validation behavior.
+
+A local implementation repair that preserves signatures and transport contracts
+can be made directly in the corresponding core file. Reload Python in a fresh
+simulation; recompile changed SV. Neither action requires regeneration or hash
+updates when using bootstrap startup. Changing a wire layout still requires
+matching implementations on both ends. Essential reference and decoding checks
+remain; this is not a promise that all SvTypes diagnostics are disabled.
+Normal SVX codec use does not compare generated field-type descriptor snapshots.
+To explicitly audit registered snapshots against the current Python codecs, call
+`svx.validate_generated_contracts()`. It reports affected members, but cannot
+prove that manually edited SV code has the same layout. Explicit artifact checks
+and SvTypes checked decoding remain distinct operations.
+
+Explicit generation `--check` still reports differences from generator output.
+When a previous generation baseline or artifact snapshot is available, regeneration refuses to replace
+or retire files that differ from that snapshot, unless they already exactly
+match the new output. Use a fresh output directory to review changes, or pass
+`--overwrite-generated` to explicitly permit replacement. This is a generation
+protection only, not a runtime requirement. Without a usable baseline, SVX
+cannot identify edits, so it conservatively refuses to replace differing files
+or retire old files without explicit permission. For a single SV output, a
+matching recorded artifact snapshot can also establish the previous state.
+This also applies to the single-file `--sv-out` form, including when no
+artifact manifest is requested. Its adjacent hidden snapshot is written during
+generation; existing outputs created before this snapshot existed are treated
+conservatively on their first regeneration.
+The direct generated-source writers keep one current baseline too, and accept
+`overwrite=True` for explicit replacement. These generation records are not
+runtime inputs and require no manual checksum maintenance.
+These manual implementation edits are distinct from changing discovery inputs
+in the table below. Regeneration is a separate action and may replace generated
+code when explicitly permitted; preserve a local patch before replacement.
+
 | Change | Required refresh | SV/native rebuild |
 |---|---|---|
 | Tracked Python implementation only | Discovery, then generation; matching bridges keep their timestamps | No |
@@ -176,8 +241,9 @@ svx export --type types_pkg::State types_pkg::Packet -f design.f --out generated
 ```
 
 The output contains inheritance.json and its discovery record, python/,
-mirrors.sv and artifacts.json. Add python/ to the simulation import path and
-compile mirrors.sv after the original classes and runtime packages. Before calling
+mirrors.sv, support/, sources.f and artifacts.json. Add python/ to the simulation
+import path, configure its svx_bootstrap.py as described above, and compile
+the generated -F sources.f after the original classes and runtime packages. Before calling
 generated constructors/methods, explicitly register their factories and dispatchers:
 
 ```systemverilog

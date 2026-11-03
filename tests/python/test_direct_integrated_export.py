@@ -44,6 +44,10 @@ def test_integrated_package_preserves_original_types_and_record_order(source, tm
     assert main(args, out=stream) == 0
     assert 'compile in place of supplied SV sources' in stream.getvalue()
     text = (output / 'sv/source.sv').read_text(encoding='utf-8')
+    assert 'class SVXCall_' not in text
+    for support in (output / 'sv/support').rglob('*.svh'):
+        text = text.replace(f'`include "{support.relative_to(output / "sv").as_posix()}"',
+                            support.read_text(encoding='utf-8'))
     assert text.count('package svx_call_records_pkg;') == 1
     assert text.index('endpackage') < text.index('package svx_call_records_pkg;')
     assert text.index('package svx_call_records_pkg;') < text.index('module original_top;')

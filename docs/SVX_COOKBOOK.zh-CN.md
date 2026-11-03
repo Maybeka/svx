@@ -730,7 +730,7 @@ endmodule
 | --- | --- |
 | 原工程源码 | 原来的 -f examples/sv_export/design.f，先于启动顶层分析 |
 | 新增顶层 | tb_package_smoke.sv，选择 tb_package_smoke 为仿真顶层 |
-| include 路径 | SVX 仓库根目录与工程根目录；本例两者相同 |
+| include 路径 | SVX 仓库根目录、工程根目录，以及 examples/sv_export/generated 支持文件根目录 |
 | 生成桥接 | 顶层已 include mirrors.sv，不要再次独立编译 |
 | 运行库 package | 顶层已 include svx_pkg.sv；若原工程已编译它，删掉此 include |
 | 原生库 | 按已有 DPI 加载配置使用 svx libs 查询到的运行库 |
@@ -988,8 +988,11 @@ symbol 解析声明类，避免镜像与源类相互导入；同名派生方法�
   `svtypes.external-field-storage.v1`；只有最终投影目标中的字段驻留在 SV。
 - 同一 receiver/method 的同步回调循环会被检测并拒绝，避免两个语言互相等待。
 
-生成后将 `SVX_ARTIFACT_MANIFEST` 指向 artifact manifest；在 build gate 中运行
-同一命令加 `--check`，拒绝过期生成物。
+普通运行将 `SVX_BOOTSTRAP` 指向生成的 `python/svx_bootstrap.py`，不同时设置
+`SVX_ARTIFACT_MANIFEST`；原有 artifact 启动方式保留严格校验。
+在 build gate 中运行同一生成命令加 `--check`，拒绝过期生成物。
+核心与支持文件、人工修补和再生成保护的规则统一见
+[生成工作流](SVX_GENERATION_WORKFLOW.md#generated-implementation-edits)。
 
 ### 9.4 传递外部 class handle 与 virtual interface
 

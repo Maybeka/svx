@@ -1,3 +1,4 @@
+`include "svtypes_pkg.sv"
 `include "sv/svx_pkg.sv"
 
 module tb;
