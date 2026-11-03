@@ -73,12 +73,20 @@ def import_compile_configuration(recipe: dict, root: Path | None = None) -> Comp
     The JSON command input is {directory, arguments}; arguments are the actual
     compiler argv including its executable, not a shell script or make command.
     """
-    if (not isinstance(recipe, dict) or set(recipe) - {'directory', 'commands', 'filelists', 'relative_filelists'}
-            or not isinstance(recipe.get('directory', '.'), str)
-            or any(not isinstance(recipe.get(key, []), list)
-                   or any(not isinstance(p, str) or not p or '\0' in p for p in recipe.get(key, []))
-                   for key in ('commands', 'filelists', 'relative_filelists'))):
-        raise SVXInheritanceError('invalid build input recipe')
+    if not isinstance(recipe, dict):
+        raise SVXInheritanceError('invalid build input recipe: expected an object')
+    unknown = set(recipe) - {'directory', 'commands', 'filelists', 'relative_filelists'}
+    if unknown:
+        raise SVXInheritanceError(f'invalid build input recipe: unexpected fields {sorted(unknown)}')
+    if not isinstance(recipe.get('directory', '.'), str):
+        raise SVXInheritanceError('invalid build input recipe: directory must be a string')
+    for key in ('commands', 'filelists', 'relative_filelists'):
+        items = recipe.get(key, [])
+        if not isinstance(items, list):
+            raise SVXInheritanceError(f'invalid build input recipe: {key} must be a list')
+        for index, item in enumerate(items):
+            if not isinstance(item, str) or not item or '\0' in item:
+                raise SVXInheritanceError(f'invalid build input recipe: {key}[{index}] must be a nonempty path without NUL, got {item!r}')
     root = (root or Path.cwd()).resolve()
     directory = (root / recipe.get('directory', '.')).resolve()
     result = CompileConfiguration([], [], {}, [], [], ignored=[])
@@ -238,9 +246,16 @@ def import_compile_configuration(recipe: dict, root: Path | None = None) -> Comp
 
 
 def replay_build_record(record: dict, root: Path) -> CompileConfiguration:
-    if not isinstance(record, dict) or set(record) != {'recipe', 'configuration'}:
-        raise SVXInheritanceError('invalid imported build configuration record')
+    if not isinstance(record, dict):
+        raise SVXInheritanceError('invalid imported build configuration record: expected an object')
+    expected = {'recipe', 'configuration'}
+    if set(record) != expected:
+        raise SVXInheritanceError(f'invalid imported build configuration record: missing fields {sorted(expected - set(record))}; unexpected fields {sorted(set(record) - expected)}')
     configuration = import_compile_configuration(record['recipe'], root)
-    if configuration.as_dict(root) != record['configuration']:
-        raise SVXInheritanceError('imported build configuration changed; refresh discovery and generated artifacts')
+    current = configuration.as_dict(root)
+    if current != record['configuration']:
+        previous = record['configuration']
+        changed = (sorted(key for key in set(current) | set(previous) if current.get(key) != previous.get(key))
+                   if isinstance(previous, dict) else ['configuration (expected an object)'])
+        raise SVXInheritanceError(f'imported build configuration changed in {changed}; refresh discovery and generated artifacts')
     return configuration

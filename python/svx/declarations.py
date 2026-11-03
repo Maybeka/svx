@@ -891,6 +891,17 @@ def manifest_from_declarations(
     sv_exclude_constants = tuple(sv_exclude_constants)
     sv_callable_targets = tuple(sv_callable_targets)
     sv_exclude_callables = tuple(sv_exclude_callables)
+    for option, values in (
+        ('--class', sv_class_targets), ('--package', sv_package_targets),
+        ('--exclude-class', sv_exclude_classes), ('--member', sv_member_targets),
+        ('--exclude-member', sv_exclude_members), ('--type', sv_type_targets),
+        ('--exclude-type', sv_exclude_types), ('--constant', sv_constant_targets),
+        ('--exclude-constant', sv_exclude_constants), ('--callable', sv_callable_targets),
+        ('--exclude-callable', sv_exclude_callables),
+    ):
+        invalid = [index for index, value in enumerate(values) if not isinstance(value, str) or not value]
+        if invalid:
+            raise SVXInheritanceError(f'{option} requires nonempty string patterns; invalid indices {invalid}')
     selecting_sv = bool(sv_class_targets or sv_package_targets)
     direct_selection = bool(selecting_sv or sv_type_targets or sv_constant_targets or sv_callable_targets)
     if sv_exclude_callables and not (sv_package_targets or sv_callable_targets):
@@ -1022,7 +1033,8 @@ def manifest_from_declarations(
             vif_enricher=_semantic_vif_enricher(interface_facts,
                 value_annotations=_source_value_annotations(python_modules), value_exports=auto_values))
         validate_sv_declarations([*sv_classes, *sv_context], sv_source_files, parse_options=parse_options,
-                                 compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values())
+                                 compilation_unit=sv_compilation_unit, proxy_context=python_ancestors.values(),
+                                 value_types=tuple(auto_values.declarations.values()) if auto_values else ())
         _enrich_virtual_interface_handles([*source_declarations, *callable_context], interface_facts)
     declared_by_id = {**{item["canonical_id"]: item for item in sv_context}, **python_ancestors, **{
         item.get("canonical_id"): item

@@ -24,6 +24,71 @@ def generation_args(root, manifest):
             '--artifact-manifest', str(root / 'generated' / 'artifacts.json')]
 
 
+def test_provenance_reports_all_empty_excluded_member_indices(tmp_path):
+    manifest, _, evidence, _, record = setup_record(tmp_path)
+    record['configuration']['sv_selection'] = {
+        'classes': [], 'packages': ['example'], 'exclude_classes': [],
+        'recursive_packages': False, 'exclude_members': ['', 'Driver.good', ''],
+    }
+    evidence.write_text(json.dumps(record), encoding='utf-8')
+    with pytest.raises(SVXInheritanceError, match=r'configuration\.sv_selection\.exclude_members.*\[0, 2\]'):
+        load_manifest(manifest)
+
+
+@pytest.mark.parametrize(('field', 'value', 'message'), [
+    ('sv_sources', ['ok.sv', ''], r'configuration\.sv_sources\[1\].*nonempty'),
+    ('sv_include_dirs', ['/absolute'], r'configuration\.sv_include_dirs\[0\].*relative'),
+    ('sv_predefines', {'FLAG': 1}, r'configuration\.sv_predefines.*FLAG'),
+    ('source_mode', 'invalid', r'configuration\.source_mode'),
+    ('python_selections', [{'module': 'pkg..bad', 'path': 'file.py'}], r'python_selections\[0\]\.module'),
+    ('python_namespaces', [{'module': 'pkg', 'paths': ['']}], r'python_namespaces\[0\]\.paths\[0\]'),
+])
+def test_provenance_configuration_errors_identify_field(tmp_path, field, value, message):
+    manifest, _, evidence, _, record = setup_record(tmp_path)
+    record['configuration'][field] = value
+    evidence.write_text(json.dumps(record), encoding='utf-8')
+    with pytest.raises(SVXInheritanceError, match=message):
+        load_manifest(manifest)
+
+
+def test_empty_export_selectors_fail_before_discovery(tmp_path):
+    from svx.declarations import manifest_from_declarations
+
+    with pytest.raises(SVXInheritanceError, match=r'--exclude-member.*\[0, 1\]'):
+        manifest_from_declarations(sv_exclude_members=['', ''])
+
+
+def test_empty_cli_exclusions_are_rejected_before_output(tmp_path):
+    source = tmp_path / 'input.sv'
+    source.write_text('package p; class C; endclass endpackage\n', encoding='utf-8')
+    output = tmp_path / 'generated'
+    with pytest.raises(SVXInheritanceError, match=r'--exclude-member.*\[0, 1\]'):
+        main(['export', '--package', 'p', '--sv-source', str(source), '--out', str(output),
+              '--exclude-member', '', ''], out=io.StringIO())
+    assert not (output / 'inheritance.json').exists()
+
+
+@pytest.mark.parametrize(('marker', 'message'), [
+    ({'schema_version': 'bad', 'path': 'evidence.json'}, r'marker: schema_version.*bad'),
+    ({'schema_version': '1.0.0', 'path': '/absolute'}, r'marker: path.*absolute'),
+    ({'path': 'evidence.json'}, r'marker: missing fields.*schema_version'),
+])
+def test_invalid_marker_identifies_reason(tmp_path, marker, message):
+    manifest, _, _, data, _ = setup_record(tmp_path)
+    data['discovery_provenance'] = marker
+    manifest.write_text(json.dumps(data), encoding='utf-8')
+    with pytest.raises(SVXInheritanceError, match=message):
+        load_manifest(manifest)
+
+
+def test_invalid_source_digest_identifies_index_and_field(tmp_path):
+    manifest, _, evidence, _, record = setup_record(tmp_path)
+    record['sources'][0]['sha256'] = 'bad'
+    evidence.write_text(json.dumps(record), encoding='utf-8')
+    with pytest.raises(SVXInheritanceError, match=r'sources\[0\]\.sha256.*64-character'):
+        load_manifest(manifest)
+
+
 def test_generation_fingerprints_reuse_only_current_validated_bytes(tmp_path, monkeypatch):
     import svx.cli
 

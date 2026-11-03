@@ -9,6 +9,15 @@ from svx.compile_config import import_compile_configuration, replay_build_record
 from svx.errors import SVXInheritanceError
 
 
+def test_build_configuration_validation_identifies_field_and_index(tmp_path):
+    with pytest.raises(SVXInheritanceError, match=r'filelists\[1\].*nonempty'):
+        import_compile_configuration({'filelists': ['ok.f', '']}, tmp_path)
+    with pytest.raises(SVXInheritanceError, match=r'unexpected fields.*unknown'):
+        import_compile_configuration({'unknown': []}, tmp_path)
+    with pytest.raises(SVXInheritanceError, match=r'missing fields.*recipe'):
+        replay_build_record({'configuration': {}}, tmp_path)
+
+
 def test_large_filelist_keeps_order_with_linear_duplicate_checks(tmp_path, monkeypatch):
     count = 512
     sources = [tmp_path / f'unit_{index}.sv' for index in range(count)]

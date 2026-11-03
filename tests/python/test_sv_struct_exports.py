@@ -15,6 +15,70 @@ from svx.errors import SVXInheritanceError
 pytest.importorskip('pyslang')
 
 
+def test_cross_package_aliased_value_collections_and_excluded_base_field(tmp_path):
+    source = tmp_path / 'values.sv'
+    source.write_text('''
+package value_pkg;
+  typedef enum bit [1:0] { IDLE, BUSY } state_t;
+  typedef struct { int a; bit [7:0] b; } item_t;
+endpackage
+package target_pkg;
+  import value_pkg::*;
+  typedef state_t alias_state_t;
+  typedef item_t alias_item_t;
+  typedef alias_item_t item_queue_t[$];
+  class Base; int excluded; endclass
+  class Driver extends Base;
+    alias_state_t states[$];
+    alias_item_t items[$];
+    alias_item_t dynamic_items[];
+    alias_item_t fixed_items[3];
+    alias_item_t mapped_items[int];
+    alias_state_t mapped_states[int];
+    function item_queue_t echo(input item_queue_t value); return value; endfunction
+  endclass
+endpackage
+''', encoding='utf-8')
+    output = tmp_path / 'generated'
+    assert main(['export', '--package', 'target_pkg', '--sv-source', str(source),
+                 '--exclude-member', 'target_pkg::Base.excluded', '--out', str(output)],
+                out=io.StringIO()) == 0
+    manifest = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
+    driver = next(item for item in manifest['classes'] if item['symbol'] == 'target_pkg::Driver')
+    assert {field['name'] for field in driver['fields']} == {
+        'states', 'items', 'dynamic_items', 'fixed_items', 'mapped_items', 'mapped_states'}
+    base = next(item for item in manifest['classes'] if item['symbol'] == 'target_pkg::Base')
+    assert not base.get('fields')
+    source.write_text(source.read_text(encoding='utf-8').replace(
+        'alias_state_t states[$]', 'alias_item_t states[$]'), encoding='utf-8')
+    from svx.sv_scan import validate_sv_declarations
+    with pytest.raises(SVXInheritanceError, match='states field type.*does not match'):
+        validate_sv_declarations(manifest['classes'], [source],
+                                 value_types=parse_value_exports(manifest['value_types']))
+
+
+def test_cross_package_class_scoped_enum_queue(tmp_path):
+    source = tmp_path / 'class_enum.sv'
+    source.write_text('''
+package source_pkg;
+  class Owner; typedef enum bit [1:0] { IDLE, BUSY } state_t; endclass
+endpackage
+package target_pkg;
+  typedef source_pkg::Owner::state_t alias_state_t;
+  class Base; int excluded; endclass
+  class Driver extends Base; alias_state_t states[$]; endclass
+endpackage
+''', encoding='utf-8')
+    output = tmp_path / 'generated'
+    assert main(['export', '--package', 'target_pkg', '--sv-source', str(source),
+                 '--exclude-member', 'target_pkg::Base.excluded', '--out', str(output)],
+                out=io.StringIO()) == 0
+    manifest = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
+    driver = next(item for item in manifest['classes'] if item['symbol'] == 'target_pkg::Driver')
+    assert [field['name'] for field in driver['fields']] == ['states']
+    assert any(item['symbol'] == 'source_pkg::Owner::state_t' for item in manifest['value_types'])
+
+
 def test_native_runtime_fixture_generation_only(tmp_path, monkeypatch):
     capabilities = svtypes.runtime_capabilities()
     monkeypatch.setattr(svtypes, 'runtime_capabilities', lambda: SimpleNamespace(

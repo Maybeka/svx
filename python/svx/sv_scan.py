@@ -1040,7 +1040,7 @@ def discover_sv_class_declarations(
 @with_instance_discovery
 def validate_sv_declarations(
     declarations: Iterable[dict[str, object]], paths: Iterable[Path], *, parse_options=None,
-    compilation_unit=False, proxy_context=()
+    compilation_unit=False, proxy_context=(), value_types=()
 ) -> None:
     """Require SV manifest declarations to agree with parsed source facts."""
 
@@ -1142,8 +1142,11 @@ def validate_sv_declarations(
                         f"SV declaration {symbol}.{name} parameter {index} expects "
                         f"{source_parameter.direction} {source_parameter.name}"
                     )
-    _validate_member_types(declarations, paths, facts, parse_options=parse_options,
-                           compilation_unit=compilation_unit, proxy_context=proxy_context)
+    from .value_exports import value_modules
+    with value_modules(value_types, codegen=True):
+        _validate_member_types(declarations, paths, facts, parse_options=parse_options,
+                               compilation_unit=compilation_unit, proxy_context=proxy_context,
+                               value_types=value_types)
 
 
 def _declared_sv_type(value: object, handle: object = None) -> str | None:
@@ -1443,15 +1446,17 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
 
 
 def _validate_member_types(declarations, paths, facts, *, parse_options=None, compilation_unit=False,
-                           proxy_context=()) -> None:
+                           proxy_context=(), value_types=()) -> None:
     """Compare language types without inferring or replacing SvTypes codecs."""
 
     scope_probes = {}
     from pyslang.ast import Compilation, MethodFlags
     from .inheritance import (
         _sv_specialization_value, _type_binding, _sv_collection_typedef,
-        _handle_binding, _handle_adapter_name, _sv_native_handle_collection_typedefs,
+        _handle_binding, _handle_adapter_name, _sv_native_handle_collection_typedefs, _codec_from_spec,
     )
+    import svtypes
+    from .value_exports import native_value_name, value_modules
 
     syntax = _pyslang()
     compilation = Compilation()
@@ -1475,6 +1480,15 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             continue
         checks = []
         value_typedefs = {}
+        named_value_typedefs = {}
+        for value in value_types:
+            data = value.as_dict()
+            if value.source_scope is not None or data['schema']['type_name'] != value.module + '.' + value.qualname:
+                continue
+            kind = data['schema']['kind']
+            if kind in {'struct', 'enum'}:
+                alias = native_value_name(value.symbol) + ('_t' if kind == 'struct' else '')
+                named_value_typedefs[alias] = f'typedef {value.native_reference} {alias};'
 
         def expected_type(raw_binding, handle):
             expected = _declared_sv_type(raw_binding, handle)
@@ -1490,6 +1504,17 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             if (isinstance(raw_binding, dict) and handle is None
                     and ("svtypes" in raw_binding or "python" in raw_binding)):
                 binding = _type_binding(raw_binding, f"SV declaration {symbol} signature", allow_void=False)
+                native_expression = svtypes.sv_type_expression(_codec_from_spec(binding.runtime_spec()))
+                required_typedefs = {
+                    name: typedef for name, typedef in named_value_typedefs.items()
+                    if re.search(r'(?<![a-zA-Z0-9_$])' + re.escape(name) + r'(?![a-zA-Z0-9_$])', native_expression)
+                }
+                if required_typedefs:
+                    with value_modules(value_types, codegen=False):
+                        original_expression = svtypes.sv_type_expression(_codec_from_spec(binding.runtime_spec()))
+                    if binding.sv == original_expression:
+                        value_typedefs.update(required_typedefs)
+                        binding = replace(binding, sv=native_expression)
                 alias = _sv_collection_typedef(binding)
                 if alias is not None:
                     value_typedefs[alias[0]] = alias[1]
@@ -1643,8 +1668,9 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             expected = (expected_method.returnType if argument_index is None
                         else expected_method.arguments[0].type)
             if actual.isError or expected.isError:
+                type_location = location if location.endswith('type') else f'{location} type'
                 raise SVXInheritanceError(
-                    f"cannot resolve SV declaration {symbol}.{name} {location} type; "
+                    f"cannot resolve SV declaration {symbol}.{name} {type_location}; "
                     "supply its type dependencies in the scanned sources"
                 )
             if not actual.isMatching(expected):

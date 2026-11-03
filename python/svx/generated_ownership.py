@@ -37,13 +37,20 @@ def protect_baseline(output_dir, inventory, sources, obsolete, *, overwrite=Fals
         return
     try:
         raw = json.loads(path.read_text(encoding='utf-8'))
-        if not isinstance(raw, dict) or set(raw) != {'schema', 'files'} or raw['schema'] != 'svx-generated-baseline/v1':
-            raise ValueError('unrecognized schema')
+        if not isinstance(raw, dict):
+            raise ValueError('root must be an object')
+        required = {'schema', 'files'}
+        if set(raw) != required:
+            raise ValueError(f'missing fields {sorted(required - set(raw))}; unexpected fields {sorted(set(raw) - required)}')
+        if raw['schema'] != 'svx-generated-baseline/v1':
+            raise ValueError(f'schema must be "svx-generated-baseline/v1", got {raw["schema"]!r}')
         files = raw['files']
-        if not isinstance(files, dict) or any(not isinstance(name, str) or not isinstance(digest, str)
-            or len(digest) != 64 or any(char not in '0123456789abcdef' for char in digest)
-            for name, digest in files.items()):
-            raise ValueError('invalid file digest table')
+        if not isinstance(files, dict):
+            raise ValueError('files must be an object mapping paths to SHA-256 digests')
+        for name, digest in files.items():
+            if not isinstance(name, str) or not isinstance(digest, str) or len(digest) != 64 or any(
+                    char not in '0123456789abcdef' for char in digest):
+                raise ValueError(f'files[{name!r}] must be a 64-character lowercase hexadecimal SHA-256 digest')
     except (OSError, ValueError) as error:
         raise SVXInheritanceError(f'invalid generated baseline {path}: {error}') from error
     previous = {'artifacts': [{'path': name, 'sha256': digest} for name, digest in files.items()]}
