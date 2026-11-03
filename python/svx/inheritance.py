@@ -3558,7 +3558,7 @@ def _emit_sv_vif_operation_dispatch_case(operation: VifOperation) -> list[str]:
         assert method.return_type is not None
         result.extend(
             [
-                f"          {method.return_type.sv} result;",
+                f"          {_sv_value_type(method.return_type)} result;",
                 f"          {_call_record_class_name(method.canonical_id, 'response')} response_value;",
                 "          if (bytes.size() != 0) begin",
                 "            ok = 0;",
@@ -3584,7 +3584,7 @@ def _emit_sv_vif_operation_dispatch_case(operation: VifOperation) -> list[str]:
     result.extend(
         [
             f"          {_call_record_class_name(method.canonical_id, 'request')} request_value;",
-            f"          {parameter.type_binding.sv} value_to_write;",
+            f"          {_sv_value_type(parameter.type_binding)} value_to_write;",
             "          request_value = new();",
             "          request_value.unpack(bytes, offset);",
             f"          value_to_write = request_value.{parameter.name};",
