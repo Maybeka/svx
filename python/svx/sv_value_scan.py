@@ -10,6 +10,7 @@ from types import new_class
 import svtypes
 
 from .errors import SVXInheritanceError
+from .export_diagnostics import attempt
 from .value_exports import parse_constant_exports, parse_value_exports, value_modules, _schema_annotation, value_key, native_value_reference
 
 
@@ -212,16 +213,32 @@ class SourceValues:
                 result['handle'] = handle
             return result
 
-        parameters = []
-        for argument in actual.arguments:
+        def parameter(argument):
             direction = {'In': 'input', 'Out': 'output', 'InOut': 'inout', 'Ref': 'ref'}[argument.direction.name]
             if direction == 'ref':
                 raise SVXInheritanceError(f'SV callable {symbol}.{argument.name} uses unsupported ref/const ref')
-            parameters.append({'name': argument.name, 'direction': direction,
-                               **value_type(argument.type, f'SV callable {symbol}.{argument.name}')})
+            native = argument.type.canonicalType
+            while native is not None:
+                if direction == 'output' and native.kind.name == 'DPIOpenArrayType':
+                    raise SVXInheritanceError(
+                        f'SV callable {symbol}.{argument.name}: output DPI open array cannot be '
+                        'exported as a dynamic array; IEEE 1800 section 7.7 prohibits dynamic '
+                        'array or queue actual arguments for output DPI open-array formals. '
+                        'Use a fixed-size SV wrapper, or inout if the native API supports it. '
+                        'Ordinary SV output dynamic arrays are supported.')
+                native = getattr(native, 'elementType', None)
+                if native is not None:
+                    native = native.canonicalType
+            return {'name': argument.name, 'direction': direction,
+                    **value_type(argument.type, f'SV callable {symbol}.{argument.name}')}
+
+        parameters = [binding for argument in actual.arguments
+                      if (binding := attempt(parameter, argument)) is not None]
         timing = actual.subroutineKind.name.lower()
         result = ({'type': 'void'} if timing == 'task' or str(actual.returnType) == 'void'
-                  else value_type(actual.returnType, f'SV callable {symbol} return'))
+                  else attempt(value_type, actual.returnType, f'SV callable {symbol} return'))
+        if result is None:
+            return
         method = {'canonical_id': owner + '#' + actual.name, 'name': actual.name,
                   'parameters': parameters, 'return_type': result['type'], 'timing': timing,
                   'static': True, 'virtual': False, 'pure_virtual': False}
@@ -530,7 +547,7 @@ class SourceValues:
             if name in class_contexts:
                 self.register_class_values(*class_contexts[name])
             with self.instance_context(instance_contexts.get(name)):
-                self.annotation(candidates[name], where=f'SV value type {name}',
+                attempt(self.annotation, candidates[name], where=f'SV value type {name}',
                     public_symbol=name if not name.startswith(('$unit[', '$instance[')) else None)
         if not (constants or callables or owned):
             return
@@ -562,7 +579,7 @@ class SourceValues:
             if name in class_contexts:
                 self.register_class_values(*class_contexts[name])
             with self.instance_context(instance_contexts.get(name)):
-                self.constant(constant_candidates[name], symbol=name if not name.startswith(('$unit[', '$instance[')) else None)
+                attempt(self.constant, constant_candidates[name], symbol=name if not name.startswith(('$unit[', '$instance[')) else None)
         selected_callables = {name for name in callable_candidates if name.split('::')[0] in owned}
         for pattern in callables:
             matches = {name for name in callable_candidates if fnmatchcase(
@@ -582,4 +599,4 @@ class SourceValues:
                     key=lambda item: (item[0].genericClass is None, item[1])):
                 self.register_class_values(native, prefix)
         for name in sorted(selected_callables):
-            self.callable(callable_candidates[name])
+            attempt(self.callable, callable_candidates[name])

@@ -557,6 +557,13 @@ the original function name from svx_mirror.<package>; there is no user-visible
 carrier class or object-construction step. Importing a package does not request
 export of the functions it imports. The original SV declaration, static local
 variables, package state and scheduling remain native.
+
+Export reports up to ten independent discovery errors before stopping. Use
+`--max-errors 20` to increase the limit, or `--max-errors 1` to stop on the first
+error. Each diagnostic identifies the affected declaration or member and its
+reason. Unsafe-to-continue parsing or dependency failures can stop discovery
+earlier. Any error prevents publication of generated code; existing output files
+are not replaced with partial results.
 When a public function name collides with a generated support import or builtin,
 only generated internal references receive private aliases; the public function
 name, formal names, contract strings and source formatting are retained.
@@ -564,6 +571,15 @@ name, formal names, contract strings and source formatting are retained.
 Every formal parameter remains in its source order. Pass ordinary values for
 inputs, svx.Output() for outputs and svx.Inout(value) for inouts. Functions return
 their ordinary result; tasks return None and execute their delay/wait in SV.
+For a package DPI-C import, an input or inout open array such as
+`input int unsigned values[]` is exposed as a SvTypes dynamic array; its DPI C
+implementation remains the project's responsibility and receives the standard
+open-array handle.
+Output DPI open arrays are rejected with the callable and parameter name:
+SVX would pass a dynamic array, which IEEE 1800 section 7.7 prohibits as an
+actual argument to an output DPI open-array formal. Use a fixed-size SV wrapper
+or an inout API where appropriate. Ordinary SV functions and tasks with output
+dynamic arrays remain supported and may allocate their results in SV.
 The existing function-callback guard rejects task/wait operations; no Python
 async scheduler is introduced. All formals in the generated Python signature
 must be supplied. ref/const-ref remain unsupported. Names that cannot form valid
@@ -574,6 +590,11 @@ bindings as class methods. Referencing a class only as a handle does not export
 that class. Class handle results retain their public SvTypes RemoteRefValue
 contract (target type and object number); selecting that class adds its mirror
 API, not an implicit replacement of every handle result with a Python instance.
+Concrete parameterized class handles may use their SV spelling directly, such as
+`Packet`, `Packet#(16)` or `Typed#(bit [7:0])`; a typedef is not required. Default
+and explicit parameter values are resolved from the source. Different concrete
+specializations retain distinct handle contracts, including in parameters,
+returns, constructors and fields.
 Restricted VIF results use the existing generated view adapter.
 Compile the generated bridge after the original packages and runtime,
 and initialize/start SVX as in the examples; unlike pure values, invoking a

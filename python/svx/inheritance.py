@@ -590,10 +590,11 @@ def _handle_binding(value: Any, binding: TypeBinding, where: str) -> HandleBindi
             "must use an sv-vif:// target for a virtual interface",
         )
     sv_type = _required_string(raw, "sv_type", where)
+    type_tokens = re.sub(r'"(?:[^"\\\r\n]|\\.)*"', 'SVXString', sv_type)
     if kind == "virtual_interface":
-        valid = re.fullmatch(r"virtual [A-Za-z_$][A-Za-z0-9_$:.#() ,\[\]]*", sv_type)
+        valid = re.fullmatch(r"virtual [A-Za-z_$][A-Za-z0-9_$:.#() ,\[\]-]*", type_tokens)
     else:
-        valid = re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_:$#() ,.\[\]]*", sv_type)
+        valid = re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_:$#() ,.\[\]-]*", type_tokens)
     if not valid:
         raise _error(f"{where}.sv_type", "contains unsupported SystemVerilog type characters")
     raw_operations = raw.get("operations", [])

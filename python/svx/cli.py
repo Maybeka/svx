@@ -1354,6 +1354,7 @@ def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int
                 sv_exclude_constants=args.exclude_constant,
                 sv_callable_targets=args.sv_callable,
                 sv_exclude_callables=args.exclude_callable,
+                max_errors=args.max_errors,
                 **macro_config,
             )
         data = manifest_dict(manifest)
@@ -1503,6 +1504,8 @@ def _add_sv_macro_arguments(parser: argparse.ArgumentParser, *, analysis=False) 
 
 
 def _add_sv_target_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument('--max-errors', type=int, default=10, metavar='COUNT',
+                        help='maximum independent export errors to report before stopping (default: 10)')
     parser.add_argument('--sv-callable', '--callable', action='extend', nargs='+', default=[], metavar='CALLABLE',
                         help='export package functions/tasks as directly importable Python functions')
     parser.add_argument('--exclude-callable', action='extend', nargs='+', default=[], metavar='PATTERN',

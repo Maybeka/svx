@@ -16,6 +16,83 @@ from svx.inheritance import emit_python_mirrors, emit_sv_mirrors, parse_manifest
 pytest.importorskip('pyslang')
 
 
+def test_dpi_open_array_parameter_uses_svtypes_dynamic_array():
+    source = Path(__file__).parents[1] / 'integration/dpi_open_array.sv'
+    manifest = manifest_from_declarations(sv_source_files=[source], sv_package_targets=['dpi_open_array_pkg'])
+    method = next(item.method for item in manifest.callables if item.name == 'dpi_sum')
+    assert method.parameters[0].direction == 'input'
+    assert method.parameters[0].type_binding.unified_type_name.startswith('svtypes.DynArray[')
+    assert 'dpi_open_array_pkg::dpi_sum(' in emit_sv_mirrors(manifest)
+
+
+@pytest.mark.parametrize('element', ['byte unsigned', 'shortint', 'int unsigned', 'longint',
+                                    'bit [7:0]', 'logic [7:0]', 'real', 'string'])
+@pytest.mark.parametrize('direction', ['input', 'inout'])
+def test_dpi_open_array_types_are_discovered(tmp_path, element, direction):
+    source = tmp_path / 'dpi_types.sv'
+    source.write_text(f'package p; import "DPI-C" function void f({direction} {element} values[]); endpackage\n',
+                      encoding='utf-8')
+    manifest = manifest_from_declarations(sv_source_files=[source], sv_package_targets=['p'])
+    parameter = manifest.callables[0].method.parameters[0]
+    assert parameter.direction == direction
+    assert parameter.type_binding.unified_type_name.startswith('svtypes.DynArray[')
+    assert 'p::f(' in emit_sv_mirrors(manifest)
+
+
+@pytest.mark.parametrize('timing', ['function void', 'task'])
+@pytest.mark.parametrize('selection', ['package', 'callable'])
+def test_dpi_output_open_array_rejects_dynamic_actual(tmp_path, timing, selection):
+    source = tmp_path / 'dpi_output.sv'
+    source.write_text(f'package p; import "DPI-C" {timing} f(output int unsigned values[]); endpackage\n',
+                      encoding='utf-8')
+    selectors = {'sv_package_targets': ['p']} if selection == 'package' else {'sv_callable_targets': ['p::f']}
+    with pytest.raises(SVXInheritanceError, match=r'p::f.values: output DPI open array.*section 7.7'):
+        manifest_from_declarations(sv_source_files=[source], **selectors)
+
+
+@pytest.mark.parametrize('timing,body', [
+    ('function automatic void', "values = new[3]; values = '{1, 2, 3}; endfunction"),
+    ('task automatic', "values = new[3]; values = '{1, 2, 3}; endtask"),
+])
+def test_ordinary_sv_output_dynamic_array_is_supported(tmp_path, timing, body):
+    source = tmp_path / 'sv_output.sv'
+    source.write_text(f'package p; {timing} f(output int unsigned values[]); {body} endpackage\n',
+                      encoding='utf-8')
+    manifest = manifest_from_declarations(sv_source_files=[source], sv_package_targets=['p'])
+    parameter = manifest.callables[0].method.parameters[0]
+    assert parameter.direction == 'output'
+    assert parameter.type_binding.unified_type_name.startswith('svtypes.DynArray[')
+    assert 'p::f(' in emit_sv_mirrors(manifest)
+
+
+def test_dpi_fixed_output_array_is_supported(tmp_path):
+    source = tmp_path / 'dpi_fixed.sv'
+    source.write_text('package p; import "DPI-C" function void f(output int unsigned values[3]); endpackage\n',
+                      encoding='utf-8')
+    manifest = manifest_from_declarations(sv_source_files=[source], sv_package_targets=['p'])
+    assert manifest.callables[0].method.parameters[0].direction == 'output'
+    assert 'p::f(' in emit_sv_mirrors(manifest)
+
+
+def test_cli_dpi_output_array_error_identifies_parameter(tmp_path):
+    source = tmp_path / 'dpi_output.sv'
+    source.write_text('package p; import "DPI-C" function void f(output int unsigned values[]); endpackage\n',
+                      encoding='utf-8')
+    output = tmp_path / 'generated'
+    result = subprocess.run(
+        [sys.executable, '-m', 'svx', 'export', '--sv-source', str(source),
+         '--package', 'p', '--out', str(output)],
+        env={**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)},
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0
+    error = result.stderr
+    assert 'p::f.values' in error
+    assert 'section 7.7' in error
+    assert 'fixed-size SV wrapper' in error
+    assert not (output / 'mirrors.sv').exists()
+
+
 @pytest.fixture
 def source(tmp_path):
     path = tmp_path / 'functions.sv'

@@ -851,8 +851,10 @@ def load_sv_declarations(path: Path) -> list[dict[str, Any]]:
 
 from .sv_value_scan import SourceValues, with_value_discovery
 from .value_exports import with_value_types
+from .export_diagnostics import with_export_diagnostics, raise_errors, has_errors
 
 
+@with_export_diagnostics
 @with_value_discovery
 @with_instance_discovery
 def manifest_from_declarations(
@@ -876,6 +878,7 @@ def manifest_from_declarations(
     sv_exclude_constants: Iterable[str] = (),
     sv_callable_targets: Iterable[str] = (),
     sv_exclude_callables: Iterable[str] = (),
+    max_errors: int = 10,
 ) -> Manifest:
     """Normalize supported declaration front ends to the sole v2 manifest model."""
 
@@ -996,7 +999,7 @@ def manifest_from_declarations(
                 packages=sv_package_targets, recursive=sv_recursive_packages,
                 exclude=sv_exclude_classes, parse_options=parse_options,
                 compilation_unit=sv_compilation_unit,
-                allow_empty=bool(auto_values and (auto_values.declarations or auto_values.constants or auto_values.callables)))
+                allow_empty=has_errors() or bool(auto_values and (auto_values.declarations or auto_values.constants or auto_values.callables)))
         requested_ids = sorted({
             class_id for item in python_ancestors.values()
             for class_id in item.get("mirror_base_ids", [])
@@ -1020,6 +1023,7 @@ def manifest_from_declarations(
                     declaration['constructor']['initiator'] = 'python'
                     sv_classes.append(declaration)
             sv_context = [item for item in sv_context if item['canonical_id'] not in selected_ids]
+    raise_errors()
     classes.extend(sv_classes)
     callable_context = ([{'language': 'python', 'symbol': 'SVXCallableContext',
                          'methods': [item['method'] for item in auto_values.callables.values()]}]
@@ -1251,7 +1255,7 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
                     f"{where} bounded queue requires explicit declaration metadata"
                 )
             return svtypes.Queue[annotation(source.elementType)]
-        if kind == "DynamicArrayType":
+        if kind in {"DynamicArrayType", "DPIOpenArrayType"}:
             return svtypes.DynArray[annotation(source.elementType)]
         if kind == "FixedSizeUnpackedArrayType":
             if source.range.left != 0 or source.range.right != source.range.width - 1:

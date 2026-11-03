@@ -954,14 +954,17 @@ def discover_sv_class_declarations(
             base_id = parent["canonical_id"]
 
         def parameters(member, location):
+            from .export_diagnostics import attempt, report
             directions = {"In": "input", "Out": "output", "InOut": "inout", "Ref": "ref"}
             result = []
             for argument in member.arguments:
                 direction = directions[argument.direction.name]
                 if direction == "ref":
-                    raise SVXInheritanceError(f"{location}.{argument.name} uses unsupported ref")
-                result.append({"name": argument.name, "direction": direction,
-                               **value_type(argument.type, f"{location}.{argument.name}")})
+                    report(f"{location}.{argument.name} uses unsupported ref")
+                    continue
+                binding = attempt(value_type, argument.type, f"{location}.{argument.name}")
+                if binding is not None:
+                    result.append({"name": argument.name, "direction": direction, **binding})
             return result
 
         def value_type(actual, location):
@@ -972,6 +975,7 @@ def discover_sv_class_declarations(
             return result
 
         methods = []
+        from .export_diagnostics import attempt, report
         for method in fact.methods:
             if not selected_member(symbol, method.name):
                 continue
@@ -980,10 +984,13 @@ def discover_sv_class_declarations(
                 raise SVXInheritanceError(f"cannot resolve SV signature {symbol}.{method.name}")
             if member.visibility.name == "Local":
                 continue
+            method_parameters = parameters(member, f"{symbol}.{method.name}")
             result_type = ({"type": "void"} if method.kind == "task" or str(member.returnType) == "void"
-                           else value_type(member.returnType, f"{symbol}.{method.name} return"))
+                           else attempt(value_type, member.returnType, f"{symbol}.{method.name} return"))
+            if result_type is None:
+                continue
             entry = {"canonical_id": f"{class_id}#{method.name}",
-                            "name": method.name, "parameters": parameters(member, f"{symbol}.{method.name}"),
+                            "name": method.name, "parameters": method_parameters,
                             "return_type": result_type["type"], "timing": method.kind,
                             "virtual": member.isVirtual,
                             "static": bool(member.flags & MethodFlags.Static),
@@ -1001,8 +1008,11 @@ def discover_sv_class_declarations(
             if member.visibility.name == "Local":
                 continue
             if "static" in field.qualifiers:
-                raise SVXInheritanceError(f"cannot automatically export static SV field {symbol}.{field.name}; exclude it with --exclude-member")
-            fields.append({"name": field.name, **value_type(member.type, f"{symbol}.{field.name}")})
+                report(f"cannot automatically export static SV field {symbol}.{field.name}; exclude it with --exclude-member")
+                continue
+            field_type = attempt(value_type, member.type, f"{symbol}.{field.name}")
+            if field_type is not None:
+                fields.append({"name": field.name, **field_type})
         if value_exports is not None and _unit_scope(symbol) is None and _instance_scope(symbol) is None:
             value_exports.publish_class_values(source, symbol)
         declaration = {"canonical_id": class_id, "language": "sv", "symbol": symbol,
@@ -1185,6 +1195,31 @@ def _canonical_sv_handle_type(actual) -> str:
     unit = _unit_scope(selector)
     instance = _instance_scope(selector)
     native = '$unit::' + unit[1] if unit is not None else instance[1] if instance is not None else selector
+    if actual.isClass and actual.genericClass is not None:
+        # Slang's display spelling can omit packages inside type arguments.
+        from .inheritance import _sv_specialization_value
+        arguments = []
+        for member in actual:
+            if member.kind.name == 'TypeParameter':
+                target = member.targetType.type
+                concrete = target.canonicalType
+                if concrete.isClass or concrete.isVirtualInterface:
+                    arguments.append(_canonical_sv_handle_type(concrete))
+                elif target.kind.name == 'TypeAlias':
+                    arguments.append(target.lexicalPath)
+                elif concrete.kind.name in {'EnumType', 'PackedStructType', 'UnpackedStructType'}:
+                    arguments.append(target.lexicalPath)
+                else:
+                    arguments.append(str(target))
+            elif member.kind.name == 'Parameter' and not member.isLocalParam:
+                if member.type.isIntegral and not member.value.hasUnknown():
+                    arguments.append(_sv_specialization_value(int(member.value.value)))
+                elif member.type.isString:
+                    arguments.append(_sv_specialization_value(str(member.value.value)))
+                else:
+                    break
+        else:
+            return native + '#(' + ', '.join(arguments) + ')'
     return (native + spelling[len(actual.name):]
             if spelling.startswith(actual.name) else spelling)
 
@@ -1209,7 +1244,12 @@ def _source_handle_metadata(actual, *, where, collections=False, value_exports=N
                 instance = _instance_scope(selected)
                 return {"kind": "sv_class", "sv_type": '$unit::' + unit[1] if unit is not None else instance[1] if instance is not None else selected,
                         "target_type_name": _source_class_id(selected)}
-            raise SVXInheritanceError(f"{where} requires explicit closed class-handle target metadata")
+            native = _canonical_sv_handle_type(actual)
+            default = actual.parentScope.lookupName(actual.genericClass.name)
+            target = (selector(actual) if default is not None
+                      and actual.isMatching(default.canonicalType) else native)
+            return {"kind": "sv_class", "sv_type": native,
+                    "target_type_name": _source_class_id(target)}
         return {"kind": "sv_class", "sv_type": _canonical_sv_handle_type(actual),
                 "target_type_name": _source_class_id(selector(actual))}
     if actual.isVirtualInterface:
