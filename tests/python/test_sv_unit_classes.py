@@ -56,7 +56,7 @@ def test_unit_bridge_retains_native_class_and_local_records(tmp_path):
     source = emit_unit_export_bridge(manifest, 0, metadata=metadata)
     assert 'extends $unit::Driver' in source
     assert 'package ' not in '\n'.join(line for line in source.splitlines() if not line.lstrip().startswith('//'))
-    assert 'class SVXCall' in source
+    assert 'class _svx__call_' in source
     assert 'register_svx_unit_mirror_0_' in source
     assert metadata == {'registration_module': 'svx_unit_exports_0', 'registration_method': 'initialize'}
     assert emit_unit_export_bridge(manifest, 1) == ''

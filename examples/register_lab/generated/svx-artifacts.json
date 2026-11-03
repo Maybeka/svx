@@ -2,50 +2,116 @@
   "artifacts": [
     {
       "language": "python",
+      "module": "svx_bootstrap",
+      "path": "python/svx_bootstrap.py",
+      "sha256": "f98f7c93ca7b50fc0eac7345532f9dfa7b22f3de982d66c5a349f88b3a9dfd4c"
+    },
+    {
+      "language": "python",
       "module": "svx_mirror",
       "path": "python/svx_mirror/__init__.py",
-      "sha256": "814c008a5efae4f9e91f4ea29b30a861368ab2bfe10265d7b57a2c6006ad1724"
+      "sha256": "d1ca7746a9614fb4e85c779732540404e346026ffa1df48a4784c160f50973cd"
     },
     {
       "language": "python",
       "module": "svx_mirror.register_policy_pkg",
       "path": "python/svx_mirror/register_policy_pkg.py",
-      "sha256": "b7155d522c2e02bb4f4824ce470e9512e88bec47ebced593a65a91e6d15b9685"
+      "sha256": "71dfb896c3862df0f3d2374f612dd48432a8e24253e4ed2afc04b5d27b42e9e1"
     },
     {
       "language": "python",
       "module": "svx_py",
       "path": "python/svx_py/__init__.py",
-      "sha256": "c8d51ff6c00dfcd1cb1e74a2af743bd14170bb76c874f0b0a3c5f19f8d32509d"
+      "sha256": "da7bb0ec5f4ae3727016793adb84f21d7fa314b114626ae8c0201a438e438f9c"
     },
     {
       "language": "python",
       "module": "svx_py.examples.register_lab.extensions",
       "path": "python/svx_py/examples/register_lab/extensions.py",
-      "sha256": "5db61fcebdb76302330837838dd5947b2b05328b017b9dc935019d579d4cea8e"
+      "sha256": "c2db0964c20cfce0c4d81b167c01ad9d40e7c759b0c0ecdcdc690f51f07c08a9"
+    },
+    {
+      "language": "python",
+      "module": "svx_support",
+      "path": "python/svx_support/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_mirror",
+      "path": "python/svx_support/svx_mirror/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_mirror.register_policy_pkg",
+      "path": "python/svx_support/svx_mirror/register_policy_pkg.py",
+      "sha256": "76ba5926f0073ad0e697b2ce59d34028119e5b43704c8047ababe3af52306ab2"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py",
+      "path": "python/svx_support/svx_py/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples",
+      "path": "python/svx_support/svx_py/examples/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples.register_lab",
+      "path": "python/svx_support/svx_py/examples/register_lab/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_py.examples.register_lab.extensions",
+      "path": "python/svx_support/svx_py/examples/register_lab/extensions.py",
+      "sha256": "80854f06a9649dced3bb7510803a964f296cbbe21d7c87cfa89afc5be5be7e88"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_vif",
+      "path": "python/svx_support/svx_vif/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_vif.register_if",
+      "path": "python/svx_support/svx_vif/register_if/__init__.py",
+      "sha256": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b"
+    },
+    {
+      "language": "python",
+      "module": "svx_support.svx_vif.register_if.diagnostics",
+      "path": "python/svx_support/svx_vif/register_if/diagnostics.py",
+      "sha256": "aa3b52fab20b5f925da22ff2fbdef660c277f86b6f2e5c964ef6ce03cf77a0c2"
     },
     {
       "language": "python",
       "module": "svx_vif",
       "path": "python/svx_vif/__init__.py",
-      "sha256": "aef6ca123df751e1e11d4e403bfd83ed491473b31826606956b66d003f5c2b3e"
+      "sha256": "dfd40ff31e9dcfe779f001dc38535e16884bdacc36eac390ab76e32cb1653823"
     },
     {
       "language": "python",
       "module": "svx_vif.register_if",
       "path": "python/svx_vif/register_if/__init__.py",
-      "sha256": "aef6ca123df751e1e11d4e403bfd83ed491473b31826606956b66d003f5c2b3e"
+      "sha256": "dfd40ff31e9dcfe779f001dc38535e16884bdacc36eac390ab76e32cb1653823"
     },
     {
       "language": "python",
       "module": "svx_vif.register_if.diagnostics",
       "path": "python/svx_vif/register_if/diagnostics.py",
-      "sha256": "77f35bade25bc5d5fc138a00213c7c05d737412544cb407e068c9903b187dbb4"
+      "sha256": "949cb4066d3b2beb4015f9430e84244d9fd940849688c83ca7f41bd0d15eafc1"
     },
     {
       "language": "systemverilog",
       "path": "inheritance.sv",
-      "sha256": "29c979d5d8a76ec3748dbabaf879a4d4c4c83ebcc6b61cd5c9f540469a45e858"
+      "sha256": "74dec7038ef542d08fbe6d97de6ec1f6c6391aa1c11d768f10e878e7693b801e"
     }
   ],
   "callables": [
@@ -69,7 +135,7 @@
           "encoding_fingerprint": "f939bf6412cdf0620875fdfb6373a4e43202d3108ba645df9a87ccb698ed9906",
           "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.request"
         },
-        "sv_class": "SVXCall_40b29c7403cdecf28786_Request",
+        "sv_class": "_svx__call_extensions_Checker_compare_Request",
         "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.request"
       },
       "response_fields": [
@@ -85,7 +151,7 @@
           "encoding_fingerprint": "d921674260a28c5a0bac1b32877e2e000775d64bba87553e7fc22a7b2534987c",
           "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.response"
         },
-        "sv_class": "SVXCall_a0a5c0493b7741d29924_Response",
+        "sv_class": "_svx__call_extensions_Checker_compare_Response",
         "unified_type_name": "svx.call.6a121d58087d49e5696b677a05ce3756c43928001b1d756327eef6f73582db11.response"
       }
     },
@@ -116,7 +182,7 @@
           "encoding_fingerprint": "1b0264a1cc84bdf34907252a8b7c0750f9235056d4645c94bda5c438918ca61b",
           "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.request"
         },
-        "sv_class": "SVXCall_ed7668a5578e6501fbdd_Request",
+        "sv_class": "_svx__call_extensions_PythonPolicy_calibrate_Request",
         "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.request"
       },
       "response_fields": [
@@ -142,7 +208,7 @@
           "encoding_fingerprint": "c484fe0c0e865a8f817875dc4ac48c2cf33e51dd27083febd5f430b32f48fab2",
           "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.response"
         },
-        "sv_class": "SVXCall_5acba6320c36d92ea86a_Response",
+        "sv_class": "_svx__call_extensions_PythonPolicy_calibrate_Response",
         "unified_type_name": "svx.call.14c50d0c2113d5e7d8263b0bae0c1b70b4ddc4cb92abaec54acbbc222515aabb.response"
       }
     },
@@ -161,7 +227,7 @@
           "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
           "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.request"
         },
-        "sv_class": "SVXCall_1423942fa10cfee35050_Request",
+        "sv_class": "_svx__call_extensions_PythonPolicy_normalize_Request",
         "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.request"
       },
       "response_fields": [
@@ -177,7 +243,7 @@
           "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
           "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.response"
         },
-        "sv_class": "SVXCall_0cac6dabb3d645e68bac_Response",
+        "sv_class": "_svx__call_extensions_PythonPolicy_normalize_Response",
         "unified_type_name": "svx.call.7974dd7e3db7125056456f7cbbca692ebc2370668ae8b2bfbab9ffdc66fadeb2.response"
       }
     },
@@ -201,7 +267,7 @@
           "encoding_fingerprint": "1b0264a1cc84bdf34907252a8b7c0750f9235056d4645c94bda5c438918ca61b",
           "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.request"
         },
-        "sv_class": "SVXCall_0139b1938ffe745f02a3_Request",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_calibrate_Request",
         "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.request"
       },
       "response_fields": [
@@ -227,7 +293,7 @@
           "encoding_fingerprint": "c484fe0c0e865a8f817875dc4ac48c2cf33e51dd27083febd5f430b32f48fab2",
           "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.response"
         },
-        "sv_class": "SVXCall_e2aecc778177de71557f_Response",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_calibrate_Response",
         "unified_type_name": "svx.call.71a64cc2b50e5c85667a53e7ed7eeab87079de6c0c446df299359aedece7743f.response"
       }
     },
@@ -246,7 +312,7 @@
           "encoding_fingerprint": "9eae5a662386f98d5a7c1330a51663e1b728e88180c2252da5d297630932a0b2",
           "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.request"
         },
-        "sv_class": "SVXCall_647a4c682ad192188e6a_Request",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_echo_bus_Request",
         "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.request"
       },
       "response_fields": [
@@ -262,7 +328,7 @@
           "encoding_fingerprint": "9eae5a662386f98d5a7c1330a51663e1b728e88180c2252da5d297630932a0b2",
           "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.response"
         },
-        "sv_class": "SVXCall_0dde2b043a3fb495ce86_Response",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_echo_bus_Response",
         "unified_type_name": "svx.call.734e6370a9f148357c6952db31c371d2e80c398ff3f03cd397cee1bfe11c8b86.response"
       }
     },
@@ -281,7 +347,7 @@
           "encoding_fingerprint": "371784021220744b8737cd7689305c71b7ef0d87a50d1537fb3d957eb89dbf52",
           "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.request"
         },
-        "sv_class": "SVXCall_a96425e66f1f8a3f1be5_Request",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_echo_packet_Request",
         "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.request"
       },
       "response_fields": [
@@ -297,7 +363,7 @@
           "encoding_fingerprint": "371784021220744b8737cd7689305c71b7ef0d87a50d1537fb3d957eb89dbf52",
           "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.response"
         },
-        "sv_class": "SVXCall_a89ee2b3eef756596e8e_Response",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_echo_packet_Response",
         "unified_type_name": "svx.call.68ebca31c206062723c12aad76abaa66b311cd69ae5cda5ba118b8fd80541d86.response"
       }
     },
@@ -316,7 +382,7 @@
           "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
           "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.request"
         },
-        "sv_class": "SVXCall_b6b98d0ad103e53cdae2_Request",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_normalize_Request",
         "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.request"
       },
       "response_fields": [
@@ -332,7 +398,7 @@
           "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
           "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.response"
         },
-        "sv_class": "SVXCall_d12e138910eed72b5317_Response",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_normalize_Response",
         "unified_type_name": "svx.call.e04b7ca6bafdd3183f53aa22bbf14f9abc451896bf91be3d76b9e551b44556b5.response"
       }
     },
@@ -351,7 +417,7 @@
           "encoding_fingerprint": "9eae5a662386f98d5a7c1330a51663e1b728e88180c2252da5d297630932a0b2",
           "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.request"
         },
-        "sv_class": "SVXCall_e18341e8f12ce17d97a6_Request",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_same_bus_Request",
         "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.request"
       },
       "response_fields": [
@@ -367,7 +433,7 @@
           "encoding_fingerprint": "d921674260a28c5a0bac1b32877e2e000775d64bba87553e7fc22a7b2534987c",
           "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.response"
         },
-        "sv_class": "SVXCall_bbee8f20fec35397493f_Response",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_same_bus_Response",
         "unified_type_name": "svx.call.1e2ccb25b8c8d618762d19fae855ebb36dcb085506e243d7f773542b48a76040.response"
       }
     },
@@ -388,7 +454,7 @@
           "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
           "unified_type_name": "svx.call.b595ec7ad4eb1fd794d4aa9424464ae688d9f36e944d6a29c2f8585f1640a858.response"
         },
-        "sv_class": "SVXCall_35f3f6df742df0de8306_Response",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_word_bytes_Response",
         "unified_type_name": "svx.call.b595ec7ad4eb1fd794d4aa9424464ae688d9f36e944d6a29c2f8585f1640a858.response"
       }
     }
@@ -413,7 +479,7 @@
           "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
           "unified_type_name": "svx.call.10d9c471ae72941992f0a3b296ef88b38e12d8f1e1c902b76fbd5e02f136a72b.request"
         },
-        "sv_class": "SVXCall_ea462e4c9451817342f8_Request",
+        "sv_class": "_svx__call_extensions_Checker_Request",
         "unified_type_name": "svx.call.10d9c471ae72941992f0a3b296ef88b38e12d8f1e1c902b76fbd5e02f136a72b.request"
       }
     },
@@ -432,7 +498,7 @@
           "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
           "unified_type_name": "svx.call.d30e141e38774ed74b25777d8be71972eeec69fc24096341c886636d8614746a.request"
         },
-        "sv_class": "SVXCall_47ccdb05035b810a0c29_Request",
+        "sv_class": "_svx__call_extensions_PythonPolicy_Request",
         "unified_type_name": "svx.call.d30e141e38774ed74b25777d8be71972eeec69fc24096341c886636d8614746a.request"
       }
     },
@@ -451,7 +517,7 @@
           "encoding_fingerprint": "0a354b1fd86a47c16d19f1ae576b44dabab37c48967ac3f586101af689ae1462",
           "unified_type_name": "svx.call.3f1085c2e5914aaf96e53d923bd04579b985833a7a6c75ca1446916d15e962d3.request"
         },
-        "sv_class": "SVXCall_a4505e2a5cc71c2a7e42_Request",
+        "sv_class": "_svx__call_register_policy_pkg_RegisterPolicy_Request",
         "unified_type_name": "svx.call.3f1085c2e5914aaf96e53d923bd04579b985833a7a6c75ca1446916d15e962d3.request"
       }
     }
@@ -527,6 +593,189 @@
   "inheritance_manifest": {
     "schema_uri": "https://svx.dev/schema/inheritance-manifest/v2",
     "schema_version": "2.0.0"
+  },
+  "member_locations": {
+    "py://examples/register_lab/extensions/Checker#compare": [
+      {
+        "language": "python",
+        "line": 35,
+        "path": "python/svx_py/examples/register_lab/extensions.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 5972,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6035,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6079,
+        "path": "inheritance.sv"
+      }
+    ],
+    "py://examples/register_lab/extensions/Checker#finish": [
+      {
+        "language": "python",
+        "line": 38,
+        "path": "python/svx_py/examples/register_lab/extensions.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6009,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6056,
+        "path": "inheritance.sv"
+      }
+    ],
+    "sv://register_policy_pkg/RegisterPolicy#calibrate": [
+      {
+        "language": "python",
+        "line": 85,
+        "path": "python/svx_mirror/register_policy_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6218,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6911,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6957,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7101,
+        "path": "inheritance.sv"
+      }
+    ],
+    "sv://register_policy_pkg/RegisterPolicy#echo_bus": [
+      {
+        "language": "python",
+        "line": 91,
+        "path": "python/svx_mirror/register_policy_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6921,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7005,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7149,
+        "path": "inheritance.sv"
+      }
+    ],
+    "sv://register_policy_pkg/RegisterPolicy#echo_packet": [
+      {
+        "language": "python",
+        "line": 88,
+        "path": "python/svx_mirror/register_policy_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6916,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6981,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7125,
+        "path": "inheritance.sv"
+      }
+    ],
+    "sv://register_policy_pkg/RegisterPolicy#normalize": [
+      {
+        "language": "python",
+        "line": 82,
+        "path": "python/svx_mirror/register_policy_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6182,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6906,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6938,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7082,
+        "path": "inheritance.sv"
+      }
+    ],
+    "sv://register_policy_pkg/RegisterPolicy#same_bus": [
+      {
+        "language": "python",
+        "line": 94,
+        "path": "python/svx_mirror/register_policy_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6926,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7029,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 7173,
+        "path": "inheritance.sv"
+      }
+    ],
+    "sv://register_policy_pkg/RegisterPolicy#word_bytes": [
+      {
+        "language": "python",
+        "line": 98,
+        "path": "python/svx_mirror/register_policy_pkg.py"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6257,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6269,
+        "path": "inheritance.sv"
+      },
+      {
+        "language": "systemverilog",
+        "line": 6297,
+        "path": "inheritance.sv"
+      }
+    ]
   },
   "required_runtime_capabilities": [
     "svtypes.checked-encoding-descriptor.v1",

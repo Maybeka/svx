@@ -10,6 +10,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 from .errors import SVXInheritanceError
+from .generated_names import with_sv_names
 from .inheritance import (
     Manifest, _emit_planned_sv_root_sv_projection, _emit_sv_projection_factory,
     _emit_sv_static_gateway, _projection_helper_package, _sv_generated_names,
@@ -76,6 +77,7 @@ def integrated_source_paths(sources, *, compilation_unit=False):
                  for index, name in enumerate(sources))
 
 
+@with_sv_names
 def emit_integrated_sources(manifest: Manifest, sources: Mapping[str, str], *,
                             compilation_unit=False, startup_metadata=None, **options) -> dict[str, str]:
     """Preserve independent compilation units instead of forcing a shared unit."""
@@ -595,7 +597,7 @@ def _emit_staged_source_unit(manifest: Manifest, source: str, *, portions, const
                 raise SVXInheritanceError(
                     f'external endpoint {binding.target_type_name} depends on a source type declared after its consumer')
         used = occupied[owner]
-        requested = '_svx_' + public
+        requested = public if public.startswith('_svx__') else '_svx__' + public
         while True:
             private = _sv_generated_names(used, (requested,))[requested]
             if private + 'Endpoint' not in used:

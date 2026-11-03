@@ -10,11 +10,11 @@ from svx.inheritance import bind_instance, encode_constructor, invoke_sv, regist
 from examples.python_owned_inheritance.base_monitor import BaseMonitor as _ForeignBaseMonitor
 
 # --- SvTypes call contracts (private bridge metadata) ---
-from svx_support.svx_py.examples.python_owned_inheritance.base_monitor import register_contracts_0 as _svx_register_support_0
-_svx_register_support_0()
+from svx_support.svx_py.examples.python_owned_inheritance.base_monitor import base_monitor_BaseMonitor_sample_contract as _svx__base_monitor_BaseMonitor_sample_contract
+register_contract(_svx__base_monitor_BaseMonitor_sample_contract)
 # --- Construction contract ---
-from svx_support.svx_py.examples.python_owned_inheritance.base_monitor import register_contracts_1 as _svx_register_support_1
-_svx_register_support_1()
+from svx_support.svx_py.examples.python_owned_inheritance.base_monitor import base_monitor_BaseMonitor_parameters as _svx__base_monitor_BaseMonitor_parameters
+register_constructor('py://examples/python_owned_inheritance/base_monitor/BaseMonitor', _svx__base_monitor_BaseMonitor_parameters)
 class BaseMonitor(_ForeignBaseMonitor):
     """Python view of an SV-derived examples.python_owned_inheritance.base_monitor.BaseMonitor."""
     __svx_foreign_class_id__ = 'py://examples/python_owned_inheritance/base_monitor/BaseMonitor'

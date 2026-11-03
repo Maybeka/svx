@@ -25,6 +25,7 @@ from .value_exports import ConstantExport, ValueExport, parse_constant_exports, 
 from .package_exports import (PackageCallable, callable_owners, parse_package_callables,
                               merge_callable_sources, emit_sv_package_callables)
 from .owner_records import _local_call_records
+from .generated_names import with_sv_names, name_for, readable, schema_label
 
 
 SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v2"
@@ -2813,9 +2814,8 @@ def _sv_collection_typedef(binding: TypeBinding) -> tuple[str, str] | None:
         return None
     if binding.sv != svtypes.sv_type_expression(codec):
         return None  # Preserve an explicitly supplied source typedef.
-    suffix = "".join(char if char.isascii() and char.isalnum() else f"_x{ord(char):x}_"
-                     for char in binding.unified_type_name)
-    name = "SVXValue_" + suffix
+    name = name_for(('collection', binding.unified_type_name),
+                    lambda: 'array_' + schema_label(svtypes.schema_descriptor(codec).schema))
     return name, "typedef " + svtypes.sv_declaration(codec, name) + ";"
 
 
@@ -2936,19 +2936,21 @@ def _manifest_handle_bindings(manifest: Manifest) -> tuple[HandleBinding, ...]:
 
 
 def _handle_adapter_stem(binding: HandleBinding) -> str:
-    # Escape underscores too: flattening punctuation would conflate a_b::C and a::b_C.
-    escapes = {'_': 'u', ':': 'c', '/': 's', '-': 'h', '.': 'd', '[': 'l', ']': 'r'}
-    stem = ''.join(char if char.isascii() and char.isalnum()
-                   else '_' + escapes.get(char, f'x{ord(char):x}_')
-                   for char in binding.target_type_name)
-    if binding.collection_binding is not None:
-        # The target is already in the prefix; repeating its escaped URI in
-        # every container layer can exceed native compiler identifier limits.
-        collection = binding.collection_binding.unified_type_name.replace(
-            f'svtypes.RemoteRef[target={binding.target_type_name}]', 'SVXHandle')
-        stem += "_C_" + "".join(char if char.isascii() and char.isalnum() else f"_x{ord(char):x}_"
-                              for char in collection)
-    return "SVXExternal_" + stem
+    def label():
+        if binding.kind == 'virtual_interface':
+            native = 'virtual ' + binding.target_type_name.removeprefix('sv-vif://').replace('/', '.')
+        else:
+            from .sv_scan import _source_class_selector
+            native = _source_class_selector(binding.target_type_name)
+        shape = ''
+        if binding.collection_binding is not None:
+            import svtypes
+            codec = _codec_from_spec(binding.collection_binding.runtime_spec())
+            shape = '_' + schema_label(svtypes.schema_descriptor(codec).schema)
+        return 'ref_' + readable(native) + shape
+    return name_for(('handle', binding.target_type_name,
+                     binding.collection_binding.unified_type_name if binding.collection_binding else None),
+                    label)
 
 
 def _handle_adapter_name(binding: HandleBinding) -> str:
@@ -3485,15 +3487,7 @@ def _emit_sv_outbound_method(method: Method, *, python_base: bool = False, pytho
     if method.return_type is not None:
         lines.append(f"      return {returned};")
     lines.append("    endfunction" if method.timing == "function" else "    endtask")
-    role = 'static' if python_static else 'base' if python_base else 'callback'
-    support_name = '__svx_support_' + _call_record_class_name(method.canonical_id, role).removeprefix('SVXCall_')
-    kind = 'task' if method.timing == 'task' else 'function'
-    result_type = '' if kind == 'task' else _sv_return_type(method) + ' '
-    lines[1] = f'    {"static " if python_static else ""}{kind} {result_type}{support_name}({parameters});'
-    arguments = ', '.join(parameter.name for parameter in method.parameters)
-    statement = ('return ' if method.return_type is not None else '') + support_name + '(' + arguments + ');'
-    return ['', f'    // Core operation: {method.canonical_id}', header,
-            '      '+statement, f'    end{kind}', *lines]
+    return ['', f'    // Core operation: {method.canonical_id}', *lines[1:]]
 
 
 def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
@@ -5686,6 +5680,7 @@ def _emit_sv_implementation_factory(cls: ForeignClass) -> list[str]:
     ]
 
 
+@with_sv_names
 @with_value_types(codegen=True)
 def emit_sv_mirrors(manifest: Manifest) -> str:
     """Emit target-scoped SV AMirror and Proxy projection helpers."""
@@ -5934,6 +5929,7 @@ def _projection_stage_filename(position: str, canonical_id: str) -> str:
     return f"{position}_{stem}_{digest}.svh"
 
 
+@with_sv_names
 @with_value_types(codegen=True)
 def emit_sv_mirror_stages(manifest: Manifest) -> dict[str, str]:
     """Split generated projection helpers at their required SV source anchors.
@@ -6011,6 +6007,7 @@ def emit_sv_mirror_stages(manifest: Manifest) -> dict[str, str]:
     return result
 
 
+@with_sv_names
 @with_value_types
 def artifact_manifest(
     manifest: Manifest,
@@ -6022,6 +6019,7 @@ def artifact_manifest(
     sv_sources: dict[PurePosixPath, str] | None = None,
 ) -> dict[str, Any]:
     """Describe generated inheritance artifacts for startup compatibility checks."""
+    _manifest_sv_record_types(manifest)
 
     from .runtime import SVX_RUNTIME_ABI_VERSION
 
@@ -7051,11 +7049,10 @@ def _call_record_type_id(method_id: str, kind: str) -> str:
 
 
 def _call_record_class_name(method_id: str, kind: str) -> str:
-    # Escape underscores too, so a literal escape-looking source name cannot
-    # collide with a separator. Wire identity remains _call_record_type_id.
-    name = ''.join(character if character.isascii() and character.isalnum()
-                   else f'_x{ord(character):x}_' for character in method_id)
-    return 'SVXCall_' + name + '_' + kind.title()
+    # Artifact-local labels are not wire identities; retain the source member.
+    label = method_id.removeprefix('sv://').removeprefix('svpkg://')
+    label = readable('/'.join(label.split('/')[-2:]))[:52]
+    return name_for(('record', method_id, kind), 'call_' + label + '_' + kind.title())
 
 
 def _call_record_schema(

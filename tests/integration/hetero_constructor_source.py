@@ -1,4 +1,9 @@
 from svtypes import Int, SvObject, svobj
+import ctypes
+
+
+_current_evaluator = ctypes.pythonapi.PyThreadState_Get
+_current_evaluator.restype = ctypes.c_void_p
 
 events = []
 mismatch_super = False
@@ -45,7 +50,11 @@ class Derived(Child, Root):
     own_value = Int()
 
     def __init__(self, child_seed, label):
-        super().__init__(child_seed + (1 if mismatch_super else 0), label)
+        evaluator = _current_evaluator()
+        try:
+            super().__init__(child_seed + (1 if mismatch_super else 0), label)
+        finally:
+            assert _current_evaluator() == evaluator, 'constructor resumed in a different Python evaluator'
         assert self.observed_value() == child_seed + (1 if mismatch_super else 0) + 10
         self.own_value.value = 1000 + len(label)
         events.append(('derived', child_seed, label, self))

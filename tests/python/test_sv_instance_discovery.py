@@ -136,7 +136,8 @@ endinterface : owner
     assert copied.count('Driver::sample(') == 2
     assert copied.count('static function int _svx__core_Driver_sample(') == 2
     support = '\n'.join(path.read_text(encoding='utf-8') for path in (output/'sv/support').rglob('*.svh'))
-    assert support.count('result = _svx__core_Driver_sample();') == 4
+    assert copied.count('result = _svx__core_Driver_sample();') == 4
+    assert 'result = _svx__core_Driver_sample();' not in support
     assert 'SVXSourceType::sample(' not in copied
     assert all('initialize_owner(' + json.dumps(binding['static_initialization_key']) + ')' in copied
                for binding in artifact['instance_bindings'])

@@ -16,7 +16,7 @@
       "language": "python",
       "module": "svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "86a027dbff3aaa0ab90e0d8612bb069b52bf17dd1a9cdadb245444381439261f"
+      "sha256": "b4c1cf7d26908a406ebf39d595f09c2c30fd84ec62a5a136fd7e1c9b8d53c86d"
     },
     {
       "language": "python",
@@ -46,12 +46,12 @@
       "language": "python",
       "module": "svx_support.svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_support/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "e43881e8076707596bfcd46554148f5ae56df76c3a09ea8d6e16508027e1a466"
+      "sha256": "270ce4bc60cb5ba1183f656b23129e8937ac06b94f400eef02b0cde94333975d"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "8bbd7d4bdab4ce1eee4db51e1042dc35eb6732995b3872389f24d89ee2996b9e"
+      "sha256": "eac6508718ade1863ecf87f0d2bb165254259ecdbba70730909114f21e5d558d"
     }
   ],
   "callables": [
@@ -79,7 +79,7 @@
           "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
           "unified_type_name": "svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response"
         },
-        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response",
+        "sv_class": "_svx__call_base_monitor_BaseMonitor_sample_Response",
         "unified_type_name": "svx.call.cf0c9a09d3ff5c57c1c64495761cf5edb9a8eb5fab32c0166d91497c970a410c.response"
       }
     }
@@ -103,7 +103,7 @@
           "encoding_fingerprint": "beae734a371e6f644c0314953b00167687c772f5008db88afbcdf8ddcd84dbdb",
           "unified_type_name": "svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request"
         },
-        "sv_class": "SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request",
+        "sv_class": "_svx__call_base_monitor_BaseMonitor_Request",
         "unified_type_name": "svx.call.1e045bd9167538dfda5f129033fad2e4d57dbd64ed5355b5949d89f35debbeda.request"
       }
     }
@@ -141,12 +141,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 584,
+        "line": 580,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 628,
+        "line": 620,
         "path": "inheritance_mirrors.sv"
       }
     ],
@@ -163,12 +163,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 614,
+        "line": 606,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 651,
+        "line": 643,
         "path": "inheritance_mirrors.sv"
       }
     ]

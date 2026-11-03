@@ -17,7 +17,8 @@ class Driver:
     support = outputs[PurePosixPath('svx_support/svx_mirror/drivers.py')]
     assert "'parameters'" not in core
     assert "'parameters'" in support
-    assert core.index('_svx_register_support_0()') < core.index('class Driver:')
+    assert core.index('register_contract(_svx__driver_read_contract)') < core.index('class Driver:')
+    assert 'def register_' not in support
     assert 'return 42' in core
     assert outputs == split_python_support({path: source})
     compile(core, str(path), 'exec')
@@ -45,10 +46,10 @@ class Driver:
 '''
     path = PurePosixPath('svx_mirror/drivers.py')
     outputs = split_python_support({path: source})
-    assert "external_targets" not in outputs[path]
+    assert "external_targets=_svx__drivers_Driver_external_targets" in outputs[path]
     assert 'self.seed = seed' in outputs[path]
     support = outputs[PurePosixPath('svx_support/svx_mirror/drivers.py')]
-    assert 'register_constructor(' in support and "external_targets=('item',)" in support
+    assert 'register_constructor(' not in support and "drivers_Driver_external_targets = ('item',)" in support
     compile(support, 'support.py', 'exec')
 
 
@@ -124,10 +125,9 @@ endpackage
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert 'return 7;' in result[path]
-    assert 'virtual task _svx__sv_invoke' not in result[path]
-    assert '`include "support/mirrors_endpoint_0_dispatch.svh"' in result[path]
-    support = result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
-    assert 'virtual task _svx__sv_invoke' in support and 'virtual function void _svx__sv_invoke_function' in support
+    assert 'virtual task _svx__sv_invoke' in result[path]
+    assert 'virtual function void _svx__sv_invoke_function' in result[path]
+    assert list(result) == [path]
 
 
 def test_sv_static_gateway_keeps_core_and_moves_protocol_dispatch():
@@ -143,10 +143,9 @@ endpackage
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert '_svx__core_Adapter_read' in result[path]
-    assert '_svx__sv_invoke_static' not in result[path]
-    support = result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
-    assert 'static task _svx__sv_invoke_static' in support
-    assert 'static function void _svx__sv_invoke_static_function' in support
+    assert 'static task _svx__sv_invoke_static' in result[path]
+    assert 'static function void _svx__sv_invoke_static_function' in result[path]
+    assert list(result) == [path]
 
 
 def test_colliding_core_names_keep_prefix_and_still_split_dispatch():
@@ -165,8 +164,8 @@ endpackage
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert name in result[path]
-    assert 'virtual task _svx__sv_invoke' not in result[path]
-    assert 'virtual task _svx__sv_invoke' in result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
+    assert 'virtual task _svx__sv_invoke' in result[path]
+    assert list(result) == [path]
 
 
 def test_constructor_request_decoder_moves_even_without_other_core_methods():
@@ -182,10 +181,9 @@ endpackage
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert 'typedef int constructor_request_t;' in result[path]
-    assert '_svx__decode_constructor_request' not in result[path]
-    support = result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
-    assert '_svx__decode_constructor_request' in support
-    assert 'virtual task _svx__sv_invoke' in support
+    assert '_svx__decode_constructor_request' in result[path]
+    assert 'virtual task _svx__sv_invoke' in result[path]
+    assert list(result) == [path]
 
 
 def test_split_accepts_var_qualified_type_expression_declaration():
@@ -204,7 +202,7 @@ endpackage
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert '_svx__core_read' in result[path]
-    assert 'var type(value) temporary;' in result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
+    assert 'var type(value) temporary;' in result[path]
 
 
 def test_export_splits_both_static_gateway_and_mirror_dispatch(tmp_path):
@@ -217,8 +215,9 @@ def test_export_splits_both_static_gateway_and_mirror_dispatch(tmp_path):
     assert 'static function int _svx__core_Driver_scale(' in core
     assert 'static function int _svx__core_static_Driver_scale(' in core
     assert 'static function int _svx__core_editable_static_pkg_package_scale(' in core
-    assert 'static task _svx__sv_invoke_static(' not in core
+    assert 'static task _svx__sv_invoke_static(' in core
     supports = '\n'.join(path.read_text(encoding='utf-8') for path in (root/'support').rglob('*.svh'))
-    assert 'result = _svx__core_Driver_scale(value);' in supports
-    assert 'result = _svx__core_static_Driver_scale(value);' in supports
-    assert 'result = _svx__core_editable_static_pkg_package_scale(value);' in supports
+    assert 'result = _svx__core_Driver_scale(value);' in core
+    assert 'result = _svx__core_static_Driver_scale(value);' in core
+    assert 'result = _svx__core_editable_static_pkg_package_scale(value);' in core
+    assert '_svx__sv_invoke_static' not in supports

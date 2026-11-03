@@ -21,17 +21,25 @@ references already present in that source.
 
 ### Generated Implementation Edits
 
-`svx export` writes editable Python/SV implementations separately from execution
-support. Python contracts live under `python/svx_support`; SV call records live
-under `support/` beside the generated SV roots. Keep those support files when
-building; they are executable dependencies, not optional diagnostic sidecars.
+`svx export` keeps executable member logic together rather than minimizing the
+main file's line count. Pure Python contract data lives under `python/svx_support`;
+registration calls remain beside their owning declarations, without numbered
+registration trampolines. Shared SV call records live under `support/` beside
+the generated SV roots. Keep these required data/codec files when building;
+they are not optional diagnostic sidecars.
 Generated VIF endpoints expose short `_svx__core_*` functions/tasks containing the
-actual signal access or native method call. Their payload dispatch methods live
-in support includes in the same class scope. For a contract-preserving access
-repair, edit the core function rather than the request/response machinery.
+actual signal access or native method call. Dispatch, constructor decoding,
+field operations and callbacks stay in the same SV file, not numbered includes.
+Public callback methods contain their necessary conversions, error handling and
+copy-out, with no wrapper whose sole purpose is forwarding to another method.
+For a contract-preserving native access repair, edit the named core function;
+for a conversion or copy-out repair, follow the complete local callback/dispatch.
 Mirrored class methods, static methods and exported package functions/tasks use
 the same layout. Their SV core names include the source class or package and
 member name; a numeric suffix distinguishes collisions.
+Private handle, collection and call-record labels describe their source member
+or value shape instead of encoding every character of a URI or fingerprint.
+These artifact-local names do not replace stable wire identities.
 Class fields similarly have a short `_svx__core_field_*` entry that operates on
 the original SV variable. In the default mode its path operations execute in
 the same class scope; with `--use-type-reference`, a type-parameterized kernel

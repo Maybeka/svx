@@ -153,6 +153,10 @@ prototypes; initializers are not replayed to recover argument values.
 
 Continuation and per-owner constructor records are private runtime machinery,
 implemented with synchronous internal continuations, not async user constructors.
+Each suspended initializer retains its owning Python evaluator through resume or
+failure unwinding. Synchronous constructor callbacks borrow that evaluator;
+they must not delete it on callback return. Ordinary time-consuming callbacks
+retain their independent evaluator states.
 Each Python portion runs at its assigned ancestor stage; it need not wait until
 every later SV descendant constructor has returned. Constructor capture context
 and object identity are retained across those stages.

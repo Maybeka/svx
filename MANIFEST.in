@@ -9,8 +9,8 @@ recursive-include docs/site *.py *.css *.js *.html
 prune docs/site/_build
 exclude docs/SVX_MILESTONE*.md
 exclude docs/review_*.md
-recursive-include examples *.py *.sv *.svh *.md *.json
-recursive-include tests *.py *.sv *.svh *.json *.cpp
+recursive-include examples *.py *.sv *.svh *.md *.json *.f
+recursive-include tests *.py *.sv *.svh *.json *.cpp *.c *.f
 prune .local-sim
 prune .tmp
 prune incubator

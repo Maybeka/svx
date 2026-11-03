@@ -31,7 +31,7 @@ def test_unit_handle_dependencies_use_one_shared_native_type_adapter(tmp_path):
     assert '$unit::Item' not in text
     assert 'svx_call_records_pkg' not in text
     source_text = (output / 'sv/source.sv').read_text(encoding='utf-8')
-    assert 'svx_scoped_handles_pkg::SVXExternal_sv_c_s_sunit_s0_sItem#($unit::Item)::' in source_text
+    assert 'svx_scoped_handles_pkg::_svx__ref_unit_0_Item#($unit::Item)::' in source_text
 
 
 def test_local_scope_rejects_duplicate_generated_bridge_names():

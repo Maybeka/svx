@@ -65,8 +65,8 @@ def test_generated_collections_convert_elements_through_scalar_registry(tmp_path
     assert 'typedef remote_ref wire_0[2];' in text
     assert 'typedef remote_ref wire_0[string];' in text
     assert 'typedef wire_0 wire_1[string];' in text
-    assert 'SVXExternal_sv_c_s_scollection_utypes_sItem::encode' in text
-    assert 'SVXExternal_sv_c_s_scollection_utypes_sItem::decode' in text
+    assert '_svx__ref_Item::encode' in text
+    assert '_svx__ref_Item::decode' in text
     assert 'converted.push_back(element_0)' in text
     assert 'converted = new[value.size()]' in text
     assert 'converted.delete()' in text
@@ -80,13 +80,13 @@ def test_collection_adapter_names_keep_shape_without_repeating_target(tmp_path):
     names = [_handle_adapter_stem(binding) for binding in bindings]
     assert len(set(names)) == len(names)
     for binding, name in zip(bindings, names):
-        assert name.startswith('SVXExternal_sv_c_s_scollection_utypes_sItem')
+        assert name.startswith('_svx__ref_Item')
         if binding.collection_binding is not None:
-            assert 'SVXHandle' in name
+            assert 'handle' in name
             assert 'RemoteRef' not in name
-            assert name.count('collection_utypes') == 1
+            assert 'collection_types' not in name
         else:
-            assert name == 'SVXExternal_sv_c_s_scollection_utypes_sItem'
+            assert name == '_svx__ref_Item'
 
 
 def test_collection_field_root_uses_wire_container_not_native_source_alias(tmp_path):

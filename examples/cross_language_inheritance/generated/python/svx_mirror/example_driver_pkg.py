@@ -9,14 +9,14 @@ from svx.declarations import SVMirror, _register_source_mirror_implementation
 from svx.inheritance import bind_instance, encode_constructor, invoke_sv, invoke_sv_static, register_constructor, register_contract, register_python_subclass
 
 # --- SvTypes call contracts (private bridge metadata) ---
-from svx_support.svx_mirror.example_driver_pkg import register_contracts_0 as _svx_register_support_0
-_svx_register_support_0()
+from svx_support.svx_mirror.example_driver_pkg import example_driver_pkg_BaseDriver_drive_contract as _svx__example_driver_pkg_BaseDriver_drive_contract
+register_contract(_svx__example_driver_pkg_BaseDriver_drive_contract)
 # --- SvTypes call contracts (private bridge metadata) ---
-from svx_support.svx_mirror.example_driver_pkg import register_contracts_1 as _svx_register_support_1
-_svx_register_support_1()
+from svx_support.svx_mirror.example_driver_pkg import register_contract_contract as _svx__register_contract_contract
+register_contract(_svx__register_contract_contract)
 # --- Construction contract ---
-from svx_support.svx_mirror.example_driver_pkg import register_contracts_2 as _svx_register_support_2
-_svx_register_support_2()
+from svx_support.svx_mirror.example_driver_pkg import example_driver_pkg_BaseDriver_parameters as _svx__example_driver_pkg_BaseDriver_parameters
+register_constructor('sv://example_driver_pkg/BaseDriver', _svx__example_driver_pkg_BaseDriver_parameters)
 
 class BaseDriver(SVMirror):
     """Executable Python base view of example_driver_pkg::BaseDriver."""

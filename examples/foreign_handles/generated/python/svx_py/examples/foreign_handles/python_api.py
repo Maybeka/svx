@@ -10,11 +10,11 @@ from svx.inheritance import bind_instance, encode_constructor, invoke_sv, regist
 from examples.foreign_handles.python_api import HandlePortal as _ForeignHandlePortal
 
 # --- SvTypes call contracts (private bridge metadata) ---
-from svx_support.svx_py.examples.foreign_handles.python_api import register_contracts_0 as _svx_register_support_0
-_svx_register_support_0()
+from svx_support.svx_py.examples.foreign_handles.python_api import foreign_handles_HandlePortal_retain_packet_contract as _svx__foreign_handles_HandlePortal_retain_packet_contract
+register_contract(_svx__foreign_handles_HandlePortal_retain_packet_contract)
 # --- Construction contract ---
-from svx_support.svx_py.examples.foreign_handles.python_api import register_contracts_1 as _svx_register_support_1
-_svx_register_support_1()
+from svx_support.svx_py.examples.foreign_handles.python_api import foreign_handles_HandlePortal_parameters as _svx__foreign_handles_HandlePortal_parameters
+register_constructor('py://examples/foreign_handles/HandlePortal', _svx__foreign_handles_HandlePortal_parameters)
 class HandlePortal(_ForeignHandlePortal):
     """Python view of an SV-derived examples.foreign_handles.python_api.HandlePortal."""
     __svx_foreign_class_id__ = 'py://examples/foreign_handles/HandlePortal'

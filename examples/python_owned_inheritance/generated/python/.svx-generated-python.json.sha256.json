@@ -3,11 +3,11 @@
   "files": {
     "svx_bootstrap.py": "389e0851daf18ca18cebe320c265a2d5b5e05ec79ae53d359a46e40bb8cbc9dd",
     "svx_py/__init__.py": "da7bb0ec5f4ae3727016793adb84f21d7fa314b114626ae8c0201a438e438f9c",
-    "svx_py/examples/python_owned_inheritance/base_monitor.py": "86a027dbff3aaa0ab90e0d8612bb069b52bf17dd1a9cdadb245444381439261f",
+    "svx_py/examples/python_owned_inheritance/base_monitor.py": "b4c1cf7d26908a406ebf39d595f09c2c30fd84ec62a5a136fd7e1c9b8d53c86d",
     "svx_support/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
     "svx_support/svx_py/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
     "svx_support/svx_py/examples/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
     "svx_support/svx_py/examples/python_owned_inheritance/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
-    "svx_support/svx_py/examples/python_owned_inheritance/base_monitor.py": "e43881e8076707596bfcd46554148f5ae56df76c3a09ea8d6e16508027e1a466"
+    "svx_support/svx_py/examples/python_owned_inheritance/base_monitor.py": "270ce4bc60cb5ba1183f656b23129e8937ac06b94f400eef02b0cde94333975d"
   }
 }

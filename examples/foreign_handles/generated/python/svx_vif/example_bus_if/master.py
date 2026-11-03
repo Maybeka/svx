@@ -7,8 +7,8 @@ from __future__ import annotations
 from svx.inheritance import invoke_sv, register_contract, register_vif_view
 
 # --- SvTypes call contracts (private bridge metadata) ---
-from svx_support.svx_vif.example_bus_if.master import register_contracts_0 as _svx_register_support_0
-_svx_register_support_0()
+from svx_support.svx_vif.example_bus_if.master import example_bus_if_master_read_contract as _svx__example_bus_if_master_read_contract
+register_contract(_svx__example_bus_if_master_read_contract)
 
 class Master:
     """Generated restricted view of virtual example_bus_if.master."""

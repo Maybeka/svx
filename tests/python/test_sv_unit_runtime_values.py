@@ -38,7 +38,7 @@ def test_same_owner_enum_struct_and_container_runtime_bindings(source, tmp_path)
     text = (output / 'sv/source.sv').read_text(encoding='utf-8')
     assert 'typedef $unit::Mode SVXUnitValue_' in text
     assert 'import $unit::*' not in text
-    assert text.index('typedef $unit::Mode SVXUnitValue_') < text.index('class SVXCall_')
+    assert text.index('typedef $unit::Mode SVXUnitValue_') < text.index('class _svx__call_')
     array_record = _call_record_class_name('sv://unit/0/Driver#echo_modes', 'request')
     body = text.split(f'class {array_record} extends', 1)[1].split('endclass', 1)[0]
     assert 'covergroup' not in body

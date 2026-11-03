@@ -21,12 +21,11 @@ def run():
         def check(self, value):
             assert value.x_mask == 0 and value.z_mask == 0
             return self.count.value + value.value_mask
-    try:
-        HostedDerived(20)
-    except TypeError as error:
-        assert "must be created by SV" in str(error)
-    else:
-        raise AssertionError("SV-initiated mirror allocated from Python")
+    python_owned = HostedDerived(20)
+    assert python_owned.count.value == 21
+    from svtypes import LogicValue
+    assert python_owned.check(LogicValue(8, 5)) == 26
+    svx.close_instance(python_owned)
 
     if (os.environ.get("SVX_CLOSE_FUNCTION") == "1"
             or os.environ.get("SVX_CLEANUP_WAIT_NEGATIVE") == "1"

@@ -378,8 +378,9 @@ def test_manifest_emits_language_specific_mirrors():
     assert "# Manifest: https://svx.dev/schema/inheritance-manifest/v2 v2.0.0; generator ABI 2." in mirror_text
     assert "# Role: Python mirrors for SystemVerilog-owned classes." in mirror_text
     assert "# --- SvTypes call contracts (private bridge metadata) ---" in mirror_text
-    assert 'from svx_support.svx_mirror.tb_pkg import register_contracts_0' in mirror_text
-    assert 'register_contract(' in support_text
+    assert 'from svx_support.svx_mirror.tb_pkg import tb_pkg_BaseDriver_drive_contract' in mirror_text
+    assert 'register_contract(' not in support_text
+    assert 'register_contract(_svx__tb_pkg_BaseDriver_drive_contract)' in mirror_text
 
     sv_text = emit_sv_mirrors(manifest)
     assert "// Layout: SvTypes records, typed external handles, public projections, then lineage helpers." in sv_text
@@ -566,9 +567,7 @@ def test_sv_generation_implements_completion_time_copy_out():
     assert "input int source, inout int changed, output int observed" in text
     assert "package svx_call_records_pkg;" in text
     outbound = text.split("virtual task drive", 1)[1].split("endtask", 1)[0]
-    assert '__svx_support_' in outbound and 'request_value' not in outbound
-    helper = '__svx_support_' + inheritance._call_record_class_name(method['canonical_id'], 'callback').removeprefix('SVXCall_')
-    outbound = text.split('task '+helper, 1)[1].split('endtask', 1)[0]
+    assert '__svx_support_' not in outbound
     assert "request_value.source = source;" in outbound
     assert "request_value.changed = changed;" in outbound
     assert "request_value.observed" not in outbound
@@ -990,7 +989,7 @@ def test_four_segment_lineage_binds_early_python_fields_at_final_mirror():
     assert "class C extends drivers_child::C" in stages[after_c]
 
 
-def test_inheritance_gen_cli_writes_mirrors(tmp_path):
+def test_inheritance_gen_cli_writes_mirrors(tmp_path, monkeypatch):
     manifest_path = tmp_path / "inheritance.json"
     manifest_path.write_text(json.dumps(manifest_data()))
     python_out = tmp_path / "python"
@@ -1052,6 +1051,9 @@ def test_inheritance_gen_cli_writes_mirrors(tmp_path):
     assert all(len(entry["sha256"]) == 64 for entry in artifacts["artifacts"])
     assert "svx_mirror/tb_pkg.py" in out.getvalue()
     (python_out / "checks.py").write_text("class BaseMonitor:\n    pass\n")
+    for name in list(sys.modules):
+        if name == 'svx_support' or name.startswith('svx_support.'):
+            monkeypatch.delitem(sys.modules, name)
     runtime._load_artifact_manifest(
         artifacts_out,
         runtime.SvTypesCapabilities(
@@ -1890,8 +1892,8 @@ def test_constructor_handle_generation_preserves_native_types_and_decodes_both_f
     model = parse_manifest(handle_manifest())
     sv = emit_sv_mirrors(model)
     assert "input external_handle_test_pkg::Packet packet, input virtual external_bus_if.master vif" in sv
-    packet_adapter = "SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket"
-    vif_adapter = "SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smaster"
+    packet_adapter = "_svx__ref_Packet"
+    vif_adapter = "_svx__ref_virtual_external_bus_if_master"
     assert f"request_value.packet = {packet_adapter}::encode(packet);" in sv
     assert f"request_value.vif = {vif_adapter}::encode(vif);" in sv
     assert sv.count(f"if (!{packet_adapter}::decode(constructor_request.packet, packet, error))") == 2
@@ -1903,7 +1905,7 @@ def test_constructor_handle_generation_preserves_native_types_and_decodes_both_f
     for module in ("svx_mirror/constructor_handle_pkg.py", "svx_py/tests/integration/constructor_handles_user.py"):
         text = python[Path(module)]
         support = python[Path('svx_support') / module]
-        assert "external_targets=('sv://external_handle_test_pkg/Packet', 'sv-vif://external_bus_if/master')" in support
+        assert "('sv://external_handle_test_pkg/Packet', 'sv-vif://external_bus_if/master')" in support
         compile(text, module, "exec")
 
 
@@ -2095,10 +2097,7 @@ def test_generated_void_function_callback_has_function_termination():
     model = parse_manifest(parameterized_manifest())
     source = emit_sv_mirrors(model)
     method = source.split("virtual function void observe(output int result);", 1)[1].split("    endfunction", 1)[0]
-    assert '__svx_support_' in method and 'svx_inheritance_call_python_function' not in method
-    observe = next(method for cls in model.classes for method in cls.methods if method.name == 'observe')
-    helper = '__svx_support_' + inheritance._call_record_class_name(observe.canonical_id, 'callback').removeprefix('SVXCall_')
-    method = source.split('function void '+helper, 1)[1].split('    endfunction', 1)[0]
+    assert '__svx_support_' not in method
     assert "svx_inheritance_call_python_function" in method
     assert "endtask" not in method
 

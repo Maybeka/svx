@@ -1,0 +1,23 @@
+{
+  "schema": "svx-generated-baseline/v1",
+  "files": {
+    "svx_bootstrap.py": "f98f7c93ca7b50fc0eac7345532f9dfa7b22f3de982d66c5a349f88b3a9dfd4c",
+    "svx_mirror/__init__.py": "d1ca7746a9614fb4e85c779732540404e346026ffa1df48a4784c160f50973cd",
+    "svx_mirror/register_policy_pkg.py": "71dfb896c3862df0f3d2374f612dd48432a8e24253e4ed2afc04b5d27b42e9e1",
+    "svx_py/__init__.py": "da7bb0ec5f4ae3727016793adb84f21d7fa314b114626ae8c0201a438e438f9c",
+    "svx_py/examples/register_lab/extensions.py": "c2db0964c20cfce0c4d81b167c01ad9d40e7c759b0c0ecdcdc690f51f07c08a9",
+    "svx_support/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_mirror/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_mirror/register_policy_pkg.py": "76ba5926f0073ad0e697b2ce59d34028119e5b43704c8047ababe3af52306ab2",
+    "svx_support/svx_py/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_py/examples/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_py/examples/register_lab/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_py/examples/register_lab/extensions.py": "80854f06a9649dced3bb7510803a964f296cbbe21d7c87cfa89afc5be5be7e88",
+    "svx_support/svx_vif/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_vif/register_if/__init__.py": "d9b2c28f557e437be804a2728647bed0a76699481506a758f933b479b7c1862b",
+    "svx_support/svx_vif/register_if/diagnostics.py": "aa3b52fab20b5f925da22ff2fbdef660c277f86b6f2e5c964ef6ce03cf77a0c2",
+    "svx_vif/__init__.py": "dfd40ff31e9dcfe779f001dc38535e16884bdacc36eac390ab76e32cb1653823",
+    "svx_vif/register_if/__init__.py": "dfd40ff31e9dcfe779f001dc38535e16884bdacc36eac390ab76e32cb1653823",
+    "svx_vif/register_if/diagnostics.py": "949cb4066d3b2beb4015f9430e84244d9fd940849688c83ca7f41bd0d15eafc1"
+  }
+}

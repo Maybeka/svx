@@ -1082,7 +1082,13 @@ static int inheritance_call_python(unsigned long long object_id,
       return 0;
     }
   }
-  PyThreadState *callback_state = PyThreadState_New(previous_state->interp);
+  // A constructor continuation outlives this synchronous callback. Its greenlet
+  // must not retain an evaluator state that finish_callback will delete.
+  const bool owns_callback_state = !(function_context && method_id != nullptr &&
+      std::strncmp(method_id, "svx-natural-constructor:",
+                   sizeof("svx-natural-constructor:") - 1) == 0);
+  PyThreadState *callback_state = owns_callback_state
+      ? PyThreadState_New(previous_state->interp) : previous_state;
   if (callback_state == nullptr) {
     PyErr_Clear();
     message = "SVX could not allocate a Python callback thread state";
@@ -1100,12 +1106,12 @@ static int inheritance_call_python(unsigned long long object_id,
   const auto finish_callback = [&]() {
     if (context_entered) PyContext_Exit(inherited_context);
     Py_XDECREF(inherited_context);
-    PyThreadState_Clear(callback_state);
+    if (owns_callback_state) PyThreadState_Clear(callback_state);
     // The last running callback may belong to an unrelated suspended SV
     // process and can finish before this one. Never restore that borrowed state.
     // Python->SV wrappers restore their own saved caller state on return.
-    PyThreadState_Swap(idle_state);
-    PyThreadState_Delete(callback_state);
+    PyThreadState_Swap(owns_callback_state ? idle_state : previous_state);
+    if (owns_callback_state) PyThreadState_Delete(callback_state);
     frames.pop_back();
     if (frames.empty()) g_inheritance_call_frames.erase(context_id);
     callback_states.pop_back();

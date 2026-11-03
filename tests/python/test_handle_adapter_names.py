@@ -32,17 +32,24 @@ def test_distinct_package_handle_types_do_not_share_an_adapter_name(tmp_path, in
     main([*args, '--check'], out=io.StringIO())
 
 
-def test_target_name_escaping_is_injective_and_legal():
+def test_artifact_local_adapter_names_are_unique_legal_and_short():
     from svx.inheritance import HandleBinding
+    from svx.generated_names import with_sv_names
+    from types import SimpleNamespace
     import re
     characters = 'aAzZ09_:/-.[]%+$~'
     targets = [f'sv://p/{left}{right}' for left in characters for right in characters]
     bindings = [HandleBinding(kind='sv_class', target_type_name=target, sv_type='p::Item')
                 for target in targets]
-    names = [_handle_adapter_stem(binding) for binding in bindings]
+    @with_sv_names
+    def allocate(manifest):
+        names = [_handle_adapter_stem(binding) for binding in bindings]
+        original = bindings[0]
+        assert _handle_adapter_stem(replace(original, target_type_name='sv://p/a_b')) != _handle_adapter_stem(
+            replace(original, target_type_name='sv://p/a/ub'))
+        return names
+    names = allocate(SimpleNamespace(classes=()))
     assert len(set(names)) == len(targets)
     assert all(re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name) for name in names)
-    # Literal escape-looking source text must not alias an escaped character.
-    original = bindings[0]
-    assert _handle_adapter_stem(replace(original, target_type_name='sv://p/a_b')) != _handle_adapter_stem(
-        replace(original, target_type_name='sv://p/a/ub'))
+    assert max(map(len, names)) < 32
+    assert names == allocate(SimpleNamespace(classes=()))

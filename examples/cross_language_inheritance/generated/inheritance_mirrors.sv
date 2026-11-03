@@ -45,10 +45,6 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
 
     // Core operation: sv://example_driver_pkg/BaseDriver#drive
     virtual task drive();
-      __svx_support_sv_x3a__x2f__x2f_example_x5f_driver_x5f_pkg_x2f_BaseDriver_x23_drive_Callback();
-    endtask
-
-    task __svx_support_sv_x3a__x2f__x2f_example_x5f_driver_x5f_pkg_x2f_BaseDriver_x23_drive_Callback();
       bit ok;
       chandle request;
       chandle response;

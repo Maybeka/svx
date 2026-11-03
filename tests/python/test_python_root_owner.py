@@ -317,7 +317,7 @@ def test_generated_plain_root_needs_no_user_owner_initialization(environment, mo
 
 
 @pytest.mark.parametrize("cleanup_failure", ["none", "before_close", "after_close"])
-def test_generated_sv_mirror_preserves_initializer_error_and_retires_binding(environment, monkeypatch, cleanup_failure):
+def test_generated_sv_mirror_preserves_initializer_error_and_retires_binding(environment, monkeypatch, cleanup_failure, generated_artifacts):
     import svx.inheritance as inheritance
     from tests.integration.sv_field_mirror_schema import manifest_data
 
@@ -325,6 +325,7 @@ def test_generated_sv_mirror_preserves_initializer_error_and_retires_binding(env
     monkeypatch.setattr(inheritance, "_python_subclasses", {})
     monkeypatch.setattr(inheritance, "_method_contracts", {})
     generated = inheritance.emit_python_mirrors(inheritance.parse_manifest(manifest_data()))
+    generated_artifacts(generated)
     text = next(text for path, text in generated.items() if str(path) == "svx_mirror/field_owner_pkg.py")
     namespace = {"__name__": "generated_sv_owner"}
     exec(text, namespace)

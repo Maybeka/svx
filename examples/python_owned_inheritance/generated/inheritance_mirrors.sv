@@ -7,7 +7,7 @@
 package svx_call_records_pkg;
   import svtypes_pkg::*;
 
-  class SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request extends svtypes_pkg::sv_object;
+  class _svx__call_base_monitor_BaseMonitor_Request extends svtypes_pkg::sv_object;
     rand int seed;
 
     protected bit __svtypes_layered_randomize_active;
@@ -46,8 +46,8 @@ package svx_call_records_pkg;
       return __svtypes_ok;
     endfunction
 
-    class SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request__svtypes_coverage;
-      covergroup cg with function sample(SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request item);
+    class _svx__call_base_monitor_BaseMonitor_Request__svtypes_coverage;
+      covergroup cg with function sample(_svx__call_base_monitor_BaseMonitor_Request item);
         option.at_least = 1;
         option.auto_bin_max = 64;
         option.comment = "";
@@ -137,7 +137,7 @@ package svx_call_records_pkg;
         cg = new();
       endfunction
 
-      function void sample(SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request item);
+      function void sample(_svx__call_base_monitor_BaseMonitor_Request item);
         cg.sample(item);
       endfunction
 
@@ -192,7 +192,7 @@ package svx_call_records_pkg;
         svtypes_pkg::end_dump_object();
         return result;
       end
-      result = $sformatf("SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request#%0d{", __svtypes_object_number);
+      result = $sformatf("_svx__call_base_monitor_BaseMonitor_Request#%0d{", __svtypes_object_number);
       __svtypes_apply_fields(3, __svtypes_bytes, __svtypes_offset, __svtypes_result);
       result = {result, __svtypes_result};
       result = {result, "}"};
@@ -242,10 +242,10 @@ package svx_call_records_pkg;
       present = bytes[offset];
       offset += 1;
       if (present == 8'h02) begin
-        $fatal(2, "SvTypes cannot unpack root reference into existing SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request object");
+        $fatal(2, "SvTypes cannot unpack root reference into existing _svx__call_base_monitor_BaseMonitor_Request object");
       end
       if (present != 8'h01) begin
-        $fatal(2, "SvTypes cannot unpack null into existing SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request object");
+        $fatal(2, "SvTypes cannot unpack null into existing _svx__call_base_monitor_BaseMonitor_Request object");
       end
       unpack_body(bytes, offset);
     endfunction
@@ -259,7 +259,7 @@ package svx_call_records_pkg;
     endfunction
   endclass
 
-  class SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response extends svtypes_pkg::sv_object;
+  class _svx__call_base_monitor_BaseMonitor_sample_Response extends svtypes_pkg::sv_object;
     rand int svx_return_value;
 
     protected bit __svtypes_layered_randomize_active;
@@ -298,8 +298,8 @@ package svx_call_records_pkg;
       return __svtypes_ok;
     endfunction
 
-    class SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response__svtypes_coverage;
-      covergroup cg with function sample(SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response item);
+    class _svx__call_base_monitor_BaseMonitor_sample_Response__svtypes_coverage;
+      covergroup cg with function sample(_svx__call_base_monitor_BaseMonitor_sample_Response item);
         option.at_least = 1;
         option.auto_bin_max = 64;
         option.comment = "";
@@ -389,7 +389,7 @@ package svx_call_records_pkg;
         cg = new();
       endfunction
 
-      function void sample(SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response item);
+      function void sample(_svx__call_base_monitor_BaseMonitor_sample_Response item);
         cg.sample(item);
       endfunction
 
@@ -444,7 +444,7 @@ package svx_call_records_pkg;
         svtypes_pkg::end_dump_object();
         return result;
       end
-      result = $sformatf("SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response#%0d{", __svtypes_object_number);
+      result = $sformatf("_svx__call_base_monitor_BaseMonitor_sample_Response#%0d{", __svtypes_object_number);
       __svtypes_apply_fields(3, __svtypes_bytes, __svtypes_offset, __svtypes_result);
       result = {result, __svtypes_result};
       result = {result, "}"};
@@ -494,10 +494,10 @@ package svx_call_records_pkg;
       present = bytes[offset];
       offset += 1;
       if (present == 8'h02) begin
-        $fatal(2, "SvTypes cannot unpack root reference into existing SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response object");
+        $fatal(2, "SvTypes cannot unpack root reference into existing _svx__call_base_monitor_BaseMonitor_sample_Response object");
       end
       if (present != 8'h01) begin
-        $fatal(2, "SvTypes cannot unpack null into existing SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response object");
+        $fatal(2, "SvTypes cannot unpack null into existing _svx__call_base_monitor_BaseMonitor_sample_Response object");
       end
       unpack_body(bytes, offset);
     endfunction
@@ -532,7 +532,7 @@ package svx_proxy_base_monitor;
       svx_inheritance_registry::register_object(object_id, this);
     endfunction
 
-    typedef SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request constructor_request_t;
+    typedef _svx__call_base_monitor_BaseMonitor_Request constructor_request_t;
 
     static function constructor_request_t _svx__decode_constructor_request(input chandle request);
       constructor_request_t value;
@@ -548,17 +548,13 @@ package svx_proxy_base_monitor;
 
     // Core operation: py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample
     virtual function int sample();
-      return __svx_support_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Callback();
-    endfunction
-
-    function int __svx_support_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Callback();
       bit ok;
       chandle request;
       chandle response;
       string error;
       byte unsigned bytes[$];
       int offset;
-      SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response response_value;
+      _svx__call_base_monitor_BaseMonitor_sample_Response response_value;
       int result;
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
@@ -583,10 +579,6 @@ package svx_proxy_base_monitor;
 
     // Core operation: py://examples/python_owned_inheritance/base_monitor/BaseMonitor#notify
     virtual task notify();
-      __svx_support_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_notify_Callback();
-    endtask
-
-    task __svx_support_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_notify_Callback();
       bit ok;
       chandle request;
       chandle response;
@@ -613,7 +605,7 @@ package svx_proxy_base_monitor;
       case (method_id)
         "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample": begin
           // Decode the typed request, invoke the declared target, then encode its response.
-          SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response response_value;
+          _svx__call_base_monitor_BaseMonitor_sample_Response response_value;
           int result;
           svx_require_unpacked_all("py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample", "inheritance request", "call request", offset, bytes.size());
           result = sample();
@@ -650,7 +642,7 @@ package svx_proxy_base_monitor;
       case (method_id)
         "py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample": begin
           // Decode the typed request, invoke the declared target, then encode its response.
-          SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_x23_sample_Response response_value;
+          _svx__call_base_monitor_BaseMonitor_sample_Response response_value;
           int result;
           svx_require_unpacked_all("py://examples/python_owned_inheritance/base_monitor/BaseMonitor#sample", "inheritance request", "call request", offset, bytes.size());
           result = sample();

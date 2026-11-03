@@ -6,8 +6,8 @@
 module tb;
   import svx_pkg::*;
   import svtypes_pkg::*;
-  typedef svx_external_handles_pkg::SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket PacketAdapter;
-  typedef svx_external_handles_pkg::SVXExternal_sv_hvif_c_s_sexternal_ubus_uif_smaster VifAdapter;
+  typedef svx_external_handles_pkg::_svx__ref_Packet PacketAdapter;
+  typedef svx_external_handles_pkg::_svx__ref_virtual_external_bus_if_master VifAdapter;
   external_bus_if bus();
   external_handle_test_pkg::Packet packet, decoded;
   virtual external_bus_if.master vif, decoded_vif;
@@ -16,7 +16,7 @@ module tb;
   initial begin
     packet = new(71);
     first = PacketAdapter::encode(packet);
-    second = external_handle_test_pkg::SVXExternal_sv_c_s_sexternal_uhandle_utest_upkg_sPacket::encode(packet);
+    second = external_handle_test_pkg::_svx__ref_Packet::encode(packet);
     if (first.object_number != second.object_number || svx_external_handle_registry::objects.num() != 1)
       $fatal(1, "endpoint alias split object identity");
     if (!PacketAdapter::decode(first, decoded, error) || decoded != packet)

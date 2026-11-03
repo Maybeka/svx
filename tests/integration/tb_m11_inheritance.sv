@@ -32,7 +32,7 @@ class SvCounterFactory implements svx_pkg::svx_factory;
     svx_proxy_m11_base::BaseMonitor::constructor_request_t constructor_request;
     int seed;
     SvCounter counter;
-    constructor_request = svx_proxy_m11_base::BaseMonitor::svx_decode_constructor_request(request);
+    constructor_request = svx_proxy_m11_base::BaseMonitor::_svx__decode_constructor_request(request);
     seed = constructor_request.seed;
     counter = new(object_id, seed);
     ok = 1;

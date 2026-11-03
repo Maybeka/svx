@@ -17,6 +17,9 @@ def test_source_distribution_includes_sv_headers_for_examples_and_tests():
         patterns = [pattern for rule in rules if rule[1] == root for pattern in rule[2:]]
         assert "*.sv" in patterns
         assert "*.svh" in patterns
+        assert '*.f' in patterns
+        if root == 'tests':
+            assert '*.c' in patterns
 
 
 def test_public_version_matches_project_metadata():
