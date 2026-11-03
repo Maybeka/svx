@@ -133,6 +133,10 @@ def _configuration_error(value) -> str | None:
     return None
 
 
+def _configuration(value) -> bool:
+    return _configuration_error(value) is None
+
+
 def _validate_python_selections(configuration: dict, root: Path, sources: set[Path]) -> None:
     if configuration.get('python_modules') and 'python_selections' not in configuration:
         raise SVXInheritanceError('discovery Python selection inventory is missing; rerun inheritance-manifest')

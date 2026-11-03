@@ -311,6 +311,9 @@ implementation exceptions are not suppressed.
 - `svx svtypes-gen` generates SystemVerilog declarations and optional typed
   channel helpers from SvTypes modules. With `--out`, byte-identical output
   preserves its existing timestamp instead of triggering downstream rebuilds.
+  `--use-type-reference` enables SystemVerilog `type(expression)` references;
+  the default does not emit them. The same option is available for `svx export`
+  and `svx inheritance-gen`.
 - `svx inspect` lists preprocessed SV declarations and lexical owners from the
   same original build inputs. `--kind` and `--name` filter the display; `--json`
   includes locations, compilation units and current export-availability reasons.

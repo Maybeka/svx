@@ -8,6 +8,17 @@ arguments in the project's build script, not in several copied check recipes.
 
 ## Choose The Operation
 
+### SystemVerilog Type References
+
+`svx export`, `svx inheritance-gen`, and `svx svtypes-gen` generate without
+SystemVerilog `type(expression)` references by default. Pass
+`--use-type-reference` to the generation command to enable them when the target
+tool supports them. This is a generation option, not a simulator runtime
+setting. Changing it requires regenerating and recompiling the SV output;
+incremental export and artifact checks distinguish the two modes. Integrated
+output preserves the supplied SV source as written, including any type
+references already present in that source.
+
 ### Generated Implementation Edits
 
 `svx export` writes editable Python/SV implementations separately from execution
@@ -21,9 +32,10 @@ repair, edit the core function rather than the request/response machinery.
 Mirrored class methods, static methods and exported package functions/tasks use
 the same layout. Their SV core names include the source class or package and
 member name; a numeric suffix distinguishes collisions.
-Class fields similarly have a short `_svx__core_field_*` binding to the original
-SV variable by `ref`. Path operations live in type-parameterized support kernels;
-the binding does not allocate another field or copy the complete value.
+Class fields similarly have a short `_svx__core_field_*` entry that operates on
+the original SV variable. In the default mode its path operations execute in
+the same class scope; with `--use-type-reference`, a type-parameterized kernel
+accesses the original field by `ref`. Neither mode allocates a second field.
 For a selected method, the optional artifact inventory's `member_locations`
 table points to its generated Python call and SV core operation. These are
 generation-time locations, not runtime authority; manual edits can shift lines.

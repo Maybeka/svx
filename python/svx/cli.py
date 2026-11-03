@@ -292,7 +292,8 @@ def _sv_helper_block(obj_cls: type, level: int = 0) -> str:
     )
 
 
-def _emit_svtypes(types: list[type], package: str | None, source: str, channel_helpers: bool = False) -> str:
+def _emit_svtypes(types: list[type], package: str | None, source: str, channel_helpers: bool = False,
+                  use_type_reference: bool = False) -> str:
     enums = [cls for cls in types if _is_sv_enum_class(cls)]
     objects = [cls for cls in types if _is_sv_object_class(cls)]
     object_names = [cls.__name__ for cls in objects]
@@ -325,7 +326,8 @@ def _emit_svtypes(types: list[type], package: str | None, source: str, channel_h
         body.append("")
 
     for obj_cls in objects:
-        body.append(obj_cls.to_sv_obj(content_level))
+        body.append(obj_cls.to_sv_obj(content_level, use_type_reference=True) if use_type_reference
+                    else obj_cls.to_sv_obj(content_level))
         body.append("")
 
     if channel_helpers and objects:
@@ -347,7 +349,8 @@ def _cmd_svtypes_gen(args: argparse.Namespace, out: TextIO) -> int:
         type_names = [name.strip() for part in args.types for name in part.split(",") if name.strip()]
     classes = _select_types(args.module, type_names)
     source = ", ".join(args.module)
-    text = _emit_svtypes(classes, args.package, source, channel_helpers=args.channel_helpers)
+    text = _emit_svtypes(classes, args.package, source, channel_helpers=args.channel_helpers,
+                         use_type_reference=args.use_type_reference)
     if args.out:
         write_text_atomic(Path(args.out), text)
     else:
@@ -449,8 +452,9 @@ def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
     _sv_macro_config(args)
     from .sv_library_search import library_search
     from .sv_frontend import source_elaboration
+    from .sv_codegen_mode import type_reference_mode
     certified_sources = {}
-    with source_elaboration(args.sv_elaboration), library_search(args._sv_build_configuration), _fresh_declaration_entries((), all_sources=True,
+    with type_reference_mode(args.use_type_reference), source_elaboration(args.sv_elaboration), library_search(args._sv_build_configuration), _fresh_declaration_entries((), all_sources=True,
                                     cached_sources=certified_sources,
                                     command='inheritance-gen') as consumed:
         return _generate_inheritance(args, out, consumed, certified_sources)
@@ -972,6 +976,8 @@ def _generation_inputs(args: argparse.Namespace, root: Path, certified_sources=N
         "sv_include_dirs": [relative(Path(path).resolve()) for path in macro_config["sv_include_dirs"]],
         "source_mode": "shared-compilation-unit" if macro_config['sv_compilation_unit'] else "separate-parse-inputs",
     }
+    if getattr(args, 'use_type_reference', False):
+        inputs['use_type_reference'] = True
     if args.sv_elaboration != 'all':
         inputs['sv_elaboration'] = args.sv_elaboration
     if args._excluded_sv_sources:
@@ -1242,6 +1248,7 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
         *(['--sv-integrated-dir', str(root / 'sv')] if integrated else
           ['--sv-output-dir', str(root)]),
         '--artifact-manifest', str(root / 'artifacts.json'),
+        *(['--use-type-reference'] if args.use_type_reference else []),
         *(['--check'] if args.check else []),
         *(['--overwrite-generated'] if getattr(args, 'overwrite_generated', False) else []),
     ])
@@ -1559,6 +1566,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser('export', help='discover and generate selected SV APIs from original project inputs')
     _add_discovery_arguments(p)
+    p.add_argument('--use-type-reference', action='store_true', help='allow generated SystemVerilog type(expression) references')
     p.add_argument('--integrated', action='store_true',
                    help='emit source copies and bridges, retaining original compilation-unit boundaries; compile instead of original inputs')
     p.add_argument('--incremental', action='store_true',
@@ -1589,11 +1597,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--types", action="append", help="comma-separated class names to generate")
     p.add_argument("--package", help="optional SystemVerilog package name")
     p.add_argument("--channel-helpers", action="store_true", help="emit SystemVerilog typed channel helper tasks")
+    p.add_argument('--use-type-reference', action='store_true', help='allow generated SystemVerilog type(expression) references')
     p.add_argument("--out", help="output file; stdout if omitted")
     p.set_defaults(func=_cmd_svtypes_gen)
 
     p = sub.add_parser("inheritance-gen", help="generate cross-language inheritance mirrors")
     _add_sv_macro_arguments(p, analysis=True)
+    p.add_argument('--use-type-reference', action='store_true', help='allow generated SystemVerilog type(expression) references')
     p.add_argument("--python-source", action="append", default=[], metavar="FILE",
                    help="Python source input to fingerprint and protect; repeat for explicit dependencies")
     p.add_argument("--manifest", required=True, help="versioned JSON inheritance manifest")

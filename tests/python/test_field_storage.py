@@ -90,9 +90,9 @@ def test_nested_field_codegen_uses_public_typedef_context():
     assert 'queue_packer#(__svx_field_nested_values_0_t,' in text
     assert '__svx_field_nested_values_0_t field_value;' in text
     assert 'int [$] field_value;' not in text
-    assert '#(type(this.nested_values))::invoke(this.nested_values,' in text
-    assert '__svx_resident_value[operation.path_index[0]][operation.path_index[1]]' in text
-    assert 'operation.path_index[1] < __svx_resident_value[operation.path_index[0]].size()' in text
+    assert 'type(this.nested_values)' not in text
+    assert 'this.nested_values[operation.path_index[0]][operation.path_index[1]]' in text
+    assert 'operation.path_index[1] < this.nested_values[operation.path_index[0]].size()' in text
 
 
 def test_field_and_method_core_names_share_collision_scope():

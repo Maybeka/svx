@@ -139,7 +139,8 @@ def emit_owner_records(manifest, source_scope, *, native_references=None, inline
                 ])
         elif data['schema']['kind'] == 'struct':
             model = svtypes.type_spec_from_identity(data['svtypes'], location=value.symbol)
-            text = model.to_sv_obj(0)
+            from .sv_codegen_mode import render_sv_object
+            text = render_sv_object(model, 0)
             if native_struct_aliases and value.symbol in (native_references or {}):
                 # Keep SvTypes' field packer, but bind its value to the original
                 # native struct so output/inout and containers retain exact types.
@@ -148,5 +149,6 @@ def emit_owner_records(manifest, source_scope, *, native_references=None, inline
                                                       packed=data['schema']['packed'], schema=data['schema'])
             lines.append(text)
     lines.extend(_manifest_sv_collection_typedefs(manifest))
-    lines.extend(record.to_sv_obj(0) for record in _manifest_sv_record_types(manifest))
+    from .sv_codegen_mode import render_sv_object
+    lines.extend(render_sv_object(record, 0) for record in _manifest_sv_record_types(manifest))
     return lines

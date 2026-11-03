@@ -220,9 +220,9 @@ def test_sv_owned_fields_bind_to_inherited_storage_without_shadowing():
     sv_text = emit_sv_mirrors(manifest)
     assert "extends field_owner_pkg::Base" in sv_text
     assert "int count;" not in sv_text
-    assert '#(type(this.count))::invoke(this.count,' in sv_text
-    assert "int_packer::pack(__svx_resident_value, bytes)" in sv_text
-    assert "int_packer::unpack(__svx_resident_value, bytes, field_offset)" in sv_text
+    assert 'type(this.count)' not in sv_text
+    assert "int_packer::pack(this.count, bytes)" in sv_text
+    assert "int_packer::unpack(this.count, bytes, field_offset)" in sv_text
 
 
 @pytest.mark.parametrize("annotation,kind", [
@@ -2029,11 +2029,11 @@ def test_native_handle_fields_preserve_metadata_and_use_typed_endpoints():
     source = emit_sv_mirrors(model)
     for field in cls.fields:
         adapter = inheritance._handle_adapter_name(field.handle)
-        assert f'#(type(this.{field.name}))::invoke(this.{field.name},' in source
-        assert f"{adapter}::encode(__svx_resident_value)" in source
+        assert f'type(this.{field.name})' not in source
+        assert f"{adapter}::encode(this.{field.name})" in source
         assert f"{adapter}::decode(field_wire, field_native, error)" in source
         assert f'field_wire = new("{field.handle.target_type_name}");' in source
-        assert "__svx_resident_value = field_native;" in source
+        assert f"this.{field.name} = field_native;" in source
         assert f"::unpack({field.name}," not in source
         assert inheritance._sv_field_declaration(field) == f"{field.handle.sv_type} {field.name}"
     invalid = handles_manifest()

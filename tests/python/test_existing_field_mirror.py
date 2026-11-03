@@ -23,8 +23,7 @@ def test_field_dispatch_qualifies_members_that_shadow_generated_locals(name):
     binding = data['classes'][0]['fields'][0]['type']
     data['classes'][0]['fields'] = [{'name': name, 'type': binding}]
     text = emit_sv_mirrors(parse_manifest(data))
-    assert f'#(type(this.{name}))::invoke(this.{name},' in text
-    text = text.replace('__svx_resident_value', f'this.{name}')
+    assert f'type(this.{name})' not in text
     assert f'int_packer::pack(this.{name}, bytes)' in text
     assert f'int_packer::unpack(this.{name}, bytes, field_offset)' in text
     assert f'int_packer::unpack(this.{name}, operation.payload, field_offset)' in text
@@ -54,8 +53,7 @@ def test_addressed_sequence_dispatch_qualifies_every_member_access(name, kind):
     }
     data['classes'][0]['fields'] = [{'name': name, 'type': binding}]
     text = emit_sv_mirrors(parse_manifest(data))
-    assert f'#(type(this.{name}))::invoke(this.{name},' in text
-    text = text.replace('__svx_resident_value', f'this.{name}')
+    assert f'type(this.{name})' not in text
     if kind == 'assoc_array':
         assert f'int_packer::pack(this.{name}[field_key], bytes)' in text
         assert f'this.{name}[field_key] = field_value;' in text

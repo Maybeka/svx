@@ -100,6 +100,37 @@ def _contains_native_reference(schema):
     return False
 
 
+def _reference_schema_typedefs(schema, name, *, native):
+    """Declare an explicit nested wire or SV handle type without type(expr)."""
+    import svtypes
+    from .sv_scan import _source_class_selector
+    from .value_exports import _schema_annotation
+
+    kind = schema['kind']
+    if kind == 'remote_ref':
+        target = schema['target_type_name']
+        if native and not target.startswith('sv://'):
+            raise SVXInheritanceError(f'{name}: native handle target requires source metadata, got {target!r}')
+        return [f'typedef {_source_class_selector(target) if native else "svtypes_pkg::remote_ref"} {name};']
+    if kind in {'queue', 'dyn_array', 'array', 'assoc_array'}:
+        child = schema['value'] if kind == 'assoc_array' else schema['element']
+        child_name = name + '_element'
+        lines = _reference_schema_typedefs(child, child_name, native=native)
+        if kind == 'queue':
+            dimension = '[$]'
+        elif kind == 'dyn_array':
+            dimension = '[]'
+        elif kind == 'array':
+            dimension = ''.join(f'[{size}]' for size in (schema.get('shape') or [schema['size']]))
+        else:
+            key = svtypes.materialize_type_spec(_schema_annotation(schema['key'], {}), location=name)
+            dimension = f'[{svtypes.sv_type_expression(key)}]'
+        lines.append(f'typedef {child_name} {name}{dimension};')
+        return lines
+    codec = svtypes.materialize_type_spec(_schema_annotation(schema, {}), location=name)
+    return [f'typedef {svtypes.sv_type_expression(codec)} {name};']
+
+
 def _convert_native_reference(schema, source, target, *, encode, where, depth=0):
     import json
     from .sv_scan import _source_class_selector
@@ -126,8 +157,12 @@ def _convert_native_reference(schema, source, target, *, encode, where, depth=0)
     destination = f'{target}[{index}]'
     if kind == 'queue':
         destination = f'svx_element_{depth}'
-        lines.extend([f'{prefix}  typedef type({target}[0]) svx_element_type_{depth};',
-                      f'{prefix}  svx_element_type_{depth} {destination};'])
+        from .sv_codegen_mode import use_type_reference
+        name = f'svx_element_type_{depth}'
+        declarations = ([f'typedef type({target}[0]) {name};'] if use_type_reference() else
+                        _reference_schema_typedefs(element, name, native=not encode))
+        lines.extend([*(f'{prefix}  {line}' for line in declarations),
+                      f'{prefix}  {name} {destination};'])
     lines.extend(_convert_native_reference(element, f'{source}[{index}]', destination,
                                            encode=encode, where=where, depth=depth + 1))
     if kind == 'queue':

@@ -41,6 +41,22 @@ def run(args):
     return stream.getvalue()
 
 
+def test_type_reference_option_changes_cache_and_generated_output(project):
+    args, root = project
+    run(args)
+    output = root / 'generated/mirrors.sv'
+    assert 'type(this.count)' not in output.read_text()
+    assert 'reused verified export' in run(args)
+    with pytest.raises(SystemExit, match='stale'):
+        run(args + ['--use-type-reference', '--check'])
+    assert 'type(this.count)' not in output.read_text()
+    assert 'full export' in run(args + ['--use-type-reference'])
+    assert 'type(this.count)' in output.read_text()
+    assert 'reused verified export' in run(args + ['--use-type-reference'])
+    assert 'full export' in run(args)
+    assert 'type(this.count)' not in output.read_text()
+
+
 def test_noop_export_reuses_without_sv_parsing_and_check_is_readonly(project, monkeypatch):
     args, root = project
     assert 'full export' in run(args)

@@ -4090,10 +4090,14 @@ def _emit_sv_deep_field_access(codec: Any, expression: str, field_id: str,
         lines = _emit_sv_deep_field_access_body(codec, expression, field_id, depth, ancestors)
     declarations = list(declarations)
     if isinstance(codec, (svtypes.DynArray, svtypes.Queue)):
-        from .struct_contract import _contains_native_reference
+        from .struct_contract import _contains_native_reference, _reference_schema_typedefs
+        from .sv_codegen_mode import use_type_reference
         child = svtypes.FieldDescriptor(codec).resolve_path(svtypes.FieldPath().index(0)).codec
-        if _contains_native_reference(svtypes.schema_descriptor(child).to_dict()['schema']):
-            declarations.append(f'typedef type({expression}[0]) svx_native_element_{depth};')
+        schema = svtypes.schema_descriptor(child).to_dict()['schema']
+        if _contains_native_reference(schema):
+            name = f'svx_native_element_{depth}'
+            declarations.extend([f'typedef type({expression}[0]) {name};'] if use_type_reference()
+                                else _reference_schema_typedefs(schema, name, native=True))
     if declarations:
         return ['begin', *('  ' + line for line in declarations),
                 *('  ' + line for line in lines), 'end']
@@ -5747,11 +5751,13 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                 import svtypes
                 model = svtypes.type_spec_from_identity(data['svtypes'], location=value.symbol)
                 from .struct_contract import bind_native_struct_declaration
-                text = bind_native_struct_declaration(model.to_sv_obj(1), model.__name__,
+                from .sv_codegen_mode import render_sv_object
+                text = bind_native_struct_declaration(render_sv_object(model, 1), model.__name__,
                     value.native_reference, packed=data['schema']['packed'], schema=data['schema'])
                 lines.extend(['', text])
         for record_type in record_types:
-            lines.extend(["", record_type.to_sv_obj(1)])
+            from .sv_codegen_mode import render_sv_object
+            lines.extend(["", render_sv_object(record_type, 1)])
         lines.extend(["endpackage : svx_call_records_pkg", ""])
     from .native_handles import uses_generic_handle
     external_handle_bindings = tuple(binding for binding in _manifest_handle_bindings(manifest)
