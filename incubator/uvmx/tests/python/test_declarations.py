@@ -249,6 +249,16 @@ def test_factory_parses_with_standard_systemverilog_keywords():
     assert not tree.diagnostics, pyslang.DiagnosticEngine.reportAll(tree.sourceManager, tree.diagnostics)
 
 
+def test_factory_uses_version_appropriate_direct_name_lookup():
+    source = (Path(__file__).parents[2] / 'sv/uvmx_factory.sv').read_text(encoding='utf-8')
+    lookup = source.split('function automatic uvm_object_wrapper uvmx_find_wrapper_by_name', 1)[1].split('endfunction', 1)[0]
+    assert '`ifdef UVM_VERSION_1_1' in lookup
+    assert 'factory.find_by_name(type_name)' in lookup
+    assert 'factory.find_wrapper_by_name(type_name)' in lookup
+    assert 'find_override_by_name' not in lookup
+    assert 'uvmx_find_wrapper_by_name(factory, declaration.factory_name)' in source
+
+
 def test_aggregate_entry_includes_imported_tests_and_custom_bases(tmp_path, monkeypatch):
     import subprocess
     import sys

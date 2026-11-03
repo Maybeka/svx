@@ -20,7 +20,7 @@ class Recursive implements svx_pkg::svx_dispatchable;
     if (!ok) nested_error = error;
   endtask
 
-  virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+  virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
     nested_error = "";
     ping();
     response = null;

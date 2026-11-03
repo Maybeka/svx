@@ -14,19 +14,24 @@ arguments in the project's build script, not in several copied check recipes.
 support. Python contracts live under `python/svx_support`; SV call records live
 under `support/` beside the generated SV roots. Keep those support files when
 building; they are executable dependencies, not optional diagnostic sidecars.
-Generated VIF endpoints expose short `svx_core_*` functions/tasks containing the
+Generated VIF endpoints expose short `_svx__core_*` functions/tasks containing the
 actual signal access or native method call. Their payload dispatch methods live
 in support includes in the same class scope. For a contract-preserving access
 repair, edit the core function rather than the request/response machinery.
 Mirrored class methods, static methods and exported package functions/tasks use
 the same layout. Their SV core names include the source class or package and
 member name; a numeric suffix distinguishes collisions.
-Class fields similarly have a short `svx_core_field_*` binding to the original
+Class fields similarly have a short `_svx__core_field_*` binding to the original
 SV variable by `ref`. Path operations live in type-parameterized support kernels;
 the binding does not allocate another field or copy the complete value.
 For a selected method, the optional artifact inventory's `member_locations`
 table points to its generated Python call and SV core operation. These are
 generation-time locations, not runtime authority; manual edits can shift lines.
+
+Bridge dispatch methods use the `_svx__` internal prefix so that source methods
+such as `svx_invoke` retain their original names. Generated SV that implements
+the older dispatcher method names must be regenerated when updating to this
+runtime; preserve and reapply any manual patches before regenerating.
 
 Compile the generated roots using `-F generated/sources.f` (or
 `-F generated/sv/sources.f` for integrated output). The filelist owns their order

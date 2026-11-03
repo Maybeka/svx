@@ -27,7 +27,7 @@ def field_kernel(field, cases, core_name):
     for start, end in sorted(set(spans), reverse=True):
         data = data[:start]+resident.encode()+data[end:]
     rewritten = data.decode('utf-8')[len(prefix):-len(suffix)].splitlines()
-    kernel = '__svx_field_kernel_'+core_name.removeprefix('svx_core_field_')
+    kernel = '__svx_field_kernel_'+core_name.removeprefix('_svx__core_field_')
     parameters = 'input string method_id, ref byte unsigned bytes[$], output bit ok, output chandle response, output string error'
     core = [f'    // Core field binding: {field.name}',
             f'    function void {core_name}({parameters});',

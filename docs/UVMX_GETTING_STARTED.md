@@ -6,6 +6,10 @@ This guide assumes UVM already runs in your project and SVX, SvTypes, their SV
 packages and the native runtime are ready. It adds a Python Test while retaining
 ordinary UVM `run_test()` and `+UVM_TESTNAME` selection for both test origins.
 
+Factory name lookup uses `find_by_name` for UVM 1.1 and
+`find_wrapper_by_name` for newer versions, selected by the version macros in
+the project's own `uvm_macros.svh`.
+
 Start with the built-in `uvm_test` base. **No per-test SV class or UVMX base
 registration generation is needed.** Generation is added only for an uncompiled
 custom SV base or a new SV-facing data contract.

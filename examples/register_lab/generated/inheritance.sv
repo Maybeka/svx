@@ -4992,11 +4992,11 @@ package svx_external_handles_pkg;
       this.value = value;
     endfunction
 
-    virtual function string svx_external_target_type();
+    virtual function string _svx__external_target_type();
       return "sv-vif://register_if/diagnostics";
     endfunction
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -5060,7 +5060,7 @@ package svx_external_handles_pkg;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -5189,7 +5189,7 @@ package svx_external_handles_pkg;
       this.value = value;
     endfunction
 
-    virtual function string svx_external_target_type();
+    virtual function string _svx__external_target_type();
       return "sv://register_policy_pkg/PacketTag";
     endfunction
   endclass : SVXExternal_sv_c_s_sregister_upolicy_upkg_sPacketTagEndpoint
@@ -5272,7 +5272,7 @@ package svx_proxy_extensions;
 
     typedef SVXCall_ea462e4c9451817342f8_Request constructor_request_t;
 
-    static function constructor_request_t svx_decode_constructor_request(input chandle request);
+    static function constructor_request_t _svx__decode_constructor_request(input chandle request);
       constructor_request_t value;
       byte unsigned bytes[$];
       int offset;
@@ -5338,7 +5338,7 @@ package svx_proxy_extensions;
       end
     endtask
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -5382,7 +5382,7 @@ package svx_proxy_extensions;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -5424,10 +5424,10 @@ package svx_proxy_extensions;
       svx_inheritance_registry::register_factory("py://examples/register_lab/extensions/Checker", this);
     endfunction
 
-    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);
       Checker::constructor_request_t constructor_request;
       Implementation svx_instance;
-      constructor_request = Checker::svx_decode_constructor_request(request);
+      constructor_request = Checker::_svx__decode_constructor_request(request);
       svx_instance = new(object_id, constructor_request.seed);
       ok = 1;
       error = "";
@@ -5557,7 +5557,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
       return result;
     endfunction
 
-    static task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    static task _svx__sv_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -5585,7 +5585,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
       endcase
     endtask
 
-    static function void svx_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    static function void _svx__sv_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -5613,7 +5613,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
       endcase
     endfunction
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -6290,7 +6290,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -6973,11 +6973,11 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
       svx_inheritance_registry::register_static("sv://register_policy_pkg/RegisterPolicy", this);
     endfunction
 
-    virtual task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);
-      RegisterPolicy::svx_invoke_static(method_id, request, ok, response, error);
+    virtual task _svx__sv_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+      RegisterPolicy::_svx__sv_invoke_static(method_id, request, ok, response, error);
     endtask
-    virtual function void svx_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
-      RegisterPolicy::svx_invoke_static_function(method_id, request, ok, response, error);
+    virtual function void _svx__sv_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+      RegisterPolicy::_svx__sv_invoke_static_function(method_id, request, ok, response, error);
     endfunction
   endclass : RegisterPolicyStaticDispatcher
 
@@ -6988,7 +6988,7 @@ package svx_mirror_sv_register_policy_pkg_RegisterPolicy;
       svx_inheritance_registry::register_factory("sv://register_policy_pkg/RegisterPolicy", this);
     endfunction
 
-    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);
       SVXCall_a4505e2a5cc71c2a7e42_Request constructor_request;
       RegisterPolicy svx_instance;
       byte unsigned bytes[$];

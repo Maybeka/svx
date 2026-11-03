@@ -2,7 +2,7 @@
 `define SVX_INHERITANCE__SV
 
 interface class svx_dispatchable;
-  pure virtual task svx_invoke(
+  pure virtual task _svx__sv_invoke(
     string method_id,
     input chandle request,
     output bit ok,
@@ -45,14 +45,14 @@ endfunction
 export "DPI-C" function svx_inheritance_context_id;
 
 interface class svx_function_dispatchable;
-  pure virtual function void svx_invoke_function(
+  pure virtual function void _svx__sv_invoke_function(
     string method_id, input chandle request, output bit ok,
     output chandle response, output string error
   );
 endclass
 
 interface class svx_static_function_dispatchable;
-  pure virtual function void svx_invoke_static_function(
+  pure virtual function void _svx__sv_invoke_static_function(
     string method_id, input chandle request, output bit ok,
     output chandle response, output string error
   );
@@ -77,7 +77,7 @@ endclass
 // interface type, so it cannot accidentally cast a handle to an unrelated
 // SV type.
 interface class svx_external_handle;
-  pure virtual function string svx_external_target_type();
+  pure virtual function string _svx__external_target_type();
 endclass
 
 interface class svx_session_resource;
@@ -129,9 +129,9 @@ class svx_external_handle_registry;
       return 0;
     end
     object = objects[object_id];
-    if (object.svx_external_target_type() != target_type_name) begin
+    if (object._svx__external_target_type() != target_type_name) begin
       error = $sformatf("external handle %0d has target %s, expected %s",
-                        object_id, object.svx_external_target_type(), target_type_name);
+                        object_id, object._svx__external_target_type(), target_type_name);
       object = null;
       return 0;
     end
@@ -146,7 +146,7 @@ class svx_external_handle_registry;
 endclass
 
 interface class svx_factory;
-  pure virtual function void svx_create(
+  pure virtual function void _svx__create(
     longint unsigned object_id,
     input chandle request,
     output bit ok,
@@ -229,11 +229,11 @@ class svx_constructor_cache_registry;
 endclass
 
 interface class svx_owner_initializer;
-  pure virtual function void svx_initialize_owner();
+  pure virtual function void _svx__initialize_owner();
 endclass
 
 interface class svx_static_dispatchable;
-  pure virtual task svx_invoke_static(
+  pure virtual task _svx__sv_invoke_static(
     string method_id,
     input chandle request,
     output bit ok,
@@ -381,7 +381,7 @@ class svx_inheritance_registry;
 
   static function void initialize_owner(string key);
     if (!owner_initializers.exists(key)) $fatal(2, "SVX native owner is not ready: %s", key);
-    owner_initializers[key].svx_initialize_owner();
+    owner_initializers[key]._svx__initialize_owner();
   endfunction
 
   static task wait_initialize_owner(string key);
@@ -489,7 +489,7 @@ task automatic svx_create_object(
     return;
   end
   object_id = svx_inheritance_registry::allocate_object_id();
-  svx_inheritance_registry::factories[class_id].svx_create(object_id, request, ok, error);
+  svx_inheritance_registry::factories[class_id]._svx__create(object_id, request, ok, error);
   if (!ok) begin
     svx_inheritance_registry::unbind(object_id);
     object_id = 0;
@@ -511,7 +511,7 @@ task automatic svx_invoke_object(
                       object_id, method_id, object_id);
     return;
   end
-  svx_inheritance_registry::objects[object_id].svx_invoke(
+  svx_inheritance_registry::objects[object_id]._svx__sv_invoke(
     method_id, request, ok, response, error
   );
   if (!ok && error.substr(0, 4) != "SVX1|") begin
@@ -530,7 +530,7 @@ function automatic longint unsigned svx_create_object_function(
     return 0;
   end
   object_id = svx_inheritance_registry::allocate_object_id();
-  svx_inheritance_registry::factories[class_id].svx_create(object_id, request, ok, error);
+  svx_inheritance_registry::factories[class_id]._svx__create(object_id, request, ok, error);
   if (!ok) begin
     svx_inheritance_registry::unbind(object_id);
     return 0;
@@ -555,7 +555,7 @@ task automatic svx_invoke_static(
              "|no SVX static dispatcher registered for ", class_id};
     return;
   end
-  svx_inheritance_registry::static_objects[class_id].svx_invoke_static(
+  svx_inheritance_registry::static_objects[class_id]._svx__sv_invoke_static(
     method_id, request, ok, response, error
   );
   if (!ok && error.substr(0, 4) != "SVX1|") begin
@@ -579,7 +579,7 @@ function automatic chandle svx_invoke_object_function(
     error = $sformatf("SVX1|function_unavailable|%0d|%s|object has no function dispatcher", object_id, method_id);
     return null;
   end
-  object.svx_invoke_function(method_id, request, ok, response, error);
+  object._svx__sv_invoke_function(method_id, request, ok, response, error);
   if (!ok && error.substr(0, 4) != "SVX1|")
     error = $sformatf("SVX1|dispatch_failed|%0d|%s|%s", object_id, method_id, error);
   return response;
@@ -601,7 +601,7 @@ function automatic chandle svx_invoke_static_function(
     error = {"SVX1|function_unavailable|0|", method_id, "|class has no function dispatcher"};
     return null;
   end
-  object.svx_invoke_static_function(method_id, request, ok, response, error);
+  object._svx__sv_invoke_static_function(method_id, request, ok, response, error);
   if (!ok && error.substr(0, 4) != "SVX1|")
     error = $sformatf("SVX1|dispatch_failed|0|%s|%s", method_id, error);
   return response;
@@ -698,7 +698,7 @@ class svx_class_reference_endpoint #(type T=svx_external_handle, parameter strin
   T value;
   longint unsigned object_id;
   function new(T value); this.value=value; endfunction
-  virtual function string svx_external_target_type(); return TARGET; endfunction
+  virtual function string _svx__external_target_type(); return TARGET; endfunction
 endclass
 
 class svx_class_reference #(type T=svx_external_handle, parameter string TARGET="")

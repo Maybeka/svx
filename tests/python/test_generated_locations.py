@@ -17,6 +17,6 @@ def test_member_locations_point_to_core_calls_and_dispatch_cases():
 def test_native_core_location_does_not_require_protocol_cases_in_core_file():
     method = 'sv-vif://bus/master#read_data'
     sources = {PurePosixPath('mirrors.sv'):
-               f'// Core operation: {method}\nfunction int svx_core_read_data(); return 1; endfunction\n'}
+               f'// Core operation: {method}\nfunction int _svx__core_read_data(); return 1; endfunction\n'}
     assert member_locations([method], {}, sources)[method] == [
         {'language': 'systemverilog', 'path': 'mirrors.sv', 'line': 1}]

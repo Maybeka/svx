@@ -534,7 +534,7 @@ package svx_proxy_base_monitor;
 
     typedef SVXCall_py_x3a__x2f__x2f_examples_x2f_python_x5f_owned_x5f_inheritance_x2f_base_x5f_monitor_x2f_BaseMonitor_Request constructor_request_t;
 
-    static function constructor_request_t svx_decode_constructor_request(input chandle request);
+    static function constructor_request_t _svx__decode_constructor_request(input chandle request);
       constructor_request_t value;
       byte unsigned bytes[$];
       int offset;
@@ -604,7 +604,7 @@ package svx_proxy_base_monitor;
       end
     endtask
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -641,7 +641,7 @@ package svx_proxy_base_monitor;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -677,18 +677,18 @@ package svx_proxy_base_monitor;
     endfunction
 
     // Core construction: native arguments and original new() order.
-    function Implementation svx_core_construct(input longint unsigned object_id, input int seed);
+    function Implementation _svx__core_construct(input longint unsigned object_id, input int seed);
       Implementation svx_instance;
       svx_instance = new(object_id, seed);
       return svx_instance;
     endfunction
 
 
-    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);
       BaseMonitor::constructor_request_t constructor_request;
       Implementation svx_instance;
-      constructor_request = BaseMonitor::svx_decode_constructor_request(request);
-      svx_instance = svx_core_construct(object_id, constructor_request.seed);
+      constructor_request = BaseMonitor::_svx__decode_constructor_request(request);
+      svx_instance = _svx__core_construct(object_id, constructor_request.seed);
       ok = 1;
       error = "";
     endfunction

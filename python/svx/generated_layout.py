@@ -140,13 +140,13 @@ def split_sv_support(sources, *, parse_options=None):
         for index, endpoint in enumerate(endpoints):
             methods = [(item, str(getattr(getattr(getattr(item, 'declaration', None), 'prototype', None), 'name', '')).strip())
                        for item in endpoint.items]
-            if not any(name.startswith(('svx_core_', '__svx_support_'))
-                       or name == 'svx_decode_constructor_request' for _, name in methods):
+            if not any(name.startswith(('_svx__core_', '__svx_support_'))
+                       or name == '_svx__decode_constructor_request' for _, name in methods):
                 continue
             dispatch = [item for item, name in methods if name in {
-                'svx_invoke', 'svx_invoke_function', 'svx_create',
-                'svx_invoke_static', 'svx_invoke_static_function',
-                'svx_decode_constructor_request'}]
+                '_svx__sv_invoke', '_svx__sv_invoke_function', '_svx__create',
+                '_svx__sv_invoke_static', '_svx__sv_invoke_static_function',
+                '_svx__decode_constructor_request'}]
             if dispatch:
                 support = PurePosixPath('support') / path.parent / (path.stem+f'_endpoint_{index}_dispatch.svh')
                 fragment(dispatch, support, f'Protocol dispatch for {str(endpoint.name).strip()}')

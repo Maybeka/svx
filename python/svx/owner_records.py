@@ -26,7 +26,7 @@ def emit_owner_initializer(key, *, owner_root=None, owner_path=None):
         '    if (' + ' || '.join(conditions) + ')',
         '      svx_inheritance_registry::register_owner_initializer(' + json.dumps(key) + ', this);',
         '  endfunction',
-        '  virtual function void svx_initialize_owner();',
+        '  virtual function void _svx__initialize_owner();',
         '    initialize();',
         '  endfunction',
         'endclass',

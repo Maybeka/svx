@@ -6,6 +6,9 @@
 native 运行库都已准备好。目标是接入一个 Python Test，同时继续通过原生
 `run_test()` 和 `+UVM_TESTNAME` 选择 Python 或原有 SV 用例。
 
+工厂名称查询兼容 UVM 1.1 的 `find_by_name` 和较新版本的
+`find_wrapper_by_name`；请使用项目自身 UVM 提供的 `uvm_macros.svh` 版本宏。
+
 先使用默认 `uvm_test` 路径：**不需要生成逐用例 SV 类，也不需要运行 UVMX
 基类注册生成器**。只有选用尚未编译的自定义 SV 基类或引入新的 SV 可见数据
 契约时，才增加对应的生成和编译步骤。

@@ -3134,7 +3134,7 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
                 "      this.value = value;",
                 "    endfunction",
                 "",
-                "    virtual function string svx_external_target_type();",
+                "    virtual function string _svx__external_target_type();",
                 f"      return {target};",
                 "    endfunction",
             ]
@@ -3145,7 +3145,7 @@ def _emit_sv_external_handle_adapters(manifest: Manifest, *,
             lines.extend(
                 [
                     "",
-                    "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                    "    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
                     "      byte unsigned bytes[$];",
                     "      int offset;",
                     "      response = null;",
@@ -3561,7 +3561,7 @@ def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
 
 
 def _vif_core_name(operation: VifOperation) -> str:
-    return 'svx_core_' + operation.method.name
+    return '_svx__core_' + operation.method.name
 
 
 def _emit_sv_vif_core_operation(operation: VifOperation) -> list[str]:
@@ -4463,7 +4463,7 @@ def _emit_sv_field_operation_case(cls: ForeignClass, field: Field) -> list[str]:
 def _emit_sv_function_invoker(
     cases: list[str], *, static: bool = False, delegate: bool = False
 ) -> list[str]:
-    name = "svx_invoke_static_function" if static else "svx_invoke_function"
+    name = "_svx__sv_invoke_static_function" if static else "_svx__sv_invoke_function"
     qualifier = "static" if static else "virtual"
     lines = [
         "",
@@ -4530,7 +4530,7 @@ def _emit_sv_field_bindings(owners, *, occupied=None):
         for field in owner.fields:
             field_id = owner.canonical_id+'.'+field.name
             if field_id not in field_cases:
-                requested = f'svx_core_field_{owner.generated_name}_{field.name}'
+                requested = f'_svx__core_field_{owner.generated_name}_{field.name}'
                 core_name = _sv_core_unique_name(occupied, requested)
                 core, dispatch = field_kernel(field, _emit_sv_field_dispatch_cases(owner, field), core_name)
                 lines.extend(core)
@@ -4576,14 +4576,14 @@ def _emit_sv_projection_invoke(
     core_names = {}
     for method, receiver, owner_name in native_methods:
         if method.canonical_id not in seen:
-            requested = f'svx_core_{owner_name}_{method.name}'
+            requested = f'_svx__core_{owner_name}_{method.name}'
             name = _sv_core_unique_name(occupied, requested)
             core_names[method.canonical_id] = name
             lines.extend(_emit_sv_core_method(method, receiver, name))
             seen.add(method.canonical_id)
     lines.extend([
         "",
-        "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+        "    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
         "      byte unsigned bytes[$];",
         "      int offset;",
         "      response = null;",
@@ -4608,7 +4608,7 @@ def _emit_sv_projection_invoke(
         lines.extend(
             [
                 "        // Delegate inherited base calls to the explicit gateway; avoid re-entering a virtual Python override.",
-                "        default: super.svx_invoke(method_id, request, ok, response, error);",
+                "        default: super._svx__sv_invoke(method_id, request, ok, response, error);",
                 "      endcase",
                 "    endtask",
             ]
@@ -5173,14 +5173,14 @@ def _emit_sv_projection_class(
         static_receiver = generated_name if cls.language == 'python' else _sv_class_reference(cls)
         static_occupied = {method.name for method in cls.methods} | {field.name for field in cls.fields}
         for method in static_methods:
-            requested = f'svx_core_static_{cls.generated_name}_{method.name}'
+            requested = f'_svx__core_static_{cls.generated_name}_{method.name}'
             core_name = _sv_core_unique_name(static_occupied, requested)
             static_core_names[method.canonical_id] = core_name
             lines.extend(_emit_sv_core_method(method, f'{static_receiver}::', core_name, static=True))
         lines.extend(
             [
                 "",
-                "    static task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                "    static task _svx__sv_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
                 "      byte unsigned bytes[$];",
                 "      int offset;",
                 "      response = null;",
@@ -5283,12 +5283,12 @@ def _emit_sv_static_gateway(
     occupied = {method.name for method in source.methods}
     core_names = {}
     for method in static_methods:
-        requested = f'svx_core_{source.generated_name}_{method.name}'
+        requested = f'_svx__core_{source.generated_name}_{method.name}'
         core_name = _sv_core_unique_name(occupied, requested)
         core_names[method.canonical_id] = core_name
         lines.extend(_emit_sv_core_method(method, f'{source_type}::', core_name, static=True))
     lines.extend([
-        "    static task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+        "    static task _svx__sv_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
         "      byte unsigned bytes[$];",
         "      int offset;",
         "      response = null;",
@@ -5317,11 +5317,11 @@ def _emit_sv_static_gateway(
             f"      svx_inheritance_registry::register_static({json.dumps(source.canonical_id)}, this);",
             "    endfunction",
             "",
-            "    virtual task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
-            f"      {gateway_name}::svx_invoke_static(method_id, request, ok, response, error);",
+            "    virtual task _svx__sv_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+            f"      {gateway_name}::_svx__sv_invoke_static(method_id, request, ok, response, error);",
             "    endtask",
-            "    virtual function void svx_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
-            f"      {gateway_name}::svx_invoke_static_function(method_id, request, ok, response, error);",
+            "    virtual function void _svx__sv_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+            f"      {gateway_name}::_svx__sv_invoke_static_function(method_id, request, ok, response, error);",
             "    endfunction",
             f"  endclass : {dispatcher_name}",
             "",
@@ -5361,7 +5361,7 @@ def _emit_sv_factory_core(native_type: str, parameters: tuple[Parameter, ...], *
     arguments = [parameter.name for parameter in parameters]
     arguments.insert(0 if id_first else len(arguments), object_id)
     return ['', '    // Core construction: native arguments and original new() order.',
-            f'    function {native_type} svx_core_construct(input longint unsigned {object_id}{", " if signature else ""}{signature});',
+            f'    function {native_type} _svx__core_construct(input longint unsigned {object_id}{", " if signature else ""}{signature});',
             f'      {native_type} {instance};', f'      {instance} = new({", ".join(arguments)});',
             f'      return {instance};', '    endfunction', '']
 
@@ -5386,7 +5386,7 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, annou
         "    endfunction",
         *_emit_sv_factory_core(helper_name, parameters, id_first=False),
         "",
-        "    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);",
+        "    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);",
     ]
     if parameters:
         lines.extend(
@@ -5410,7 +5410,7 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, annou
                     f"      ok = svx_inheritance_create_python_function({json.dumps(_PYTHON_RECEIVER_EXPECT_PREFIX + source.canonical_id)}, object_id, null, error);",
                     "      if (!ok) return;",
                 ] if announce_receiver else []),
-                f"      svx_instance = svx_core_construct(object_id, {arguments});",
+                f"      svx_instance = _svx__core_construct(object_id, {arguments});",
             ]
         )
     else:
@@ -5419,7 +5419,7 @@ def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, annou
                           f"      ok = svx_inheritance_create_python_function({json.dumps(_PYTHON_RECEIVER_EXPECT_PREFIX + source.canonical_id)}, object_id, null, error);",
                           "      if (!ok) return;",
                       ] if announce_receiver else []),
-                      "      svx_instance = svx_core_construct(object_id);"])
+                      "      svx_instance = _svx__core_construct(object_id);"])
     lines.extend(
         [
             "      ok = 1;",
@@ -5600,11 +5600,11 @@ def _emit_sv_projection_helpers(
                             f"      svx_inheritance_registry::register_static({json.dumps(source.canonical_id)}, this);",
                             "    endfunction",
                             "",
-                            "    virtual task svx_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
-                            f"      {source.generated_name}::svx_invoke_static(method_id, request, ok, response, error);",
+                            "    virtual task _svx__sv_invoke_static(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                            f"      {source.generated_name}::_svx__sv_invoke_static(method_id, request, ok, response, error);",
                             "    endtask",
-                            "    virtual function void svx_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
-                            f"      {source.generated_name}::svx_invoke_static_function(method_id, request, ok, response, error);",
+                            "    virtual function void _svx__sv_invoke_static_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);",
+                            f"      {source.generated_name}::_svx__sv_invoke_static_function(method_id, request, ok, response, error);",
                             "    endfunction",
                             f"  endclass : {dispatcher_name}",
                             "",
@@ -5661,7 +5661,7 @@ def _emit_sv_implementation_factory(cls: ForeignClass) -> list[str]:
         "    endfunction",
         *_emit_sv_factory_core('Implementation', parameters, id_first=True),
         "",
-        "    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);",
+        "    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);",
         *(
             [f"      {cls.generated_name}::constructor_request_t constructor_request;"]
             if parameters else []
@@ -5669,11 +5669,11 @@ def _emit_sv_implementation_factory(cls: ForeignClass) -> list[str]:
         "      Implementation svx_instance;",
         *handle_declarations,
         *(
-            [f"      constructor_request = {cls.generated_name}::svx_decode_constructor_request(request);"]
+            [f"      constructor_request = {cls.generated_name}::_svx__decode_constructor_request(request);"]
             if parameters else []
         ),
         *handle_decode,
-        f"      svx_instance = svx_core_construct(object_id{', ' if arguments else ''}{arguments});",
+        f"      svx_instance = _svx__core_construct(object_id{', ' if arguments else ''}{arguments});",
         "      ok = 1;",
         '      error = "";',
         "    endfunction",
@@ -5801,7 +5801,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                         "",
                         f"    typedef {record_name} constructor_request_t;",
                         "",
-                        "    static function constructor_request_t svx_decode_constructor_request(input chandle request);",
+                        "    static function constructor_request_t _svx__decode_constructor_request(input chandle request);",
                         "      constructor_request_t value;",
                         "      byte unsigned bytes[$];",
                         "      int offset;",
@@ -5818,7 +5818,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                 lines.extend(_emit_sv_outbound_method(method, python_static=method.is_static))
             field_core, field_cases = _emit_sv_field_bindings((cls,))
             lines.extend(field_core)
-            lines.extend(["", "    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);", "      byte unsigned bytes[$];", "      int offset;", "      response = null;", "      svx_payload_to_byte_queue(request, bytes);", "      offset = 0;", "      case (method_id)"])
+            lines.extend(["", "    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);", "      byte unsigned bytes[$];", "      int offset;", "      response = null;", "      svx_payload_to_byte_queue(request, bytes);", "      offset = 0;", "      case (method_id)"])
             for method in cls.methods:
                 lines.extend(_emit_sv_dispatch_case(method))
             for field in cls.fields:

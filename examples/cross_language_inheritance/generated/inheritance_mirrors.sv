@@ -67,11 +67,11 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
     endtask
 
     // Core operation: sv://example_driver_pkg/BaseDriver#drive
-    task svx_core_BaseDriver_drive();
+    task _svx__core_BaseDriver_drive();
       super.drive();
     endtask
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -81,7 +81,7 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
         "sv://example_driver_pkg/BaseDriver#drive": begin
           // Decode the typed request, invoke the declared target, then encode its response.
           svx_require_unpacked_all("sv://example_driver_pkg/BaseDriver#drive", "inheritance request", "call request", offset, bytes.size());
-          this.svx_core_BaseDriver_drive();
+          this._svx__core_BaseDriver_drive();
           bytes.delete();
           ok = 1;
           error = "";
@@ -94,7 +94,7 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -115,16 +115,16 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
     endfunction
 
     // Core construction: native arguments and original new() order.
-    function BaseDriver svx_core_construct(input longint unsigned object_id);
+    function BaseDriver _svx__core_construct(input longint unsigned object_id);
       BaseDriver svx_instance;
       svx_instance = new(object_id);
       return svx_instance;
     endfunction
 
 
-    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);
       BaseDriver svx_instance;
-      svx_instance = svx_core_construct(object_id);
+      svx_instance = _svx__core_construct(object_id);
       ok = 1;
       error = "";
     endfunction

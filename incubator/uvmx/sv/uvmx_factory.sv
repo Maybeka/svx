@@ -1,6 +1,14 @@
 `ifndef UVMX_FACTORY__SV
 `define UVMX_FACTORY__SV
 
+function automatic uvm_object_wrapper uvmx_find_wrapper_by_name(uvm_factory factory, string type_name);
+`ifdef UVM_VERSION_1_1
+  return factory.find_by_name(type_name);
+`else
+  return factory.find_wrapper_by_name(type_name);
+`endif
+endfunction
+
 class uvmx_test_bridge#(type BASE = uvm_test) extends BASE;
   local uvmx_phase_callbacks callbacks;
   local string python_test_name;
@@ -101,7 +109,7 @@ class uvmx_base_registry;
       `uvm_fatal("UVMX/BASE", {"SV base bridge was not compiled: ", declaration.sv_base})
     wrapper = bases[declaration.sv_base].make(declaration.factory_name, declaration.canonical_id);
     factory.register(wrapper);
-    if (factory.find_wrapper_by_name(declaration.factory_name) != wrapper)
+    if (uvmx_find_wrapper_by_name(factory, declaration.factory_name) != wrapper)
       `uvm_fatal("UVMX/NAME", {"Python test conflicts with an existing UVM factory name: ", declaration.factory_name})
   endfunction
 endclass

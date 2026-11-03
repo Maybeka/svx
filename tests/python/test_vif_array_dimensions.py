@@ -40,6 +40,6 @@ endpackage
     assert 'this.value.values = value;' in texts
     assert 'return this.value.vectors;' in texts
     assert 'this.value.vectors = value;' in texts
-    assert 'result = svx_core_read_values();' in texts
-    assert 'result = svx_core_read_values();' not in core
-    assert 'svx_core_write_values(value_to_write);' in texts
+    assert 'result = _svx__core_read_values();' in texts
+    assert 'result = _svx__core_read_values();' not in core
+    assert '_svx__core_write_values(value_to_write);' in texts

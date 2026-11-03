@@ -115,58 +115,58 @@ def test_sv_endpoint_keeps_editable_core_and_moves_protocol_methods_together():
     from svx.generated_layout import split_sv_support
     source = '''package bridge;
 class SVXExternal_BusEndpoint;
-  function int svx_core_read(); return 7; endfunction
-  virtual task svx_invoke(); endtask
-  virtual function void svx_invoke_function(); endfunction
+  function int _svx__core_read(); return 7; endfunction
+  virtual task _svx__sv_invoke(); endtask
+  virtual function void _svx__sv_invoke_function(); endfunction
 endclass
 endpackage
 '''
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert 'return 7;' in result[path]
-    assert 'virtual task svx_invoke' not in result[path]
+    assert 'virtual task _svx__sv_invoke' not in result[path]
     assert '`include "support/mirrors_endpoint_0_dispatch.svh"' in result[path]
     support = result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
-    assert 'virtual task svx_invoke' in support and 'virtual function void svx_invoke_function' in support
+    assert 'virtual task _svx__sv_invoke' in support and 'virtual function void _svx__sv_invoke_function' in support
 
 
 def test_sv_static_gateway_keeps_core_and_moves_protocol_dispatch():
     from svx.generated_layout import split_sv_support
     source = '''package bridge;
 virtual class Gateway;
-  static function int svx_core_Adapter_read(); return 7; endfunction
-  static task svx_invoke_static(); endtask
-  static function void svx_invoke_static_function(); endfunction
+  static function int _svx__core_Adapter_read(); return 7; endfunction
+  static task _svx__sv_invoke_static(); endtask
+  static function void _svx__sv_invoke_static_function(); endfunction
 endclass
 endpackage
 '''
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
-    assert 'svx_core_Adapter_read' in result[path]
-    assert 'svx_invoke_static' not in result[path]
+    assert '_svx__core_Adapter_read' in result[path]
+    assert '_svx__sv_invoke_static' not in result[path]
     support = result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
-    assert 'static task svx_invoke_static' in support
-    assert 'static function void svx_invoke_static_function' in support
+    assert 'static task _svx__sv_invoke_static' in support
+    assert 'static function void _svx__sv_invoke_static_function' in support
 
 
 def test_colliding_core_names_keep_prefix_and_still_split_dispatch():
     from svx.generated_layout import split_sv_support
     from svx.inheritance import _sv_core_unique_name
-    occupied = {'svx_core_Driver_read', 'svx_core_Driver_read_2'}
-    name = _sv_core_unique_name(occupied, 'svx_core_Driver_read')
-    assert name == 'svx_core_Driver_read_3'
+    occupied = {'_svx__core_Driver_read', '_svx__core_Driver_read_2'}
+    name = _sv_core_unique_name(occupied, '_svx__core_Driver_read')
+    assert name == '_svx__core_Driver_read_3'
     source = f'''package bridge;
 class Driver;
   function int {name}(); return 7; endfunction
-  virtual task svx_invoke(); endtask
+  virtual task _svx__sv_invoke(); endtask
 endclass
 endpackage
 '''
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert name in result[path]
-    assert 'virtual task svx_invoke' not in result[path]
-    assert 'virtual task svx_invoke' in result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
+    assert 'virtual task _svx__sv_invoke' not in result[path]
+    assert 'virtual task _svx__sv_invoke' in result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
 
 
 def test_constructor_request_decoder_moves_even_without_other_core_methods():
@@ -174,18 +174,18 @@ def test_constructor_request_decoder_moves_even_without_other_core_methods():
     source = '''package bridge;
 class Driver;
   typedef int constructor_request_t;
-  static function constructor_request_t svx_decode_constructor_request(); return 7; endfunction
-  virtual task svx_invoke(); endtask
+  static function constructor_request_t _svx__decode_constructor_request(); return 7; endfunction
+  virtual task _svx__sv_invoke(); endtask
 endclass
 endpackage
 '''
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
     assert 'typedef int constructor_request_t;' in result[path]
-    assert 'svx_decode_constructor_request' not in result[path]
+    assert '_svx__decode_constructor_request' not in result[path]
     support = result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
-    assert 'svx_decode_constructor_request' in support
-    assert 'virtual task svx_invoke' in support
+    assert '_svx__decode_constructor_request' in support
+    assert 'virtual task _svx__sv_invoke' in support
 
 
 def test_split_accepts_var_qualified_type_expression_declaration():
@@ -193,8 +193,8 @@ def test_split_accepts_var_qualified_type_expression_declaration():
     source = '''package bridge;
 class Driver;
   int value;
-  function int svx_core_read(); return value; endfunction
-  virtual function void svx_invoke();
+  function int _svx__core_read(); return value; endfunction
+  virtual function void _svx__sv_invoke();
     var type(value) temporary;
     temporary = value;
   endfunction
@@ -203,7 +203,7 @@ endpackage
 '''
     path = PurePosixPath('mirrors.sv')
     result = split_sv_support({path: source})
-    assert 'svx_core_read' in result[path]
+    assert '_svx__core_read' in result[path]
     assert 'var type(value) temporary;' in result[PurePosixPath('support/mirrors_endpoint_0_dispatch.svh')]
 
 
@@ -214,11 +214,11 @@ def test_export_splits_both_static_gateway_and_mirror_dispatch(tmp_path):
     assert main(['export', '--package', 'editable_static_pkg', '--sv-source',
                  'tests/integration/editable_static.sv', '--out', str(root)], out=StringIO()) == 0
     core = (root/'mirrors.sv').read_text(encoding='utf-8')
-    assert 'static function int svx_core_Driver_scale_2(' in core
-    assert 'static function int svx_core_static_Driver_scale(' in core
-    assert 'static function int svx_core_editable_static_pkg_package_scale(' in core
-    assert 'static task svx_invoke_static(' not in core
+    assert 'static function int _svx__core_Driver_scale(' in core
+    assert 'static function int _svx__core_static_Driver_scale(' in core
+    assert 'static function int _svx__core_editable_static_pkg_package_scale(' in core
+    assert 'static task _svx__sv_invoke_static(' not in core
     supports = '\n'.join(path.read_text(encoding='utf-8') for path in (root/'support').rglob('*.svh'))
-    assert 'result = svx_core_Driver_scale_2(value);' in supports
-    assert 'result = svx_core_static_Driver_scale(value);' in supports
-    assert 'result = svx_core_editable_static_pkg_package_scale(value);' in supports
+    assert 'result = _svx__core_Driver_scale(value);' in supports
+    assert 'result = _svx__core_static_Driver_scale(value);' in supports
+    assert 'result = _svx__core_editable_static_pkg_package_scale(value);' in supports

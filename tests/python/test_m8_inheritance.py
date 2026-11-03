@@ -634,7 +634,7 @@ def test_static_sv_member_uses_a_class_dispatcher_not_an_instance():
     assert "self._svx_remote_object_id" not in python_text.split("def static_value():", 1)[1].split("\n\n", 1)[0]
 
     sv_text = emit_sv_mirrors(manifest)
-    assert "static task svx_invoke_static" in sv_text
+    assert "static task _svx__sv_invoke_static" in sv_text
     assert "BaseDriver::static_value()" in sv_text
     assert "class BaseDriverStaticDispatcher implements svx_static_dispatchable, svx_static_function_dispatchable;" in sv_text
     assert "register_static(\"sv://tb_pkg/BaseDriver\"" in sv_text
@@ -651,8 +651,8 @@ def test_ancestor_invocation_uses_short_class_aliases_without_name_collisions():
     assert 'typedef other_pkg::BaseDriver svx_BaseDriver;' in code
     assert 'BaseDriver::drive(address);' in code
     assert 'svx_BaseDriver::drive(address);' in code
-    assert 'task svx_core_BaseDriver_drive(' in code
-    assert 'task svx_core_BaseDriver_drive_2(' in code
+    assert 'task _svx__core_BaseDriver_drive(' in code
+    assert 'task _svx__core_BaseDriver_drive_2(' in code
     assert 'tb_pkg::BaseDriver::drive(' not in code
     assert 'other_pkg::BaseDriver::drive(' not in code
 
@@ -690,7 +690,7 @@ def test_standalone_sv_mirror_exposes_static_member_through_a_gateway():
     sv_text = emit_sv_mirrors(manifest)
     assert "package svx_static_tb_pkg_BaseDriver_pkg;" in sv_text
     assert "virtual class BaseDriverStaticGateway extends tb_pkg::BaseDriver;" in sv_text
-    assert "BaseDriverStaticGateway::svx_invoke_static" in sv_text
+    assert "BaseDriverStaticGateway::_svx__sv_invoke_static" in sv_text
 
     from svx.declarations import manifest_dict
 
@@ -883,7 +883,7 @@ def test_alternating_lineage_generates_only_required_mirror_and_proxy():
     # B delegates A's explicit base gateway to the generated A bridge instead
     # of calling the A virtual override and re-entering B.check().
     bproxy = text.split("class B extends A", 1)[1].split("endclass : B", 1)[0]
-    assert "default: super.svx_invoke(method_id, request, ok, response, error);" in bproxy
+    assert "default: super._svx__sv_invoke(method_id, request, ok, response, error);" in bproxy
     assert "virtual task check(" not in bproxy
     assert '"sv://drivers/A#check":' not in bproxy
     assert "longint unsigned __svx_remote_object_id;" not in bproxy
@@ -1844,9 +1844,9 @@ def test_generated_python_root_factory_encapsulates_typed_constructor():
     }
     source = emit_sv_mirrors(parse_manifest(data))
     assert "class BaseMonitorFactory #(type Implementation = BaseMonitor)" in source
-    assert "constructor_request = BaseMonitor::svx_decode_constructor_request(request);" in source
+    assert "constructor_request = BaseMonitor::_svx__decode_constructor_request(request);" in source
     assert "Implementation svx_instance;" in source
-    assert "svx_instance = svx_core_construct(object_id, constructor_request.seed);" in source
+    assert "svx_instance = _svx__core_construct(object_id, constructor_request.seed);" in source
     assert "svx_instance = new(object_id, seed);" in source
     assert 'svx_inheritance_registry::register_factory("py://checks/BaseMonitor", this);' in source
 

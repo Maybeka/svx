@@ -15,6 +15,31 @@ from svx.errors import SVXInheritanceError
 pytest.importorskip('pyslang')
 
 
+def test_user_dispatch_like_method_names_are_preserved(tmp_path):
+    source = tmp_path / 'dispatch_names.sv'
+    source.write_text('''
+package dispatch_names_pkg;
+  class Driver;
+    virtual function int svx_invoke(); return 42; endfunction
+    function int svx_invoke_function(); return 17; endfunction
+    static function int svx_invoke_static(); return 23; endfunction
+    function int svx_core_Driver_svx_invoke(); return 99; endfunction
+  endclass
+endpackage
+''', encoding='utf-8')
+    output = tmp_path / 'out'
+    assert main(['export', '--package', 'dispatch_names_pkg', '--sv-source', str(source),
+                 '--out', str(output)], out=io.StringIO()) == 0
+    manifest = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
+    driver = next(item for item in manifest['classes'] if item['symbol'] == 'dispatch_names_pkg::Driver')
+    assert {method['name'] for method in driver['methods']} == {
+        'svx_invoke', 'svx_invoke_function', 'svx_invoke_static', 'svx_core_Driver_svx_invoke'}
+    generated = (output / 'mirrors.sv').read_text(encoding='utf-8')
+    generated += '\n'.join(path.read_text(encoding='utf-8') for path in (output / 'support').glob('*.svh'))
+    assert '_svx__sv_invoke(' in generated
+    assert 'this._svx__core_Driver_svx_invoke(' in generated
+
+
 @pytest.fixture
 def project(tmp_path):
     source = tmp_path / 'project.sv'

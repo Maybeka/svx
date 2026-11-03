@@ -1364,26 +1364,26 @@ package svx_external_handles_pkg;
       this.value = value;
     endfunction
 
-    virtual function string svx_external_target_type();
+    virtual function string _svx__external_target_type();
       return "sv-vif://example_bus_if/master";
     endfunction
 
     // Core operation: sv-vif://example_bus_if/master#read
-    function logic [7:0] svx_core_read();
+    function logic [7:0] _svx__core_read();
       return this.value.read();
     endfunction
 
     // Core operation: sv-vif://example_bus_if/master#write
-    task svx_core_write(input logic [7:0] value);
+    task _svx__core_write(input logic [7:0] value);
       this.value.write(value);
     endtask
 
     // Core operation: sv-vif://example_bus_if/master#write_data
-    function void svx_core_write_data(input logic [7:0] value);
+    function void _svx__core_write_data(input logic [7:0] value);
       this.value.data = value;
     endfunction
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -1395,7 +1395,7 @@ package svx_external_handles_pkg;
           SVXCall_sv_x2d_vif_x3a__x2f__x2f_example_x5f_bus_x5f_if_x2f_master_x23_read_Response response_value;
           logic [7:0] result;
           svx_require_unpacked_all("sv-vif://example_bus_if/master#read", "inheritance request", "call request", offset, bytes.size());
-          result = this.svx_core_read();
+          result = this._svx__core_read();
           bytes.delete();
           response_value = new();
           response_value.svx_return_value = result;
@@ -1412,7 +1412,7 @@ package svx_external_handles_pkg;
           request_value.unpack(bytes, offset);
           value = request_value.value;
           svx_require_unpacked_all("sv-vif://example_bus_if/master#write", "inheritance request", "call request", offset, bytes.size());
-          this.svx_core_write(value);
+          this._svx__core_write(value);
           bytes.delete();
           ok = 1;
           error = "";
@@ -1425,7 +1425,7 @@ package svx_external_handles_pkg;
           request_value.unpack(bytes, offset);
           value_to_write = request_value.value;
           svx_require_unpacked_all("sv-vif://example_bus_if/master#write_data", "VIF signal write", "call request", offset, bytes.size());
-          svx_core_write_data(value_to_write);
+          _svx__core_write_data(value_to_write);
           bytes.delete();
           ok = 1;
           error = "";
@@ -1438,7 +1438,7 @@ package svx_external_handles_pkg;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -1450,7 +1450,7 @@ package svx_external_handles_pkg;
           SVXCall_sv_x2d_vif_x3a__x2f__x2f_example_x5f_bus_x5f_if_x2f_master_x23_read_Response response_value;
           logic [7:0] result;
           svx_require_unpacked_all("sv-vif://example_bus_if/master#read", "inheritance request", "call request", offset, bytes.size());
-          result = this.svx_core_read();
+          result = this._svx__core_read();
           bytes.delete();
           response_value = new();
           response_value.svx_return_value = result;
@@ -1466,7 +1466,7 @@ package svx_external_handles_pkg;
           request_value.unpack(bytes, offset);
           value_to_write = request_value.value;
           svx_require_unpacked_all("sv-vif://example_bus_if/master#write_data", "VIF signal write", "call request", offset, bytes.size());
-          svx_core_write_data(value_to_write);
+          _svx__core_write_data(value_to_write);
           bytes.delete();
           ok = 1;
           error = "";
@@ -1645,7 +1645,7 @@ package svx_proxy_python_api;
       return result;
     endfunction
 
-    virtual task svx_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual task _svx__sv_invoke(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -1707,7 +1707,7 @@ package svx_proxy_python_api;
       endcase
     endtask
 
-    virtual function void svx_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
+    virtual function void _svx__sv_invoke_function(string method_id, input chandle request, output bit ok, output chandle response, output string error);
       byte unsigned bytes[$];
       int offset;
       response = null;
@@ -1777,16 +1777,16 @@ package svx_proxy_python_api;
     endfunction
 
     // Core construction: native arguments and original new() order.
-    function Implementation svx_core_construct(input longint unsigned object_id);
+    function Implementation _svx__core_construct(input longint unsigned object_id);
       Implementation svx_instance;
       svx_instance = new(object_id);
       return svx_instance;
     endfunction
 
 
-    virtual function void svx_create(longint unsigned object_id, input chandle request, output bit ok, output string error);
+    virtual function void _svx__create(longint unsigned object_id, input chandle request, output bit ok, output string error);
       Implementation svx_instance;
-      svx_instance = svx_core_construct(object_id);
+      svx_instance = _svx__core_construct(object_id);
       ok = 1;
       error = "";
     endfunction

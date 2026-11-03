@@ -39,7 +39,7 @@
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "7597962a8c3962dd289c393c423aec235ac9d53680c3daddf19eb322eebeb05c"
+      "sha256": "42ad1dc0a30ec75cb01f41cdbc7501597b9377cf2617c330ec902b7ceccf2bd5"
     }
   ],
   "callables": [

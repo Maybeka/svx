@@ -29,7 +29,7 @@ class HandlePortalImpl extends svx_proxy_external_handle_base::HandlePortal;
 endclass
 
 class HandlePortalFactory implements svx_pkg::svx_factory;
-  virtual function void svx_create(
+  virtual function void _svx__create(
     longint unsigned object_id,
     input chandle request,
     output bit ok,

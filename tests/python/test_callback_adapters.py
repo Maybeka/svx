@@ -17,7 +17,9 @@ def test_declarations_validate_before_generation():
     with pytest.raises(ValueError, match="class ID"):
         CallbackAdapter('py://bad/"', ())
     with pytest.raises(ValueError, match="name"):
-        Callback("svx_invoke", "task")
+        Callback("_svx__sv_invoke", "task")
+    for name in ('svx_invoke', 'close', '__object_id', '__class_id'):
+        assert Callback(name, 'task').name == name
 
 
 def test_render_is_deterministic_and_owns_private_plumbing():
@@ -29,8 +31,8 @@ def test_render_is_deterministic_and_owns_private_plumbing():
     assert "function void build()" in output
     assert "task run()" in output
     assert "svx_inheritance_call_python_function" in output
-    assert "svx_inheritance_call_python(__object_id" in output
-    assert "svx_inheritance_registry::unbind(__object_id)" in output
+    assert "svx_inheritance_call_python(_svx__object_id" in output
+    assert "svx_inheritance_registry::unbind(_svx__object_id)" in output
     with pytest.raises(ValueError, match="name"):
         adapter.render_sv("bad;code")
 

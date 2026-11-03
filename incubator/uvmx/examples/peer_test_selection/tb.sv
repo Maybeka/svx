@@ -16,8 +16,8 @@ module uvmx_peer_testbench;
     expected_finish_policy = uvm_top.finish_on_completion;
     uvmx_init("python_tests");
     factory = uvm_factory::get();
-    if (factory.find_wrapper_by_name("py_smoke_test") == null ||
-        factory.find_wrapper_by_name("legacy_sv_test") == null)
+    if (uvmx_find_wrapper_by_name(factory, "py_smoke_test") == null ||
+        uvmx_find_wrapper_by_name(factory, "legacy_sv_test") == null)
       $fatal(2, "UVMX registration did not finish before run_test");
     if (uvm_top.finish_on_completion != expected_finish_policy)
       $fatal(2, "UVMX initialization changed UVM finish policy");
