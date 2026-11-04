@@ -1,5 +1,5 @@
 package parameterized_pkg;
-  class Base #(type T = int, int N = 2);
+  class Base #(type T = int, bit [7:0] N = 2);
     T count = N;
     function T get_count();
       return count;

@@ -4,6 +4,18 @@ import json
 
 import pytest
 
+
+def test_parser_error_reports_reason_source_location_and_source_line(tmp_path):
+    from svx.sv_scan import _pyslang, _check_source_diagnostics
+    from svx.errors import SVXInheritanceError
+    tree = _pyslang().SyntaxTree.fromText('package p;\n  typedef bit [7:0 Bad;\nendpackage\n')
+    with pytest.raises(SVXInheritanceError) as caught:
+        _check_source_diagnostics(tree, tmp_path / 'input.sv')
+    message = str(caught.value)
+    assert "expected ']'" in message
+    assert 'typedef bit [7:0 Bad;' in message
+    assert str(tmp_path / 'input.sv') in message and '^' in message
+
 from svx.errors import SVXInheritanceError
 from svx.sv_scan import validate_sv_declarations
 

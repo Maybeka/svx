@@ -18,6 +18,9 @@ setting. Changing it requires regenerating and recompiling the SV output;
 incremental export and artifact checks distinguish the two modes. Integrated
 output preserves the supplied SV source as written, including any type
 references already present in that source.
+Native struct adapters use the validated concrete widths of packed fields in
+helper type arguments, rather than deriving them from a function's value
+parameter. This keeps different closed generic struct views type-correct.
 
 ### Generated Implementation Edits
 
@@ -583,11 +586,29 @@ For a package DPI-C import, an input or inout open array such as
 `input int unsigned values[]` is exposed as a SvTypes dynamic array; its DPI C
 implementation remains the project's responsibility and receives the standard
 open-array handle.
-Output DPI open arrays are rejected with the callable and parameter name:
-SVX would pass a dynamic array, which IEEE 1800 section 7.7 prohibits as an
-actual argument to an output DPI open-array formal. Use a fixed-size SV wrapper
-or an inout API where appropriate. Ordinary SV functions and tasks with output
-dynamic arrays remain supported and may allocate their results in SV.
+For output DPI open arrays, the Python caller supplies the buffer capacity:
+
+```python
+values = svx.Output([0] * 128)
+read_data(values)
+assert len(values.value) == 128
+```
+
+SVX sends the supplied buffer through SvTypes, preserves its allocation across
+the internal wrapper and copies the filled result back. The original DPI
+declaration remains `output`; the internal wrapper uses `inout` only to retain
+the allocated buffer. C fills the existing elements and must not resize it.
+For a one-dimensional open array, `svx.Output()` or `svx.Output([])` supplies an
+empty buffer. Initial elements
+must be valid for the declared SvTypes element type; they are not API inputs.
+Discovery uses schema2.8.0 and records `dpi_output_buffer: true` on these output
+parameters so that manifest replay preserves the same allocation contract.
+
+This relies on simulator support for preallocated dynamic-array actuals to an
+output DPI open-array formal, beyond the restriction in IEEE 1800 section 7.7.
+It is not a guarantee for every simulator. Where unsupported, use a fixed-size
+SV wrapper or an inout API. Ordinary SV functions and tasks with output dynamic
+arrays are unchanged and may allocate a different result length in SV.
 The existing function-callback guard rejects task/wait operations; no Python
 async scheduler is introduced. All formals in the generated Python signature
 must be supplied. ref/const-ref remain unsupported. Names that cannot form valid
@@ -1275,6 +1296,14 @@ checks; changed or non-replayable selections use the full parser path. This does
 not accept a tree after its source or lookup choices have changed. The observation
 scope ends with the command; it is not changed-unit AST incrementality or a
 persistent parse cache. Opt-in unchanged-result reuse remains a separate layer.
+Within one manifest normalization, identical intrinsic SvTypes bindings reuse
+their validated immutable metadata. Mutable codec/field instances and user-defined
+type bindings are not shared by this optimization, and the metadata table ends
+with that normalization. Class-owned value aliases are registered on demand:
+pending class views are expanded in their original order before a named-value
+lookup, while explicitly selected values retain their ordinary discovery path.
+This avoids traversing unused factory/type-alias graphs for class-only exports;
+it does not trim selected classes, their lineage, or referenced value types.
 For SV-only discovery selections, provenance validation can use one fresh proof
 replay to check both the recorded byte digests and the current include/library
 choices. It does not immediately hash those same SV files a second time within
@@ -1335,6 +1364,18 @@ typedef such as `typedef Base#(byte, 4) ByteBase;` supplies a stable class ident
 without generating the template as another target. Different named
 specializations stay distinct. Inline non-default bases need a named typedef
 or explicit specialization metadata, not substitution with a default instance.
+
+Specialization `sv_type` metadata accepts SV type syntax, including packed
+dimensions (`bit [7:0]`, `logic signed [1:0][15:0]`) and qualified names.
+Complex type syntax is checked with the optional `manifest` parser dependency,
+not a character whitelist. Project sources still determine semantic validity;
+accepting a type expression does not imply support for every value codec.
+Canonical SvTypes collection and packer descriptions are interpreted through
+SvTypes declaration/template APIs, not parsed verbatim as native type source.
+Invalid types report their original spelling, manifest field path and enclosing
+class. Member errors also identify their method/parameter or field; loading a
+manifest adds its filename. Source syntax errors include the diagnostic reason,
+line/column and offending source line.
 
 Native handle typedefs and closed defaults are normalized across fields,
 constructors, formals/results and Python declarations. A named closed class

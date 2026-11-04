@@ -733,13 +733,15 @@ def test_manifest_rejects_same_leaf_python_module_collision():
         parse_manifest(data)
 
 
-def test_closed_parameterized_sv_class_emits_a_specialized_mirror():
+@pytest.mark.parametrize('sv_type', ['int', 'bit [7:0]', 'logic signed [1:0][15:0]',
+    'bit [2*4-1:0]', 'pkg::Owner::Code', 'struct packed { bit [3:0] a; bit b; }'])
+def test_closed_parameterized_sv_class_emits_a_specialized_mirror(sv_type):
     data = manifest_data()
     base = data["classes"][0]
     base["specialization"] = {
         "arguments": [
             {"kind": "type", "type": INT},
-            {"kind": "value", "sv_type": "int", "value": 16},
+            {"kind": "value", "sv_type": sv_type, "value": 16},
         ]
     }
     data["classes"].append(
@@ -769,6 +771,48 @@ def test_closed_parameterized_sv_class_emits_a_specialized_mirror():
     )
     with pytest.raises(SVXInheritanceError, match="collides"):
         parse_manifest(duplicate)
+
+
+@pytest.mark.parametrize('sv_type', ['bit [7:', 'int; int injected;', 'bit [7:0]; //'])
+def test_invalid_specialization_type_reports_value_class_and_manifest_path(tmp_path, sv_type):
+    from svx.inheritance import load_manifest
+    import json
+    data = manifest_data()
+    data['classes'][0]['specialization'] = {'arguments': [
+        {'kind': 'value', 'sv_type': sv_type, 'value': 16}]}
+    path = tmp_path / 'broken-manifest.json'
+    path.write_text(json.dumps(data), encoding='utf-8')
+    with pytest.raises(SVXInheritanceError) as caught:
+        load_manifest(path)
+    message = str(caught.value)
+    assert repr(sv_type) in message
+    assert 'root.classes[0].specialization.arguments[0].sv_type' in message
+    assert 'tb_pkg::BaseDriver' in message and str(path) in message
+
+
+def test_parameter_error_identifies_its_enclosing_method_and_class():
+    data = manifest_data()
+    method = data['classes'][0]['methods'][0]
+    method['parameters'] = [{'name': 'bad_argument', 'type': INT, 'direction': 'ref'}]
+    with pytest.raises(SVXInheritanceError) as caught:
+        parse_manifest(data)
+    message = str(caught.value)
+    assert 'ref and const ref are not supported' in message
+    assert "parameter 'bad_argument'" in message
+    assert f"method {method['name']!r}" in message
+    assert "class 'tb_pkg::BaseDriver'" in message
+
+
+@pytest.mark.parametrize('sv_type', [
+    'bit [8*4-1:0]', 'logic signed [1:0][15:0]',
+    'struct packed { bit [31:0] data; }',
+    "pkg::Container#(bit [7:0], 8'hff)", 'type(pkg::Owner::value)',
+    'int []', 'int [$:7]', 'int [string]',
+])
+def test_sv_binding_types_use_sv_syntax_not_character_whitelists(sv_type):
+    from svx.inheritance import _type_binding
+    binding = dict(INT, sv=sv_type)
+    assert _type_binding(binding, 'test.parameter.type', allow_void=False).sv == sv_type
 
 
 def test_alternating_lineage_generates_only_required_mirror_and_proxy():

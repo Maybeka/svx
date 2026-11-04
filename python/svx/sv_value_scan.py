@@ -45,6 +45,7 @@ class SourceValues:
         self.current_instance = None
         self.class_value_symbols = {}
         self.class_value_members = {}
+        self.pending_class_values = {}
         self.named_value_origins = {}
         self.default_class_owners = set()
         self.class_lookup = None
@@ -65,9 +66,20 @@ class SourceValues:
             node = node.parent
         return False
 
-    def register_class_values(self, native, prefix):
+    def _flush_class_values(self):
+        pending = tuple(self.pending_class_values)
+        self.pending_class_values.clear()
+        for native, prefix in pending:
+            self.register_class_values(native, prefix)
+
+    def register_class_values(self, native, prefix, *, defer=False):
         """Anchor template-owned values to a concrete, usable package class name."""
         key = (native, prefix)
+        if defer and self.modules is not None and not self.modules.annotations:
+            if key not in self.class_value_members:
+                self.pending_class_values.setdefault(key, None)
+            return
+        self._flush_class_values()
         if key in self.class_value_members:
             return
         members = []
@@ -88,28 +100,35 @@ class SourceValues:
                 if member is None or getattr(getattr(member, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
                     continue
                 symbol = path + '::' + entry.name
-                if member.kind.name == 'ClassType':
+                kind = member.kind.name
+                if kind == 'ClassType':
                     collect(member, symbol)
                     continue
-                if member.kind.name == 'TypeAlias' and member.canonicalType.isClass:
+                if kind == 'TypeAlias' and member.canonicalType.isClass:
                     collect(member.canonicalType, symbol)
                     continue
-                generic = self._generic_value_owner(member)
-                if member.kind.name == 'TypeParameter':
-                    member = member.typeAlias
-                if member.kind.name not in {'TypeAlias', 'Parameter'} or not (generic or self._generic_value_owner(member)):
+                if kind not in {'TypeAlias', 'Parameter', 'TypeParameter'}:
                     continue
-                if member.kind.name == 'TypeAlias' and member.canonicalType.isClass:
+                generic = self._generic_value_owner(member)
+                if kind == 'TypeParameter':
+                    member = member.typeAlias
+                    kind = member.kind.name
+                if kind not in {'TypeAlias', 'Parameter'} or not (generic or self._generic_value_owner(member)):
+                    continue
+                if kind == 'TypeAlias' and member.canonicalType.isClass:
                     continue
                 self.class_value_symbols.setdefault(member, (symbol, None))
-                if member.kind.name == 'TypeAlias':
+                if kind == 'TypeAlias':
                     members.append((member, symbol))
-                if member.kind.name == 'TypeAlias' and member.canonicalType.lexicalPath == member.lexicalPath:
+                if kind == 'TypeAlias' and member.canonicalType.lexicalPath == member.lexicalPath:
                     self.class_value_symbols.setdefault(member.canonicalType, (symbol, None))
         collect(native, prefix)
 
     def publish_class_values(self, native, prefix):
         """Expose each selected class's alias of an already materialized value."""
+        if ((native, prefix) in self.pending_class_values
+                and self.modules is not None and not self.modules.annotations):
+            return
         self.register_class_values(native, prefix)
         for member, symbol in self.class_value_members[(native, prefix)]:
             if symbol in self.declarations:
@@ -153,6 +172,9 @@ class SourceValues:
         return types, constants
 
     def source_symbol(self, actual):
+        # Preserve original view/alias precedence when a named value is first
+        # required; unused factory/class alias graphs never need expansion.
+        self._flush_class_values()
         if self.current_instance is not None:
             symbols = self.instance_symbols.get(self.current_instance['path'], {})
             if actual in symbols:
@@ -218,18 +240,15 @@ class SourceValues:
             if direction == 'ref':
                 raise SVXInheritanceError(f'SV callable {symbol}.{argument.name} uses unsupported ref/const ref')
             native = argument.type.canonicalType
+            output_buffer = False
             while native is not None:
                 if direction == 'output' and native.kind.name == 'DPIOpenArrayType':
-                    raise SVXInheritanceError(
-                        f'SV callable {symbol}.{argument.name}: output DPI open array cannot be '
-                        'exported as a dynamic array; IEEE 1800 section 7.7 prohibits dynamic '
-                        'array or queue actual arguments for output DPI open-array formals. '
-                        'Use a fixed-size SV wrapper, or inout if the native API supports it. '
-                        'Ordinary SV output dynamic arrays are supported.')
+                    output_buffer = True
                 native = getattr(native, 'elementType', None)
                 if native is not None:
                     native = native.canonicalType
             return {'name': argument.name, 'direction': direction,
+                    **({'dpi_output_buffer': True} if output_buffer else {}),
                     **value_type(argument.type, f'SV callable {symbol}.{argument.name}')}
 
         parameters = [binding for argument in actual.arguments

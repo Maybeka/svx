@@ -17,6 +17,24 @@ SOURCE = Path(__file__).parents[2] / 'examples/sv_export/generic_values.sv'
 PACKAGE = 'generic_class_constants_pkg'
 
 
+@pytest.mark.parametrize('native_type', ['bit [7:0]', 'logic signed [1:0][7:0]'])
+def test_full_export_accepts_packed_value_parameter_type(tmp_path, native_type):
+    source = tmp_path / 'packed_parameters.sv'
+    source.write_text(f'''package packed_parameters;
+class Packet #(parameter {native_type} CODE = 3);
+  function int get_code(); return CODE; endfunction
+endclass
+typedef Packet#(5) Selected;
+endpackage
+''', encoding='utf-8')
+    output = tmp_path / 'generated'
+    assert main(['export', '--sv-source', str(source), '--class',
+                 'packed_parameters::Packet', '--out', str(output)], out=io.StringIO()) == 0
+    data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
+    argument = data['classes'][0]['specialization']['arguments'][0]
+    assert '[' in argument['sv_type'] and argument['value'] == 3
+
+
 def export(tmp_path, *selectors):
     output = tmp_path / 'generated'
     args = ['export', '--sv-source', str(SOURCE), '--out', str(output), *selectors]

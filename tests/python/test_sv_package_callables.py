@@ -41,13 +41,20 @@ def test_dpi_open_array_types_are_discovered(tmp_path, element, direction):
 
 @pytest.mark.parametrize('timing', ['function void', 'task'])
 @pytest.mark.parametrize('selection', ['package', 'callable'])
-def test_dpi_output_open_array_rejects_dynamic_actual(tmp_path, timing, selection):
+def test_dpi_output_open_array_preserves_caller_capacity(tmp_path, timing, selection):
     source = tmp_path / 'dpi_output.sv'
     source.write_text(f'package p; import "DPI-C" {timing} f(output int unsigned values[]); endpackage\n',
                       encoding='utf-8')
     selectors = {'sv_package_targets': ['p']} if selection == 'package' else {'sv_callable_targets': ['p::f']}
-    with pytest.raises(SVXInheritanceError, match=r'p::f.values: output DPI open array.*section 7.7'):
-        manifest_from_declarations(sv_source_files=[source], **selectors)
+    manifest = manifest_from_declarations(sv_source_files=[source], **selectors)
+    parameter = manifest.callables[0].method.parameters[0]
+    assert parameter.direction == 'output' and parameter.dpi_output_buffer
+    assert manifest.schema_version == '2.8.0'
+    assert parse_manifest(manifest_dict(manifest)) == manifest
+    text = emit_sv_mirrors(manifest)
+    assert 'inout svx_call_records_pkg::_svx__array_dynamic_bits32 values' in text
+    assert 'p::f(values);' in text
+    assert 'changed capacity' in text
 
 
 @pytest.mark.parametrize('timing,body', [
@@ -74,7 +81,7 @@ def test_dpi_fixed_output_array_is_supported(tmp_path):
     assert 'p::f(' in emit_sv_mirrors(manifest)
 
 
-def test_cli_dpi_output_array_error_identifies_parameter(tmp_path):
+def test_cli_dpi_output_array_exports_capacity_contract(tmp_path):
     source = tmp_path / 'dpi_output.sv'
     source.write_text('package p; import "DPI-C" function void f(output int unsigned values[]); endpackage\n',
                       encoding='utf-8')
@@ -85,12 +92,10 @@ def test_cli_dpi_output_array_error_identifies_parameter(tmp_path):
         env={**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)},
         capture_output=True, text=True,
     )
-    assert result.returncode != 0
-    error = result.stderr
-    assert 'p::f.values' in error
-    assert 'section 7.7' in error
-    assert 'fixed-size SV wrapper' in error
-    assert not (output / 'mirrors.sv').exists()
+    assert result.returncode == 0, result.stderr
+    data = json.loads((output / 'inheritance.json').read_text())
+    assert data['callables'][0]['method']['parameters'][0]['dpi_output_buffer'] is True
+    assert (output / 'mirrors.sv').exists()
 
 
 @pytest.fixture

@@ -146,8 +146,13 @@ def _check_source_diagnostics(tree, path):
         }:
             filename = tree.sourceManager.getFileName(diagnostic.location)
             line = tree.sourceManager.getLineNumber(diagnostic.location)
+            column = tree.sourceManager.getColumnNumber(diagnostic.location)
+            token = tree.sourceManager.getSourceText(diagnostic.location.buffer).splitlines()
+            context = token[line-1].rstrip('\0') if 0 < line <= len(token) else ''
             raise SVXInheritanceError(
-                f"cannot parse SystemVerilog source {filename or path}:{line}: {diagnostic.code}"
+                f"cannot parse SystemVerilog source {filename or path}:{line}:{column}: "
+                f"{engine.formatMessage(diagnostic)} ({diagnostic.code})"
+                f"\n  context: {path}\n  {context}\n  {' '*(column-1)}^"
             )
 
 
@@ -909,7 +914,7 @@ def discover_sv_class_declarations(
         if source is None or not hasattr(source, "constructor"):
             raise SVXInheritanceError(f"cannot resolve SV class {symbol} in supplied sources")
         if value_exports is not None and _unit_scope(symbol) is None and _instance_scope(symbol) is None:
-            value_exports.register_class_values(source, symbol)
+            value_exports.register_class_values(source, symbol, defer=True)
         specialization = None
         if fact.parameter_kinds:
             arguments = []
@@ -1346,8 +1351,7 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
         lines.append('endpackage')
         tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", manager,
                                           **({} if parse_options is None else {"options": parse_options}))
-        if tree.diagnostics:
-            raise SVXInheritanceError(f"invalid SV handle type expression in {symbol}")
+        _check_source_diagnostics(tree, f"handle types of {symbol}")
         compilation.addSyntaxTree(tree)
         probes.append((package + '::Probe', handles))
     for declaration in declarations:
@@ -1437,8 +1441,7 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
         lines.append('endpackage')
         tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", manager,
                                           **({} if parse_options is None else {"options": parse_options}))
-        if tree.diagnostics:
-            raise SVXInheritanceError(f"SV declaration {symbol} has an invalid field handle type expression")
+        _check_source_diagnostics(tree, f"field handle types of {symbol}")
         compilation.addSyntaxTree(tree)
         probes.append((declaration, package + '::Probe'))
     compilation = _compile_owner_probes(compilation, unit_probes, manager, parse_options, source_units, proxy_context, scope_probes)
@@ -1644,8 +1647,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             lines.append('endpackage')
         tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", source_manager,
                                           **({} if parse_options is None else {"options": parse_options}))
-        if tree.diagnostics:
-            raise SVXInheritanceError(f"SV declaration {symbol} has an invalid signature type expression")
+        _check_source_diagnostics(tree, f"method signatures of {symbol}")
         compilation.addSyntaxTree(tree)
         probes.append((symbol, (f'$instance[{instance[0]}.{package}]::Probe' if instance is not None
                                 else package + '::Probe'), checks, constructor, methods))

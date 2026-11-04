@@ -1106,7 +1106,10 @@ def manifest_from_declarations(
     return parse_manifest(
         {
             "schema_uri": SCHEMA_URI,
-            "schema_version": ('2.7.0' if auto_values and any(item.default_class_owners for item in
+            "schema_version": ('2.8.0' if auto_values and any(
+                                   parameter.get('dpi_output_buffer') for item in auto_values.callables.values()
+                                   for parameter in item['method']['parameters']) else
+                               '2.7.0' if auto_values and any(item.default_class_owners for item in
                                            (*auto_values.declarations.values(), *auto_values.constants.values())) else
                                '2.6.0' if (auto_values and any((item.source_scope or {}).get('kind') == 'instance'
                                             for item in (*auto_values.declarations.values(), *auto_values.constants.values()))) or any((item.get('source_scope') or {}).get('kind') == 'instance' for cls in classes
@@ -1722,6 +1725,8 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
             },
             "direction": parameter.direction,
         }
+        if parameter.dpi_output_buffer:
+            result["dpi_output_buffer"] = True
         if parameter.handle is not None:
             result["handle"] = handle_declaration(parameter.handle)
         return result

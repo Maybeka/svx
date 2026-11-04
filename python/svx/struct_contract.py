@@ -1,5 +1,7 @@
 """Public SvTypes struct-kind negotiation; never infer packing from encoding."""
 
+from collections.abc import Mapping
+
 from .errors import SVXInheritanceError
 
 
@@ -8,8 +10,6 @@ CAPABILITY = 'svtypes.struct-kinds.v1'
 
 def validate_struct_metadata(value, *, where):
     """Check nested identities and schemas, including container arguments."""
-    from collections.abc import Mapping
-
     found = False
     if isinstance(value, Mapping):
         if value.get('kind') == 'struct':
@@ -41,10 +41,18 @@ def bind_native_struct_declaration(text, model_name, reference, *, packed, schem
     if not separator or not declaration.lstrip().startswith(prefix):
         raise SVXInheritanceError('SvTypes struct codegen does not expose its expected typed packer')
     indent = declaration[:len(declaration) - len(declaration.lstrip())]
+    # Native aliases may bind several widths of the same generic struct. A
+    # value-dependent $bits in a helper type argument can bind the wrong scope;
+    # the validated concrete field schema already supplies the exact width.
+    for field in (schema or {}).get('fields', ()):
+        field_type = field['type']
+        width = field_type.get('width')
+        if field_type.get('kind') in {'bits', 'logic', 'enum'} and type(width) is int:
+            packer = packer.replace(f'$bits(value.{field["name"]})', str(width))
     handles = [field for field in (schema or {}).get('fields', ())
                if _contains_native_reference(field['type'])]
     if handles:
-        return _native_handle_struct(text, model_name, reference, schema, indent)
+        return _native_handle_struct(declaration + separator + packer, model_name, reference, schema, indent)
     return indent + 'typedef ' + reference + ' ' + model_name + '_t;' + packer
 
 

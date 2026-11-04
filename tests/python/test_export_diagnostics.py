@@ -12,7 +12,7 @@ pytest.importorskip('pyslang')
 def source(tmp_path: Path, count=15):
     path = tmp_path / 'errors.sv'
     path.write_text('package p;\n' + '\n'.join(
-        f'import "DPI-C" function void f{i:02}(output int values[]);'
+        f'function void f{i:02}(ref int values); endfunction'
         for i in range(count)) + '\nendpackage\n', encoding='utf-8')
     return path
 
@@ -23,7 +23,7 @@ def test_discovery_error_limit(tmp_path, limit):
         manifest_from_declarations(sv_source_files=[source(tmp_path)],
                                    sv_package_targets=['p'], max_errors=limit)
     message = str(caught.value)
-    assert message.count('output DPI open array cannot') == min(limit, 15)
+    assert message.count('uses unsupported ref/const ref') == min(limit, 15)
     assert 'p::f00.values' in message
     assert f'p::f{min(limit, 15)-1:02}.values' in message
     if limit <= 15:
@@ -38,7 +38,7 @@ def test_default_limit_and_collector_reset(tmp_path):
     path = source(tmp_path)
     with pytest.raises(SVXInheritanceError) as caught:
         manifest_from_declarations(sv_source_files=[path], sv_package_targets=['p'])
-    assert str(caught.value).count('output DPI open array cannot') == 10
+    assert str(caught.value).count('uses unsupported ref/const ref') == 10
     path.write_text('package p; function int f(); return 1; endfunction endpackage\n', encoding='utf-8')
     assert len(manifest_from_declarations(sv_source_files=[path], sv_package_targets=['p']).callables) == 1
 
@@ -60,7 +60,7 @@ def test_multiple_class_members_are_reported(tmp_path):
 
 def test_multiple_parameters_of_one_callable_are_reported(tmp_path):
     path = tmp_path / 'parameters.sv'
-    path.write_text('package p; import "DPI-C" function void f(output int first[], output int second[]); endpackage\n', encoding='utf-8')
+    path.write_text('package p; function void f(ref int first, ref int second); endfunction endpackage\n', encoding='utf-8')
     with pytest.raises(SVXInheritanceError) as caught:
         manifest_from_declarations(sv_source_files=[path], sv_package_targets=['p'])
     assert 'p::f.first' in str(caught.value) and 'p::f.second' in str(caught.value)
@@ -74,6 +74,6 @@ def test_cli_limit_preserves_existing_output(tmp_path):
     sentinel.write_text('// existing user code\n', encoding='utf-8')
     with pytest.raises(SVXInheritanceError) as caught:
         main(['export', '--sv-source', str(path), '--package', 'p', '--max-errors', '3', '--out', str(output)])
-    assert str(caught.value).count('output DPI open array cannot') == 3
+    assert str(caught.value).count('uses unsupported ref/const ref') == 3
     assert sentinel.read_text(encoding='utf-8') == '// existing user code\n'
     assert sorted(p.name for p in output.iterdir()) == ['mirrors.sv']

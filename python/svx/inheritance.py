@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field, fields as dataclass_fields, replace
 from contextvars import ContextVar
+from functools import lru_cache, wraps
 import ast
 import hashlib
 import importlib
@@ -32,6 +33,7 @@ SCHEMA_URI = "https://svx.dev/schema/inheritance-manifest/v2"
 SCHEMA_VERSION = "2.0.0"
 GENERATOR_ABI_VERSION = 2
 REQUIRED_RUNTIME_CAPABILITIES = SVTYPES_REQUIRED_CAPABILITIES
+_type_binding_cache = ContextVar('svx_manifest_type_bindings', default=None)
 EXTERNAL_FIELD_STORAGE_CAPABILITY = "svtypes.external-field-storage.v1"
 MAX_CALL_PAYLOAD_BYTES = 16 * 1024 * 1024
 _PYTHON_BASE_METHOD_PREFIX = "svx-python-base:"
@@ -125,6 +127,7 @@ class Parameter:
     type_binding: TypeBinding
     direction: str
     handle: HandleBinding | None = None
+    dpi_output_buffer: bool = False
 
 
 @dataclass(frozen=True)
@@ -465,6 +468,49 @@ def _migrate_type_binding(value: Any, where: str) -> Any:
     }
 
 
+def _intrinsic_type_identity(value):
+    if isinstance(value, dict):
+        return value.get('kind') in {'scalar', 'packed', 'specialization', 'signedness',
+                                     'collection', 'remote_ref'} and all(
+            _intrinsic_type_identity(item) for item in value.values())
+    if isinstance(value, list):
+        return all(_intrinsic_type_identity(item) for item in value)
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _type_binding_scope(function):
+    @wraps(function)
+    def parse(*args, **kwargs):
+        token = _type_binding_cache.set({})
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _type_binding_cache.reset(token)
+    return parse
+
+
+def _reuse_intrinsic_binding(function):
+    @wraps(function)
+    def bind(value, where, *, allow_void):
+        cache = _type_binding_cache.get()
+        key = None
+        if (cache is not None and isinstance(value, dict)
+                and isinstance(value.get('svtypes'), dict)
+                and _intrinsic_type_identity(value['svtypes'])):
+            try:
+                key = json.dumps(value, sort_keys=True, separators=(',', ':'))
+            except (TypeError, ValueError):
+                pass  # Invalid metadata still follows the ordinary diagnostic path.
+            if key is not None and key in cache:
+                return cache[key]
+        binding = function(value, where, allow_void=allow_void)
+        if key is not None and binding is not None and len(cache) < 512:
+            cache[key] = binding
+        return binding
+    return bind
+
+
+@_reuse_intrinsic_binding
 def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | None:
     if allow_void and value == "void":
         return None
@@ -518,16 +564,8 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
             python_args=tuple(args),
             python_kwargs=tuple(sorted(kwargs.items())),
         )
-    for field, content, grammar in (
-        ("unified_type_name", binding.unified_type_name, r"[^\s]+"),
-        # SvTypes collections use ordinary SV unpacked dimensions such as
-        # ``int []`` and ``int [$]``.  Keep the grammar deliberately narrow
-        # while permitting those generated declaration forms.
-        ("sv", binding.sv, r"[$A-Za-z_][A-Za-z0-9_:$#() ,\[\]]*"),
-        ("sv_packer", binding.sv_packer, r"[A-Za-z_][A-Za-z0-9_:.$#() ,\[\]]*"),
-    ):
-        if not re.fullmatch(grammar, content):
-            raise _error(f"{where}.{field}", "contains unsupported source characters")
+    if not re.fullmatch(r"[^\s]+", binding.unified_type_name):
+        raise _error(f"{where}.unified_type_name", f"must not contain whitespace: {binding.unified_type_name!r}")
     if binding.python_module is not None and not re.fullmatch(
         r"[A-Za-z_][A-Za-z0-9_.]*", binding.python_module
     ):
@@ -540,6 +578,17 @@ def _type_binding(value: Any, where: str, *, allow_void: bool) -> TypeBinding | 
         actual_descriptor = svtypes.encoding_descriptor(codec).to_dict()
     except Exception as error:
         raise _error(where, f"cannot resolve public SvTypes declaration: {error}") from error
+    # SvTypes' collection expression is normalized metadata (e.g. real []),
+    # not necessarily a legal pre-name SV type. Validate its actual declaration.
+    declaration = (svtypes.sv_declaration(codec, '_svx_type')
+                   if isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.AssocArray))
+                   and binding.sv == svtypes.sv_type_expression(codec) else None)
+    _check_sv_type(binding.sv, f"{where}.sv", declaration=declaration)
+    # Canonical packer metadata may itself contain normalized collection types;
+    # the codec-template generator supplies their legal native declarations.
+    if (not isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.AssocArray))
+            or binding.sv_packer != svtypes.sv_packer_expression(codec)):
+        _check_sv_type(binding.sv_packer, f"{where}.sv_packer")
     if actual_type_id != binding.unified_type_name:
         raise _error(
             f"{where}.unified_type_name",
@@ -568,6 +617,50 @@ def _remote_ref_target(binding: TypeBinding, where: str) -> str:
         raise _error(where, f"must use a concrete SvTypes RemoteRef type: {error}") from error
 
 
+@lru_cache(maxsize=512)
+def _sv_type_syntax_error(sv_type: str, declaration: str | None = None) -> str | None:
+    # Names need no optional parser; complex types use the SV grammar. Name
+    # resolution still belongs to semantic validation with the project inputs.
+    if (re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_$]*(?:::[$A-Za-z_][A-Za-z0-9_$]*)*", sv_type)
+            or re.fullmatch(r"(?:bit|logic|reg|byte|shortint|int|longint|integer|time) (?:signed|unsigned)", sv_type)):
+        return None
+    from .sv_scan import _pyslang
+    syntax = _pyslang()
+    from pyslang import SourceManager, DiagnosticEngine, DiagnosticSeverity
+    source = f"typedef {declaration or (sv_type + ' _svx_type')};"
+    tree = syntax.SyntaxTree.fromText(source, SourceManager())
+    engine = DiagnosticEngine(tree.sourceManager)
+    for diagnostic in tree.diagnostics:
+        if engine.getSeverity(diagnostic.code, diagnostic.location) in {
+                DiagnosticSeverity.Error, DiagnosticSeverity.Fatal}:
+            return (f"{engine.formatMessage(diagnostic)} ({diagnostic.code}) at column "
+                    f"{tree.sourceManager.getColumnNumber(diagnostic.location)} of {source}")
+    if str(tree.root.kind) != "SyntaxKind.TypedefDeclaration" or str(tree.root.name).strip() != "_svx_type":
+        return "expected exactly one SystemVerilog type, not additional declarations"
+    return None
+
+
+def _check_sv_type(sv_type: str, where: str, *, declaration: str | None = None) -> None:
+    reason = _sv_type_syntax_error(sv_type, declaration)
+    if reason is not None:
+        raise _error(where, f"invalid SystemVerilog type {sv_type!r}: {reason}")
+
+
+def _declaration_context(kind):
+    def decorate(function):
+        @wraps(function)
+        def parse(value, *args, **kwargs):
+            try:
+                return function(value, *args, **kwargs)
+            except SVXInheritanceError as error:
+                name = (value.get('symbol') or value.get('name') or value.get('canonical_id')) if isinstance(value, dict) else None
+                if name is None:
+                    raise
+                raise SVXInheritanceError(f"{error}\n  in {kind} {name!r}") from error
+        return parse
+    return decorate
+
+
 def _handle_binding(value: Any, binding: TypeBinding, where: str) -> HandleBinding:
     """Parse typed foreign-handle metadata without changing its wire codec."""
 
@@ -591,13 +684,9 @@ def _handle_binding(value: Any, binding: TypeBinding, where: str) -> HandleBindi
             "must use an sv-vif:// target for a virtual interface",
         )
     sv_type = _required_string(raw, "sv_type", where)
-    type_tokens = re.sub(r'"(?:[^"\\\r\n]|\\.)*"', 'SVXString', sv_type)
-    if kind == "virtual_interface":
-        valid = re.fullmatch(r"virtual [A-Za-z_$][A-Za-z0-9_$:.#() ,\[\]-]*", type_tokens)
-    else:
-        valid = re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_:$#() ,.\[\]-]*", type_tokens)
-    if not valid:
-        raise _error(f"{where}.sv_type", "contains unsupported SystemVerilog type characters")
+    _check_sv_type(sv_type, f"{where}.sv_type")
+    if kind == "virtual_interface" and not sv_type.startswith("virtual "):
+        raise _error(f"{where}.sv_type", f"virtual interface type must begin with 'virtual ': {sv_type!r}")
     raw_operations = raw.get("operations", [])
     if not isinstance(raw_operations, list):
         raise _error(f"{where}.operations", "must be a list")
@@ -616,9 +705,10 @@ def _handle_binding(value: Any, binding: TypeBinding, where: str) -> HandleBindi
     return HandleBinding(kind, target_type_name, sv_type, operations, collection_binding)
 
 
+@_declaration_context("parameter")
 def _parse_parameter(value: Any, where: str) -> Parameter:
     raw = _object(value, where)
-    _reject_unknown(raw, {"name", "type", "direction", "handle"}, where)
+    _reject_unknown(raw, {"name", "type", "direction", "handle", "dpi_output_buffer"}, where)
     name = _identifier(_required_string(raw, "name", where), f"{where}.name")
     type_binding = _type_binding(raw.get("type"), f"{where}.type", allow_void=False)
     direction = raw.get("direction", "input")
@@ -630,6 +720,13 @@ def _parse_parameter(value: Any, where: str) -> Parameter:
     if direction not in {"input", "output", "inout"}:
         raise _error(f"{where}.direction", "must be input, output, or inout")
     assert type_binding is not None
+    dpi_output_buffer = raw.get("dpi_output_buffer", False)
+    if not isinstance(dpi_output_buffer, bool):
+        raise _error(f"{where}.dpi_output_buffer", "must be a boolean")
+    if dpi_output_buffer:
+        import svtypes
+        if direction != "output" or not isinstance(_codec_from_spec(type_binding.runtime_spec()), (svtypes.Array, svtypes.DynArray)):
+            raise _error(f"{where}.dpi_output_buffer", "requires an output array parameter")
     handle_raw = raw.get("handle")
     handle = (
         _handle_binding(handle_raw, type_binding, f"{where}.handle")
@@ -641,9 +738,11 @@ def _parse_parameter(value: Any, where: str) -> Parameter:
         type_binding=type_binding,
         direction=direction,
         handle=handle,
+        dpi_output_buffer=dpi_output_buffer,
     )
 
 
+@_declaration_context("field")
 def _parse_field(value: Any, where: str) -> Field:
     raw = _object(value, where)
     _reject_unknown(raw, {"name", "type", "handle"}, where)
@@ -686,8 +785,7 @@ def _parse_specialization(value: Any, where: str, language: str) -> Specializati
         elif kind == "value":
             _reject_unknown(argument, {"kind", "sv_type", "value"}, argument_where)
             sv_type = _required_string(argument, "sv_type", argument_where)
-            if not re.fullmatch(r"[$A-Za-z_][A-Za-z0-9_:$ ]*", sv_type):
-                raise _error(f"{argument_where}.sv_type", "contains unsupported source characters")
+            _check_sv_type(sv_type, f"{argument_where}.sv_type")
             arguments.append(
                 SpecializationArgument(
                     kind="value",
@@ -742,6 +840,7 @@ def _sv_class_reference(cls: ForeignClass) -> str:
     return f"{cls.symbol}#({', '.join(arguments)})"
 
 
+@_declaration_context("method")
 def _parse_method(value: Any, cls_id: str, where: str) -> Method:
     raw = _object(value, where)
     _reject_unknown(
@@ -759,6 +858,8 @@ def _parse_method(value: Any, cls_id: str, where: str) -> Method:
     if not isinstance(raw_parameters, list):
         raise _error(f"{where}.parameters", "must be a list")
     parameters = tuple(_parse_parameter(item, f"{where}.parameters[{index}]") for index, item in enumerate(raw_parameters))
+    if any(parameter.dpi_output_buffer for parameter in parameters) and not cls_id.startswith('svpkg://'):
+        raise _error(f"{where}.parameters", "DPI output buffers are supported only for package callables")
     parameter_names = [parameter.name for parameter in parameters]
     if len(parameter_names) != len(set(parameter_names)):
         raise _error(f"{where}.parameters", "contains duplicate parameter names")
@@ -850,6 +951,7 @@ def _validate_symbol(language: str, symbol: str, where: str) -> None:
         raise _error(where, f"must be a {expected} symbol")
 
 
+@_declaration_context("class")
 def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> ForeignClass:
     raw = _object(value, where)
     allowed = {
@@ -957,6 +1059,7 @@ def _parse_class(value: Any, where: str, *, lineage_member: bool = False) -> For
     )
 
 
+@_type_binding_scope
 def parse_manifest(data: Any, *, source_path: Path | None = None) -> Manifest:
     raw = _object(data, "root")
     _reject_unknown(
@@ -1393,7 +1496,10 @@ def load_manifest(path: Path) -> Manifest:
         raise SVXInheritanceError(f"cannot read inheritance manifest {path}: {error}") from error
     except json.JSONDecodeError as error:
         raise SVXInheritanceError(f"invalid JSON inheritance manifest {path}: {error.msg}") from error
-    return parse_manifest(data, source_path=path)
+    try:
+        return parse_manifest(data, source_path=path)
+    except SVXInheritanceError as error:
+        raise SVXInheritanceError(f"{error}\n  manifest: {path}") from error
 
 
 def _python_module_for(cls: ForeignClass) -> str:
@@ -2289,7 +2395,7 @@ def _request_parameters(method: Method) -> tuple[Parameter, ...]:
     return tuple(
         parameter
         for parameter in method.parameters
-        if parameter.direction in {"input", "inout"}
+        if parameter.direction in {"input", "inout"} or parameter.dpi_output_buffer
     )
 
 
@@ -2807,6 +2913,12 @@ def _emit_python_vif_views(manifest: Manifest) -> dict[PurePosixPath, str]:
 
 
 def _sv_collection_typedef(binding: TypeBinding) -> tuple[str, str] | None:
+    if binding.svtypes_identity_json is not None:
+        identity = json.loads(binding.svtypes_identity_json)
+        if (identity.get('kind') in {'scalar', 'packed', 'remote_ref'}
+                or (identity.get('kind') == 'specialization'
+                    and identity.get('base', {}).get('kind') == 'packed')):
+            return None  # Public intrinsic identities cannot be collection codecs.
     import svtypes
 
     codec = _codec_from_spec(binding.runtime_spec())
@@ -3537,6 +3649,14 @@ def _emit_sv_dispatch_case(method: Method, receiver: str = "") -> list[str]:
     values = ", ".join(arguments[p.name] for p in method.parameters)
     call = f"{receiver}{method.name}({values})"
     lines.append(f"          {call};" if method.return_type is None else f"          {returned} = {call};")
+    for parameter in method.parameters:
+        if parameter.dpi_output_buffer:
+            lines.extend([
+                f"          if ($size({arguments[parameter.name]}) != $size({req}.{parameter.name})) begin",
+                "            ok = 0; response = null;",
+                f'            error = "DPI output buffer {method.canonical_id}.{parameter.name} changed capacity";',
+                "            return;", "          end",
+            ])
     lines.append("          bytes.delete();")
     if outputs or method.return_type is not None:
         lines.append(f"          {rsp} = new();")
@@ -4507,8 +4627,11 @@ def _emit_sv_core_method(method: Method, receiver: str, core_name: str, *, stati
     arguments = ', '.join(parameter.name for parameter in method.parameters)
     call = f'{receiver}{method.name}({arguments})'
     statement = ('return ' if method.return_type is not None else '') + call + ';'
+    core_method = replace(method, parameters=tuple(
+        replace(parameter, direction='inout') if parameter.dpi_output_buffer else parameter
+        for parameter in method.parameters))
     return ['', f'    // Core operation: {method.canonical_id}',
-            f'    {"static " if static else ""}{kind} {result_type}{core_name}({_sv_parameters(method)});',
+            f'    {"static " if static else ""}{kind} {result_type}{core_name}({_sv_parameters(core_method)});',
             '      '+statement, f'    end{kind}']
 
 
@@ -6019,7 +6142,9 @@ def artifact_manifest(
     sv_sources: dict[PurePosixPath, str] | None = None,
 ) -> dict[str, Any]:
     """Describe generated inheritance artifacts for startup compatibility checks."""
-    _manifest_sv_record_types(manifest)
+    # Reserve collision-safe names in emitter order, then reuse those exact
+    # record classes when describing their encoding instead of rebuilding them.
+    record_types = {record.__name__: record for record in _manifest_sv_record_types(manifest)}
 
     from .runtime import SVX_RUNTIME_ABI_VERSION
 
@@ -6058,10 +6183,14 @@ def artifact_manifest(
             return None
         import svtypes
 
-        record_type = _sv_record_type(owner_id, kind, fields)
+        class_name = _call_record_class_name(owner_id, kind)
+        record_type = record_types.get(class_name)
+        if record_type is None:
+            record_type = _sv_record_type(owner_id, kind, fields)
+            record_types[class_name] = record_type
         return {
             "unified_type_name": _call_record_type_id(owner_id, kind),
-            "sv_class": _call_record_class_name(owner_id, kind),
+            "sv_class": class_name,
             "encoding_descriptor": svtypes.encoding_descriptor(record_type).to_dict(),
         }
 
@@ -7381,7 +7510,10 @@ def _call_values(
             request[name] = holder.value
             holders[name] = holder
         else:
-            holders[name] = _copyout_holder("output", value, where=f"inheritance argument {name}")
+            holder = _copyout_holder("output", value, where=f"inheritance argument {name}")
+            holders[name] = holder
+            if any(field_name == name for field_name, _ in contract.request_fields):
+                request[name] = holder.value if holder._svx_copyout_is_set else []
     return request, holders
 
 

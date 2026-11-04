@@ -16,7 +16,7 @@ def manifest_data():
     binding = base["fields"][0]["type"]
     base["specialization"] = {"arguments": [
         {"kind": "type", "type": binding},
-        {"kind": "value", "sv_type": "int", "value": 7},
+        {"kind": "value", "sv_type": "bit [7:0]", "value": 7},
     ]}
     for method in base["methods"]:
         method["canonical_id"] = method["canonical_id"].replace(old_id, base["canonical_id"])
