@@ -8,6 +8,7 @@ or source manager is retained by the observation context after the command.
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from .export_timing import measured
 
 
 _analysis = ContextVar('svx_source_analysis', default=None)
@@ -62,6 +63,7 @@ def elaborate_sources(compilation):
     return compilation
 
 
+@measured('Semantic compilation (including reuse checks)')
 def compile_source_trees(trees):
     """Share default semantic compilations of identical command-owned trees.
 

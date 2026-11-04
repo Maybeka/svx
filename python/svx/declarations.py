@@ -1221,7 +1221,16 @@ def _validate_source_value_schema(actual, schema, *, where):
 
 def _source_semantic_type_declaration(actual: Any, *, where: str,
                                       value_annotations=None, value_exports=None) -> dict[str, Any]:
+    def assigned_type(source):
+        # A resolved type parameter names its argument, not a new nominal type.
+        while (source.kind.name == 'TypeAlias'
+               and str(getattr(getattr(source, 'syntax', None), 'kind', '')) == 'SyntaxKind.TypeAssignment'):
+            source = source.targetType.type
+        return source
+
+    actual = assigned_type(actual)
     def annotation(source):
+        source = assigned_type(source)
         original = source
         source = source.canonicalType
         if source.kind.name in {"EnumType", "PackedStructType", "UnpackedStructType"}:
@@ -1409,7 +1418,10 @@ def _vif_operations(
         try:
             return _vif_type_declaration(spelling, where=where)
         except SVXInheritanceError:
-            return type_binding(actual, where=where)
+            try:
+                return type_binding(actual, where=where)
+            except SVXInheritanceError as error:
+                raise SVXInheritanceError(f'{where}: {error}') from error
 
     for member in fact.members:
         direction = directions.get(member.name)
@@ -1511,10 +1523,12 @@ def _enrich_python_source_handles(classes, facts, interfaces):
                     raise SVXInheritanceError(f"Python source handle {target} requires explicit closed class-handle target metadata")
                 member[handle_key] = sv_class_handle(target, symbol)
         elif target.startswith("sv-vif://"):
-            parts = target.removeprefix("sv-vif://").split("/")
-            if len(parts) == 2 and parts[0] in interfaces:
-                suffix = "" if parts[1] == "full" else "." + parts[1]
-                member[handle_key] = virtual_interface_handle(target, "virtual " + parts[0] + suffix)
+            from urllib.parse import unquote
+            native, separator, modport = target.removeprefix("sv-vif://").rpartition("/")
+            native = unquote(native)
+            if separator and native.partition('#')[0] in interfaces:
+                suffix = "" if modport == "full" else "." + modport
+                member[handle_key] = virtual_interface_handle(target, "virtual " + native + suffix)
 
     for declaration in classes:
         if declaration.get("language") != "python":
@@ -1598,19 +1612,20 @@ def _semantic_vif_enricher(facts, *, value_annotations=None, value_exports=None)
     def binding(actual, *, where):
         return _source_semantic_type_declaration(actual, where=where,
             value_annotations=value_annotations, value_exports=value_exports)
-    def enrich(handle, scope):
+    def enrich(handle, actual):
         if handle.get('operations'):
             return
         target = handle['target_type_name']
         if target not in operations:
-            _enrich_vif_handle(handle, facts, native_scope=scope, type_binding=binding)
+            _enrich_vif_handle(handle, facts, native_scope=actual.iface.body,
+                               native_type=actual, type_binding=binding)
             operations[target] = copy.deepcopy(handle['operations'])
         else:
             handle['operations'] = copy.deepcopy(operations[target])
     return enrich
 
 
-def _enrich_vif_handle(handle, facts, *, native_scope=None, type_binding=None):
+def _enrich_vif_handle(handle, facts, *, native_scope=None, native_type=None, type_binding=None):
     if not isinstance(handle, dict) or handle.get("kind") != "virtual_interface":
         return
     if handle.get("operations"):
@@ -1619,17 +1634,23 @@ def _enrich_vif_handle(handle, facts, *, native_scope=None, type_binding=None):
     target = handle.get("target_type_name")
     if not isinstance(sv_type, str) or not isinstance(target, str):
         return
-    match = re.fullmatch(r"virtual\s+([A-Za-z_$][A-Za-z0-9_$:]*)((?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)", sv_type)
-    if match is None:
-        raise SVXInheritanceError(
-            f"virtual interface handle type {sv_type!r} is not a supported static VIF declaration"
-        )
-    interface_name, modport_suffix = match.groups()
-    modport = modport_suffix[1:] if modport_suffix else None
+    if native_type is not None:
+        from .sv_scan import _source_handle_metadata
+        interface_name = native_type.iface.body.definition.name
+        modport = native_type.modport.name if native_type.modport is not None else None
+        expected_target = _source_handle_metadata(native_type, where=sv_type)['target_type_name']
+    else:
+        match = re.fullmatch(r"virtual\s+([A-Za-z_$][A-Za-z0-9_$:]*)((?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)", sv_type)
+        if match is None:
+            raise SVXInheritanceError(
+                f"virtual interface handle type {sv_type!r} requires source-backed type resolution"
+            )
+        interface_name, modport_suffix = match.groups()
+        modport = modport_suffix[1:] if modport_suffix else None
+        expected_target = f"sv-vif://{interface_name}/{modport or 'full'}"
     fact = facts.get(interface_name)
     if fact is None:
         raise SVXInheritanceError(f"virtual interface {interface_name} was not found in scanned SV sources")
-    expected_target = f"sv-vif://{interface_name}/{modport or 'full'}"
     if target != expected_target:
         raise SVXInheritanceError(f"virtual interface target {target!r} must be {expected_target!r}")
     handle["operations"] = _vif_operations(target, fact, modport, native_scope=native_scope,

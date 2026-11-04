@@ -8,6 +8,28 @@ arguments in the project's build script, not in several copied check recipes.
 
 ## Choose The Operation
 
+### Export Timing Report
+
+Add `--timings` to an ordinary export command to print an opt-in wall-clock
+report after the operation:
+
+```sh
+svx export -f project.f --package drivers_pkg --out generated --timings
+```
+
+The report includes compile-configuration import, discovery, actual SV
+preprocessing/parsing and library search, semantic compilation (including reuse
+checks), generation, and total export time. Indentation denotes nested phases;
+each phase includes its children, so do not add parent and child times together.
+Repeated phases show accumulated time and call counts. Only phases actually
+executed appear; an incremental reuse may have no discovery or generation rows.
+Total time also includes validation and output handling outside the named
+phases, but excludes Python interpreter startup and command-line parsing.
+
+The same flag works with `--incremental` and `--check`, does not change generated
+files or cache eligibility, and is disabled by default. Failed exports print
+a partial report marked `failed` before propagating the original error.
+
 ### SystemVerilog Type References
 
 `svx export`, `svx inheritance-gen`, and `svx svtypes-gen` generate without
@@ -473,6 +495,22 @@ public types. Packed member writes decode into a temporary before assigning the
 addressed leaf; they do not pass an illegal packed member as a ref actual or
 read/modify/write its whole parent.
 
+A selected class may define multiple enum typedefs and fixed arrays of each:
+
+```systemverilog
+class Driver;
+  typedef enum bit [2:0] { A_IDLE=0, A_RUN=1 } first_t;
+  typedef enum bit [2:0] { B_IDLE=0, B_RUN=2 } second_t;
+  first_t first[3];
+  second_t second[3];
+endclass
+```
+
+The enums remain distinct nominal types despite equal widths. Their Python
+types are Driver.first_t and Driver.second_t. Fields and method input/output
+arrays retain their unpacked dimensions; helper typedefs are distinct and
+declared after their element types.
+
 --exclude-type removes optional value targets, but an excluded type needed by a
 selected signature or value declaration rejects with the dependency location.
 Current SvTypes boundaries still apply: unions, X/Z enum
@@ -669,11 +707,12 @@ SvTypes type objects, not duplicate definitions. Original native types remain
 in their source scope. Named values retain their public module/qualname and
 the public SvTypes identity can resolve them after import.
 
-This currently qualifies package-owned nested classes and supported nested value
-typedefs. Module/interface/program class instance bindings and alternating
-source-managed lineages with automatic value/package-call records remain unfinished;
-they are not native-language restrictions. No class is relocated to a synthetic
-package to bypass its source ownership.
+Package-owned nested classes and supported nested value typedefs are qualified.
+Concrete instance-owned classes use the owner-bound paths described below,
+including lexical nested-class selection. Alternating source-managed lineages
+combined with automatic value/package-call records still need owner-aware
+placement; this is an implementation gap, not a native-language restriction.
+No class is relocated to a synthetic package to bypass its source ownership.
 Existing explicit Python declaration frontends retain their own
 SvTypes declarations; direct SV selectors derive their named values from SV.
 Direct SV exports can use either separate bridges or the integrated source-copy
@@ -949,6 +988,10 @@ endpoint path; see the [qualified operation scope](CROSS_LANGUAGE_HANDLE_ADAPTER
 VIF member typedefs are resolved in the native interface scope using the existing
 handle analysis; supported structural aliases need no extra declaration JSON or
 export target. Package-callable-only exports use this same enrichment path.
+Parameterized VIF handles resolve defaults, value/type arguments and modports
+against each actual specialization. Different widths and array lengths retain
+separate endpoint identities; equivalent default/explicit forms share one.
+See [parameterized VIF identities](CROSS_LANGUAGE_HANDLE_ADAPTERS.md#virtual-interface-handles).
 Package-defined enum and packed-struct VIF operation types and their supported
 containers also require no extra declarations. Shared typed endpoints bind the
 actual native types explicitly, retaining SvTypes encoding and input/output/

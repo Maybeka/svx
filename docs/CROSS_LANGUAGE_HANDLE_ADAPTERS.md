@@ -270,6 +270,25 @@ contracts: a generated VIF member is emitted only when its formal or signal
 type has a concrete supported SvTypes mapping. Unsupported member types fail
 generation with the source member and type in the diagnostic; SVX never
 guesses a wire encoding from SV spelling.
+
+Parameterized interfaces use this same path. Default, positional and named
+arguments are resolved in the actual interface specialization, including type
+arguments. Signal widths, unpacked array lengths and method signatures use that
+specialization, not the source template's unevaluated parameter expressions.
+For example, `virtual bus_if#(.WIDTH(16)).master` has a distinct endpoint from
+the 8-bit specialization. An omitted default and the same explicitly supplied
+default share an endpoint; scalar/packed type aliases are canonicalized too.
+Localparams are evaluated as dependencies but are not supplied as override
+arguments in generated SV.
+
+The endpoint identity retains the resolved named arguments, for example
+`sv-vif://bus_if#(.WIDTH(16))/master`. Whitespace, string delimiters and path
+separators inside arguments are percent-escaped in the identity; the native SV
+declaration remains ordinary SV syntax. No hash substitutes for the type.
+Parameter values may be integral (including X/Z), string or real, and type
+parameters retain their concrete native type. Exposed members must still have
+supported SvTypes value mappings; parameterization does not remove the
+interface-local nominal-type and handle-valued-operation limitations above.
 Packed and unpacked dimensions are retained independently for each declarator.
 An unpacked array or queue must not be silently treated as its scalar element
 type; where no supported VIF mapping exists, generation fails rather than
@@ -286,6 +305,14 @@ The generated module name is deterministic:
 `svx_vif.<interface>.<modport>.<ModportClass>`. The runtime lazily imports that
 module when an inbound VIF `RemoteRef` is decoded, so user endpoint code does
 not need a separate registration import before using its declared parameter.
+Parameterized views add a `params_<escaped-arguments>` module between interface
+and modport, with `part_` submodules when the encoded arguments exceed 96
+characters per component. Its reversible character escaping distinguishes specializations
+without hashes or colliding punctuation replacements. Returned VIFs select this
+module automatically; callers normally use the decoded view rather than import
+the specialization module explicitly. See the
+[parameterized fixture](../tests/integration/parameterized_vif.sv) and
+[Python calls](../tests/integration/parameterized_vif_entry.py).
 
 ## Manifest and Generation Rules
 

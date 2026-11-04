@@ -2409,13 +2409,8 @@ def _response_parameters(method: Method) -> tuple[Parameter, ...]:
 
 def _vif_module_parts(binding: HandleBinding) -> tuple[str, ...]:
     assert binding.kind == "virtual_interface"
-    stem = binding.target_type_name.removeprefix("sv-vif://")
-    interface, separator, modport = stem.partition("/")
-    if not separator or not interface or not modport:
-        raise SVXInheritanceError(
-            f"invalid virtual-interface target {binding.target_type_name!r}"
-        )
-    return ("svx_vif", interface, modport)
+    from .vif_names import vif_module_parts
+    return vif_module_parts(binding.target_type_name)
 
 
 def _vif_view_class_name(binding: HandleBinding) -> str:
@@ -2925,7 +2920,10 @@ def _sv_collection_typedef(binding: TypeBinding) -> tuple[str, str] | None:
     if not isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.AssocArray)):
         return None
     if binding.sv != svtypes.sv_type_expression(codec):
-        return None  # Preserve an explicitly supplied source typedef.
+        from .value_exports import original_value_expression
+        if (not binding.sv.rstrip().endswith(']')
+                or binding.sv != original_value_expression(binding.runtime_spec(), codec)):
+            return None  # Preserve an explicitly supplied whole-array source typedef.
     name = name_for(('collection', binding.unified_type_name),
                     lambda: 'array_' + schema_label(svtypes.schema_descriptor(codec).schema))
     return name, "typedef " + svtypes.sv_declaration(codec, name) + ";"
@@ -5857,7 +5855,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                 *(f"  import {package}::*;" for package in imported_packages),
             ]
         )
-        lines.extend("  " + declaration for declaration in _manifest_sv_collection_typedefs(manifest))
+        collection_typedefs = _manifest_sv_collection_typedefs(manifest)
         for value in manifest.value_types:
             if value.source_scope is not None:
                 continue
@@ -5874,6 +5872,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                 text = bind_native_struct_declaration(render_sv_object(model, 1), model.__name__,
                     value.native_reference, packed=data['schema']['packed'], schema=data['schema'])
                 lines.extend(['', text])
+        lines.extend("  " + declaration for declaration in collection_typedefs)
         for record_type in record_types:
             from .sv_codegen_mode import render_sv_object
             lines.extend(["", render_sv_object(record_type, 1)])
@@ -7012,13 +7011,13 @@ def _decode_vif_view(value: Any) -> Any:
         # Generated views use a deterministic module path. Load it before an
         # inbound call reaches user code, rather than requiring a ceremonial
         # import solely to activate an annotated VIF parameter.
-        match = re.fullmatch(
-            r"sv-vif://([A-Za-z_][A-Za-z0-9_$]*)/([A-Za-z_][A-Za-z0-9_$]*)",
-            target_type_name,
-        )
-        if match is not None:
-            interface, modport = match.groups()
-            importlib.import_module(f"svx_vif.{interface}.{modport}")
+        from .vif_names import vif_module_parts
+        try:
+            parts = vif_module_parts(target_type_name)
+        except SVXInheritanceError:
+            parts = None
+        if parts is not None:
+            importlib.import_module('.'.join(parts))
             view_type = _vif_views.get(target_type_name)
     return view_type(value) if view_type is not None and getattr(value, "object_number", 0) != 0 else value
 

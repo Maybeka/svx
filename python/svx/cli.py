@@ -17,6 +17,7 @@ from types import ModuleType
 from typing import Iterable, TextIO
 from contextlib import contextmanager, nullcontext
 from .source_selection import with_source_observations
+from .export_timing import export_report, measured
 
 from .inheritance import (
     artifact_manifest,
@@ -358,6 +359,7 @@ def _cmd_svtypes_gen(args: argparse.Namespace, out: TextIO) -> int:
     return 0
 
 
+@measured('Compile configuration')
 def _sv_macro_config(args: argparse.Namespace) -> dict:
     from .compile_config import import_compile_configuration
     if not hasattr(args, '_explicit_sv_sources'):
@@ -448,6 +450,7 @@ def _cmd_compile_config(args, out):
 
 
 @with_source_observations
+@measured('Generation')
 def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
     _sv_macro_config(args)
     from .sv_library_search import library_search
@@ -1183,6 +1186,7 @@ def _fresh_declaration_entries(names, source_paths=(), *, all_sources=False,
 
 
 @with_source_observations
+@measured('Discovery')
 def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
     _sv_macro_config(args)
     from .sv_library_search import library_search
@@ -1193,6 +1197,11 @@ def _cmd_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
 
 @with_source_observations
 def _cmd_export(args: argparse.Namespace, out: TextIO) -> int:
+    with export_report(getattr(args, 'timings', False), out):
+        return _run_export(args, out)
+
+
+def _run_export(args: argparse.Namespace, out: TextIO) -> int:
     if args.refresh_cache and not args.incremental:
         raise SVXInheritanceError('--refresh-cache requires --incremental')
     if args.incremental:
@@ -1569,6 +1578,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser('export', help='discover and generate selected SV APIs from original project inputs')
     _add_discovery_arguments(p)
+    p.add_argument('--timings', action='store_true', help='report export wall time by phase, including parsing and generation')
     p.add_argument('--use-type-reference', action='store_true', help='allow generated SystemVerilog type(expression) references')
     p.add_argument('--integrated', action='store_true',
                    help='emit source copies and bridges, retaining original compilation-unit boundaries; compile instead of original inputs')

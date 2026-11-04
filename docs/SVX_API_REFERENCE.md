@@ -384,6 +384,10 @@ implementation exceptions are not suppressed.
   requires --incremental and forces the full operation. `--check` does not write
   cache data. Changed dependencies still rerun the full frontend; see the
   workflow for eligibility and invalidation details.
+  `--timings` prints optional inclusive phase and total wall times, including
+  discovery, parsing and generation. It also works with --check and --incremental;
+  it does not change generated artifacts or reuse eligibility. See the
+  [timing report](SVX_GENERATION_WORKFLOW.md#export-timing-report) for interpretation.
   Compilation-unit values accept --type/--constant '$unit::*', bare unique names,
   or owner-qualified selectors such as '$unit[1]::Mode'. They publish at
   svx_mirror_unit.unit_<index>, not a fabricated native SV package. See

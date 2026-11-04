@@ -16,6 +16,7 @@ import svtypes
 from .errors import SVXInheritanceError
 
 _codegen_values = ContextVar('svx_codegen_value_types', default=False)
+_active_value_modules = ContextVar('svx_active_value_modules', default=None)
 
 
 def value_key(symbol, scope=None):
@@ -229,6 +230,9 @@ class ValueModules:
         self.named = {}
         self.annotations = {}
         self.codegen = codegen
+        self.declarations = []
+        self.original_expressions = {}
+        self.original_named = None
 
     def add(self, declaration):
         try:
@@ -284,6 +288,9 @@ class ValueModules:
         setattr(owner, name, annotation)
         self.named[schema['type_name']] = annotation
         self.annotations[declaration.key] = annotation
+        self.declarations.append(declaration)
+        self.original_expressions.clear()
+        self.original_named = None
         return annotation
 
     def close(self):
@@ -299,13 +306,37 @@ def value_modules(declarations=(), *, codegen=None):
     codegen = _codegen_values.get() if codegen is None else codegen
     token = _codegen_values.set(codegen)
     modules = ValueModules(codegen)
+    active_token = _active_value_modules.set(modules)
     try:
         for declaration in declarations:
             modules.add(declaration)
         yield modules
     finally:
         modules.close()
+        _active_value_modules.reset(active_token)
         _codegen_values.reset(token)
+
+
+def original_value_expression(spec, codec):
+    """Recover normalized collection spelling before codegen renames values."""
+    modules = _active_value_modules.get()
+    identity = spec.get('svtypes')
+    if modules is None or not modules.codegen or not modules.declarations or identity is None:
+        return None
+    key = json.dumps(identity, sort_keys=True, separators=(',', ':'))
+    if key not in modules.original_expressions:
+        # One original-name view per emitter, not one full rebuild per array.
+        if modules.original_named is None:
+            with value_modules(tuple(modules.declarations), codegen=False) as original:
+                modules.original_named = dict(original.named)
+        try:
+            annotation = _schema_annotation(svtypes.schema_descriptor(codec).schema, modules.original_named)
+            original_codec = svtypes.materialize_type_spec(annotation, location='collection declaration')
+            expression = svtypes.sv_type_expression(original_codec)
+        except SVXInheritanceError:
+            expression = None  # Not a named value supported by this declaration view.
+        modules.original_expressions[key] = expression
+    return modules.original_expressions[key]
 
 
 def value_implementation_module(module):

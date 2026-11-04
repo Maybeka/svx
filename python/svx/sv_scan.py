@@ -14,6 +14,7 @@ import re
 from typing import Callable, Iterable
 
 from .errors import SVXInheritanceError
+from .generated_names import sv_name_scope
 from .sv_frontend import (_analysis, analysis_source_manager, elaborate_sources, compile_source_trees,
                           source_elaboration_mode)
 from .sv_instance_scan import with_instance_discovery
@@ -275,8 +276,10 @@ def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, co
                 state.owners.append(snapshot)
         else:
             start = perf_counter()
-            trees = tuple(_parse_source_batch(syntax, paths, source_manager,
-                                             parse_options=parse_options, compilation_unit=compilation_unit))
+            from .export_timing import phase
+            with phase('SV preprocessing, parsing and library search'):
+                trees = tuple(_parse_source_batch(syntax, paths, source_manager,
+                                                 parse_options=parse_options, compilation_unit=compilation_unit))
             if not explicit_manager:
                 record_raw_syntax(paths, parse_options, compilation_unit, trees,
                                   source_manager, (parse_options, search))
@@ -1194,7 +1197,38 @@ def _declared_class_reference(declaration) -> str:
 def _canonical_sv_handle_type(actual) -> str:
     actual = actual.canonicalType
     if actual.isVirtualInterface:
-        return "virtual " + str(actual)
+        body = actual.iface.body
+        arguments = []
+        for parameter in body.parameters:
+            if parameter.isLocalParam:
+                continue
+            if parameter.kind.name == 'TypeParameter':
+                target = parameter.targetType.type
+                concrete = target.canonicalType
+                if concrete.isClass or concrete.isVirtualInterface:
+                    value = _canonical_sv_handle_type(concrete)
+                elif concrete.kind.name in {
+                    'EnumType', 'PackedStructType', 'UnpackedStructType',
+                }:
+                    while (target.kind.name == 'TypeAlias'
+                           and target.targetType.type.kind.name == 'TypeAlias'):
+                        target = target.targetType.type
+                    value = target.lexicalPath
+                elif concrete.kind.name in {
+                    'FixedSizeUnpackedArrayType', 'DynamicArrayType', 'QueueType', 'AssociativeArrayType',
+                }:
+                    value = target.lexicalPath
+                else:
+                    value = str(concrete)
+            else:
+                value = str(parameter.value)
+            arguments.append(f'.{parameter.name}({value})')
+        native = body.definition.name
+        if arguments:
+            native += '#(' + ', '.join(arguments) + ')'
+        if actual.modport is not None:
+            native += '.' + actual.modport.name
+        return 'virtual ' + native
     spelling = str(actual)
     selector = _semantic_class_selector(actual) if actual.isClass else actual.lexicalPath
     unit = _unit_scope(selector)
@@ -1258,12 +1292,14 @@ def _source_handle_metadata(actual, *, where, collections=False, value_exports=N
         return {"kind": "sv_class", "sv_type": _canonical_sv_handle_type(actual),
                 "target_type_name": _source_class_id(selector(actual))}
     if actual.isVirtualInterface:
-        interface = actual.iface.body.definition.name
+        from urllib.parse import quote
         modport = actual.modport.name if actual.modport is not None else "full"
-        expected = interface + ("." + modport if modport != "full" else "")
-        if str(actual) != expected:
-            raise SVXInheritanceError(f"{where} requires explicit closed virtual-interface metadata")
-        return {"kind": "virtual_interface", "sv_type": "virtual " + expected,
+        native = _canonical_sv_handle_type(actual)
+        interface = native.removeprefix('virtual ')
+        if actual.modport is not None:
+            interface = interface[:-(len(modport) + 1)]
+        interface = quote(interface, safe='():.#[],_$')
+        return {"kind": "virtual_interface", "sv_type": native,
                 "target_type_name": f"sv-vif://{interface}/{modport}"}
     return None
 
@@ -1381,7 +1417,7 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
                 )
             normalized = dict(handle, sv_type=_canonical_sv_handle_type(actual))
             if actual.isVirtualInterface and vif_enricher is not None:
-                vif_enricher(normalized, actual.iface.body)
+                vif_enricher(normalized, actual)
             updates.append((handle, normalized))
     for handle, normalized in updates:
         handle.update(normalized)
@@ -1488,6 +1524,7 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
     return result
 
 
+@sv_name_scope()
 def _validate_member_types(declarations, paths, facts, *, parse_options=None, compilation_unit=False,
                            proxy_context=(), value_types=()) -> None:
     """Compare language types without inferring or replacing SvTypes codecs."""

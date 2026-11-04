@@ -10,6 +10,7 @@ import platform
 import sys
 
 from .errors import SVXInheritanceError
+from .export_timing import measured
 from .source_selection import capture_selection, file_digest, selection_context, validate_selection
 
 
@@ -45,7 +46,7 @@ def _prepare(args):
     prepared = argparse.Namespace(**vars(args))
     options = _sv_macro_config(prepared)
     request = {key: value for key, value in vars(args).items()
-               if not key.startswith('_') and key not in {'func', 'debug', 'check', 'incremental', 'refresh_cache'}}
+               if not key.startswith('_') and key not in {'func', 'debug', 'check', 'incremental', 'refresh_cache', 'timings'}}
     request.update(cwd=str(Path.cwd()), output_root=str(Path(args.out).resolve()), framework=_framework(),
                    build=prepared._sv_build_configuration.as_dict(Path.cwd()),
                    build_inputs=[(str(path), file_digest(path)) for path in prepared._sv_build_configuration.inputs],
@@ -165,6 +166,7 @@ def _load(path):
         return None
 
 
+@measured('Incremental verification and export')
 def run_incremental_export(args, out, execute):
     """Reuse only a complete unchanged direct-SV export, with two fresh checks."""
     if args.python_module or args.sv_declarations or args.python_source:

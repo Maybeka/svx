@@ -1,9 +1,23 @@
 """Readable artifact-local names, independent of stable wire identities."""
 from contextvars import ContextVar
+from contextlib import contextmanager
 from functools import wraps
 import re
 
 _names = ContextVar('svx_generated_names', default=None)
+
+
+@contextmanager
+def sv_name_scope():
+    """Allocate distinct helper names for one non-artifact SV operation."""
+    if _names.get() is not None:
+        yield
+        return
+    token = _names.set(({}, set()))
+    try:
+        yield
+    finally:
+        _names.reset(token)
 
 
 def readable(text):
