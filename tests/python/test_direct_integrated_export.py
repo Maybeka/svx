@@ -38,7 +38,7 @@ endmodule''', encoding='utf-8')
 
 def test_integrated_package_preserves_original_types_and_record_order(source, tmp_path):
     output = tmp_path / 'generated'
-    args = ['export', '--package', 'p', '--integrated', '--sv-source', str(source),
+    args = ['export', '--audit', '--package', 'p', '--integrated', '--sv-source', str(source),
             '-I', str(tmp_path), '--out', str(output)]
     stream = io.StringIO()
     assert main(args, out=stream) == 0
@@ -75,7 +75,7 @@ assert callable(echo)
 ])
 def test_integrated_independent_symbol_kinds(source, tmp_path, selector, target):
     output = tmp_path / 'generated'
-    args = ['export', selector, target, '--integrated', '--sv-source', str(source),
+    args = ['export', '--audit', selector, target, '--integrated', '--sv-source', str(source),
             '-I', str(tmp_path), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0

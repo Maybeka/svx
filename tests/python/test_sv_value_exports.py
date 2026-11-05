@@ -43,7 +43,7 @@ def test_value_only_manifest_and_normal_import_without_runtime(source, tmp_path)
             'native_values::StateAlias', '--sv-source', str(source), '--out', str(output)]
     stream = io.StringIO()
     assert main(args, out=stream) == 0
-    assert 'from svx_mirror.native_values import Packet' in stream.getvalue()
+    assert 'from svx_mirror.native_values import Packet' not in stream.getvalue()
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     assert data['classes'] == [] and data['schema_version'] == '2.1.0'
     assert {item['symbol'] for item in data['value_types']} == {

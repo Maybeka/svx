@@ -222,7 +222,8 @@ def test_sv_owned_fields_bind_to_inherited_storage_without_shadowing():
     assert "int count;" not in sv_text
     assert 'type(this.count)' not in sv_text
     assert "int_packer::pack(this.count, bytes)" in sv_text
-    assert "int_packer::unpack(this.count, bytes, field_offset)" in sv_text
+    assert "int_packer::unpack(field_wire, bytes, field_offset)" in sv_text
+    assert '_svx__core_write_Base_count(field_wire);' in sv_text
 
 
 @pytest.mark.parametrize("annotation,kind", [
@@ -648,8 +649,8 @@ def test_ancestor_invocation_uses_short_class_aliases_without_name_collisions():
         source, base_methods=(), inherited_sv_sources=(source, other), generated_name='Child'))
     assert 'typedef tb_pkg::BaseDriver BaseDriver;' in code
     assert 'typedef other_pkg::BaseDriver svx_BaseDriver;' in code
-    assert 'BaseDriver::drive(address);' in code
-    assert 'svx_BaseDriver::drive(address);' in code
+    assert 'BaseDriver::drive(req.address);' in code
+    assert 'svx_BaseDriver::drive(req.address);' in code
     assert 'task _svx__core_BaseDriver_drive(' in code
     assert 'task _svx__core_BaseDriver_drive_2(' in code
     assert 'tb_pkg::BaseDriver::drive(' not in code
@@ -943,7 +944,8 @@ def test_alternating_lineage_generates_only_required_mirror_and_proxy():
     assert "inheritance_create_sv('sv://drivers/A'" in python_mirror
     assert "__svx_projected_fields_by_class_id__" in python_mirror
     assert "'py://checks/B': {'retry': 'py://checks/B.retry'}" in python_mirror
-    assert "instance._svx_bind_active_projected_fields()" in python_mirror
+    assert "__svx_base_field_ids__" in python_mirror
+    assert "def __svx_create_from_sv__" not in python_mirror
     compile(python_mirror, "generated/svx_mirror/drivers.py", "exec")
 
 
@@ -1015,7 +1017,7 @@ def test_four_segment_lineage_binds_early_python_fields_at_final_mirror():
     python_mirror = python_files[mirror_path]
     cmirror = python_mirror.split("class C(SVMirror):", 1)[1]
     assert "'py://checks/D': {'retry': 'py://checks/B.retry'}" in cmirror
-    assert "self._svx_bind_projected_fields({'retry': 'py://checks/B.retry'})" in cmirror
+    assert "self._svx_finish_created_object(object_id, {'retry': 'py://checks/B.retry'})" in cmirror
     compile(python_mirror, "generated/svx_mirror/drivers_child.py", "exec")
 
     stages = emit_sv_mirror_stages(manifest)
@@ -1922,12 +1924,12 @@ def test_projection_constructor_locals_and_bridge_id_avoid_user_formals():
     ))
     assert f"super.new({', '.join(names)});" in generated
     assert "input int object_id" in generated
-    assert "input longint unsigned svx_object_id_1 = 0" in generated
-    assert "bit svx_ok;" in generated
-    assert "chandle svx_request;" in generated
-    assert "byte unsigned svx_bytes[$];" in generated
-    assert "svx_request_value.request_value = request_value;" in generated
-    assert "this.__svx_remote_object_id = svx_object_id_1;" in generated
+    assert "input longint unsigned svx_object_id_1 = svx_constructor_ids::take(" in generated
+    assert "bit svx_ok;" not in generated
+    assert "chandle svx_request;" not in generated
+    assert "byte unsigned svx_bytes[$];" not in generated
+    assert '::encode_arguments(' in generated
+    assert '`SVX_BIND_CONSTRUCTED_OBJECT(svx_object_id_1,' in generated
 
 
 def test_constructor_handle_generation_preserves_native_types_and_decodes_both_factories():
@@ -1938,11 +1940,12 @@ def test_constructor_handle_generation_preserves_native_types_and_decodes_both_f
     assert "input external_handle_test_pkg::Packet packet, input virtual external_bus_if.master vif" in sv
     packet_adapter = "_svx__ref_Packet"
     vif_adapter = "_svx__ref_virtual_external_bus_if_master"
-    assert f"request_value.packet = {packet_adapter}::encode(packet);" in sv
-    assert f"request_value.vif = {vif_adapter}::encode(vif);" in sv
+    assert f"{packet_adapter}::encode(packet)" in sv
+    assert f"{vif_adapter}::encode(vif)" in sv
     assert sv.count(f"if (!{packet_adapter}::decode(constructor_request.packet, packet, error))") == 2
     assert sv.count(f"if (!{vif_adapter}::decode(constructor_request.vif, vif, error))") == 2
-    assert "instance = new(packet, vif, object_id);" in sv
+    assert 'svx_constructor_ids::prepare("sv://constructor_handle_pkg/Holder", object_id);' in sv
+    assert "instance = new(packet, vif);" in sv
     assert "instance = new(object_id, packet, vif);" in sv
     python = emit_python_mirrors(model)
     assert "svx_mirror/external_handle_test_pkg.py" not in {str(path) for path in python}

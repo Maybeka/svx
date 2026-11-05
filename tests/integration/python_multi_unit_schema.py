@@ -26,7 +26,8 @@ def source_inputs():
 def emit_sources():
     manifest = parse_manifest(manifest_data())
     records = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
-    records.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    from svx.owner_records import render_call_record
+    records.extend(render_call_record(record, 1) for record in _manifest_sv_record_types(manifest))
     records.append('endpackage')
     sv = {PurePosixPath('common.svh'): '\n'.join(records) + '\n',
           PurePosixPath('source.sv'): _emit_python_root_source_units(manifest, source_inputs())}

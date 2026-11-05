@@ -148,7 +148,8 @@ def emit_sources(manifest=None, *, endpoint_handles=False, multiple_endpoint_pac
         source = source.replace('svx_proxy_python_unit_source::', 'svx_proxy_mixed_python_source::')
     manifest = manifest or original
     records = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
-    records.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    from svx.owner_records import render_call_record
+    records.extend(render_call_record(record, 1) for record in _manifest_sv_record_types(manifest))
     records.append('endpackage')
     inputs = endpoint_source_inputs(source) if multiple_endpoint_packages else {'mixed-source.sv': source}
     return {'common.svh': '\n'.join(records) + '\n', 'source.sv': _emit_source_units(manifest, inputs)}

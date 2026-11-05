@@ -118,7 +118,8 @@ def emit_probe():
 
     records.append(RootPolicyMode.to_sv_enum(1))
     for record in _manifest_sv_record_types(manifest):
-        records.append(record.to_sv_obj(1))
+        from svx.owner_records import render_call_record
+        records.append(render_call_record(record, 1))
     records.extend(["endpackage", "package python_root_probe_pkg;", "  import svtypes_pkg::*;",
                     "  import svx_pkg::*;", "  import svx_call_records_pkg::*;"])
     for root in manifest.classes[:2]:

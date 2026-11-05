@@ -58,4 +58,9 @@ def export_report(enabled, out):
         for path, (seconds, count) in report['rows'].items():
             label = '  ' * len(path) + path[-1]
             print(f'{label}: {seconds:.6f} s ({count} calls)', file=out)
+            children = [value[0] for child, value in report['rows'].items()
+                        if len(child) == len(path) + 1 and child[:-1] == path]
+            if children:
+                remainder = max(0.0, seconds - sum(children))
+                print(f'{"  " * (len(path) + 1)}Self / uninstrumented: {remainder:.6f} s', file=out)
         print(f'  Total: {elapsed:.6f} s', file=out)

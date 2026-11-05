@@ -45,7 +45,8 @@ def emit_sources(source=None, *, shared_module=False):
     if source is None:
         source = Path(__file__).with_name('same_module_source.sv' if shared_module else 'same_package_source.sv').read_text()
     common = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
-    common.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    from svx.owner_records import render_call_record
+    common.extend(render_call_record(record, 1) for record in _manifest_sv_record_types(manifest))
     common.append('endpackage')
     sv = {PurePosixPath('common.svh'): '\n'.join(common) + '\n',
           PurePosixPath('source.sv'): _emit_sv_root_source_unit(manifest, source)}

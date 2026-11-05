@@ -29,7 +29,8 @@ def emit_sources(*, sv_origin_only=False):
     model = parse_manifest(manifest_data(sv_origin_only=sv_origin_only))
     records = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
     for record in _manifest_sv_record_types(model):
-        records.append(record.to_sv_obj(1))
+        from svx.owner_records import render_call_record
+        records.append(render_call_record(record, 1))
     records.extend(['endpackage', ''])
     sources = {PurePosixPath('common.svh'): '\n'.join(records)}
     for package, text in _emit_python_root_sv_packages(model, has_call_records=True).items():

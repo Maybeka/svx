@@ -16,7 +16,7 @@ def test_package_type_graph_with_alternating_and_native_families(tmp_path, sourc
     environment = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
     selection = (['--package', 'export_chain_pkg'] if whole_package else
                  ['--class', 'export_chain_pkg::C', 'export_chain_pkg::CLeaf'])
-    arguments = [sys.executable, '-m', 'svx', 'export', '--integrated', *selection, '--python-module',
+    arguments = [sys.executable, '-m', 'svx', 'export', '--audit', '--integrated', *selection, '--python-module',
                  'tests.integration.package_export_alternating', '--sv-source',
                  str(root / 'tests/integration/package_export_alternating.sv'),
                  '--sv-include-dir', str(root), '--out', str(tmp_path)]

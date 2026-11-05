@@ -113,6 +113,9 @@ class SourceAnalysis:
     class_fact_builds: int = 0
     class_fact_reuses: int = 0
     package_imports: dict = field(default_factory=dict)
+    class_inventories: dict = field(default_factory=dict)
+    class_inventory_builds: int = 0
+    class_inventory_reuses: int = 0
 
 
 @contextmanager

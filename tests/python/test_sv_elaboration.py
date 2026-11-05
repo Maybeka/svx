@@ -70,7 +70,7 @@ module dut;for(genvar i=0;i<500;i++) begin:g logic[31:0] data;end endmodule''', 
 
     monkeypatch.setattr(frontend, 'elaborate_sources', trace)
     monkeypatch.setattr(scan, 'elaborate_sources', trace)
-    args = ['export', '--package', 'p', '--sv-source', str(source), '-I', str(tmp_path),
+    args = ['export', '--audit', '--package', 'p', '--sv-source', str(source), '-I', str(tmp_path),
             '--sv-elaboration', 'packages', '--out', str(output)]
     stream = io.StringIO()
     assert main(args, out=stream) == 0
@@ -92,7 +92,7 @@ def test_package_mode_does_not_hide_dut_syntax_errors(tmp_path):
     source = tmp_path / 'bad.sv'
     source.write_text('package p;class A;endclass endpackage module dut;int = ;endmodule', encoding='utf-8')
     with pytest.raises(SVXInheritanceError):
-        main(['export', '--class', 'p::A', '--sv-elaboration', 'packages',
+        main(['export', '--audit', '--class', 'p::A', '--sv-elaboration', 'packages',
               '--sv-source', str(source), '--out', str(tmp_path / 'generated')], out=io.StringIO())
     assert not (tmp_path / 'generated/inheritance.json').exists()
 
@@ -122,7 +122,7 @@ module tb;import extra_pkg::*;dut u();endmodule''', encoding='utf-8')
     with library_search(config):
         assert _source_dependencies(config.sources) == limited | {library / 'dut.sv', library / 'leaf.sv'}
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'p::Driver', '-f', str(filelist),
+    args = ['export', '--audit', '--class', 'p::Driver', '-f', str(filelist),
             '--sv-build-directory', str(tmp_path), '--sv-elaboration', 'packages', '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     # Validation outside the command must replay the recorded library policy.
@@ -160,7 +160,7 @@ def test_package_mode_preserves_library_precedence_and_detects_new_candidate(tmp
     filelist = tmp_path / 'files.f'
     filelist.write_text('-y first -y second +libext+.sv\ntop.sv', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'p::Driver', '-f', str(filelist),
+    args = ['export', '--audit', '--class', 'p::Driver', '-f', str(filelist),
             '--sv-build-directory', str(tmp_path), '--sv-elaboration', 'packages', '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0

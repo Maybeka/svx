@@ -36,6 +36,10 @@ def _framework():
                     records.append((str(path.resolve()), file_digest(path)))
             if len(records) == count:
                 raise OSError(f'framework code fingerprint is unavailable: {directory}')
+    from .cli import sv_dir
+    for name in ('svx_accessors.svh', 'svx_inheritance.sv'):
+        support = sv_dir() / name
+        records.append((str(support.resolve()), file_digest(support)))
     return _digest({'python': sys.version, 'platform': platform.platform(), 'files': records,
                     'versions': {module.__name__: getattr(module, '__version__', None)
                                  for module in (svx, svtypes, pyslang)}})

@@ -22,6 +22,7 @@ class BaseDriver(SVMirror):
     """Executable Python base view of example_driver_pkg::BaseDriver."""
     __svx_foreign_class_id__ = 'sv://example_driver_pkg/BaseDriver'
     __svx_guard_descendant_initializers__ = True
+    __svx_base_field_ids__ = {}
     __svx_projected_fields_by_class_id__ = {}
 
     def __init_subclass__(cls, **kwargs):
@@ -29,29 +30,6 @@ class BaseDriver(SVMirror):
         if any(base is BaseDriver or base.__dict__.get('__svx_sv_mirror__', {}).get('canonical_id') == 'sv://example_driver_pkg/BaseDriver' for base in cls.__bases__):
             register_python_subclass('sv://example_driver_pkg/BaseDriver', cls)
 
-    def _svx_bind_active_projected_fields(self):
-        # Project only fields selected for this concrete alternating-lineage target.
-        declaration = getattr(type(self), '__svx_inheritance_class__', {})
-        class_id = declaration.get('canonical_id') if isinstance(declaration, dict) else None
-        field_ids = {}
-        field_ids.update(self.__svx_projected_fields_by_class_id__.get(class_id, {}))
-        if field_ids:
-            self._svx_bind_projected_fields(field_ids)
-
-    @classmethod
-    def __svx_create_from_sv__(cls, remote_object_id, *args):
-        # Bind the existing SV instance before Python initialization reads projected fields.
-        instance = cls.__new__(cls)
-        SVMirror.__init__(instance)
-        instance._svx_bind_remote_object(remote_object_id)
-        bind_instance(remote_object_id, instance)
-        try:
-            instance._svx_bind_active_projected_fields()
-            cls.__init__(instance, *args)
-        except BaseException as initialization_error:
-            SVMirror._svx_retire_failed_python_companion(instance, initialization_error)
-            raise
-        return instance
 
     def __init__(self):
         from svx.inheritance import _suspend_natural_constructor as _suspend_natural_constructor
@@ -62,15 +40,7 @@ class BaseDriver(SVMirror):
         SVMirror.__init__(self)
         # Allocate the complete paired SV target for Python-initiated construction.
         object_id = _native.inheritance_create_sv('sv://example_driver_pkg/BaseDriver', encode_constructor('sv://example_driver_pkg/BaseDriver', {}))
-        self._svx_bind_remote_object(object_id)
-        try:
-            bind_instance(object_id, self)
-            self._svx_bind_projected_fields({})
-        except BaseException:
-            self._svx_release_projected_fields()
-            _native.inheritance_close(object_id)
-            raise
-        self._svx_target_constructor_completed = True
+        self._svx_finish_created_object(object_id, {})
 
     def drive(self):
         return invoke_sv(self._svx_remote_object_id, 'sv://example_driver_pkg/BaseDriver#drive', {})

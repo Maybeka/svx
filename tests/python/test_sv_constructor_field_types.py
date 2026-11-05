@@ -111,7 +111,7 @@ def test_standalone_sv_field_target_emits_a_bound_mirror_not_an_empty_view():
     assert "class Base(SVMirror):" in text
     assert "count = _codec_from_spec(" in text
     assert "sv://field_owner_pkg/Base.count" in text
-    assert "_svx_bind_active_projected_fields()" in text
+    assert "__svx_base_field_ids__" in text
     assert len(manifest.classes) == 1
     assert "class Derived" not in emit_sv_mirrors(manifest)
 
@@ -129,7 +129,11 @@ def test_sv_origin_standalone_field_target_allows_python_mirror_construction():
     assert "count = _codec_from_spec(" in text
     assert "must be created by SV" not in text
     assert "inheritance_create_sv(" in text
-    assert text.index("instance._svx_bind_active_projected_fields()") < text.index("cls.__init__(instance, *args)")
+    import inspect
+    from svx.declarations import SVMirror
+    lifecycle = inspect.getsource(SVMirror.__svx_create_from_sv__)
+    assert lifecycle.index("instance._svx_bind_active_projected_fields()") < lifecycle.index("cls.__init__(instance, *args)")
+    assert 'def __svx_create_from_sv__' not in text
     sv = emit_sv_mirrors(manifest)
     assert "class Base extends field_owner_pkg::Base" in sv
     assert 'sv://field_owner_pkg/Base.count@svx_field_read' in sv

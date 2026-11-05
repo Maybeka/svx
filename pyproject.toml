@@ -49,6 +49,7 @@ packages = ["svx"]
   "LICENSE",
 ]
 "share/svx/sv" = [
+  "sv/svx_accessors.svh",
   "sv/svx_channel.sv",
   "sv/svx_defs.svh",
   "sv/svx_error.sv",

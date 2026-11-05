@@ -12,7 +12,8 @@ def emit_sources():
     manifest = parse_manifest(manifest_data())
     bindings = _manifest_handle_bindings(manifest)
     records = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
-    records.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    from svx.owner_records import render_call_record
+    records.extend(render_call_record(record, 1) for record in _manifest_sv_record_types(manifest))
     records.append('endpackage')
     original = (Path(__file__).parent / 'constructor_handle_types.sv').read_text()
     owner = original.split('\npackage constructor_handle_pkg;', 1)[0].rstrip()

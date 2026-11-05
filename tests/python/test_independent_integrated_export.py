@@ -50,7 +50,7 @@ endpackage
 ''', encoding='utf-8')
     filelist = tmp_path / 'design.f'
     filelist.write_text('base.sv\nchild.sv\n', encoding='utf-8')
-    args = ['export', '--package', 'child_pkg', '--integrated', '-f', str(filelist),
+    args = ['export', '--audit', '--package', 'child_pkg', '--integrated', '-f', str(filelist),
             '--sv-build-directory', str(tmp_path), '--out', str(tmp_path / 'generated')]
     return args, first, second, include
 
@@ -111,7 +111,7 @@ def test_independent_units_preserve_order_macros_types_and_source_owners(project
     assert 'SV startup: svx_exports_pkg::initialize(); after svx_init()' in message
     from svx.sv_source_options import _source_parse_options
     inventory = declaration_inventory([output / path for path in order], compilation_unit=False,
-        parse_options=_source_parse_options({}, (), [output / 'sv']))
+        parse_options=_source_parse_options({}, (), [output / 'sv', Path(__file__).resolve().parents[2]]))
     units = [item for item in inventory['declarations'] if item['symbol'] == '$unit::SameName']
     assert len(units) == 2 and units[0]['compilation_unit'] != units[1]['compilation_unit']
     model = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
@@ -165,7 +165,7 @@ def test_single_and_shared_inputs_keep_source_sv_layout(tmp_path):
     source.write_text('package p;class A;endclass endpackage', encoding='utf-8')
     for shared in (False, True):
         output = tmp_path / ('shared' if shared else 'single')
-        args = ['export', '--package', 'p', '--integrated', '--sv-source', str(source),
+        args = ['export', '--audit', '--package', 'p', '--integrated', '--sv-source', str(source),
                 '--out', str(output), *(['--sv-compilation-unit'] if shared else [])]
         run(args)
         artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
@@ -186,7 +186,7 @@ def test_pure_value_exports_do_not_require_startup_registration(tmp_path, integr
     source.write_text('// package svx_exports_pkg; is a documented generated startup namespace.\n'
                       'package p;typedef enum bit[1:0] {IDLE=0, RUN=2} Mode;endpackage', encoding='utf-8')
     output = tmp_path / 'generated'
-    message = run(['export', '--type', 'p::Mode', '--sv-source', str(source), '--out', str(output),
+    message = run(['export', '--audit', '--type', 'p::Mode', '--sv-source', str(source), '--out', str(output),
                    *(['--integrated'] if integrated else [])])
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     assert 'systemverilog_startup' not in artifact and 'SV startup:' not in message

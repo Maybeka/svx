@@ -12,6 +12,40 @@ from svx.sv_source_options import _source_parse_options
 pytest.importorskip('pyslang')
 
 
+def test_class_inventory_reuse_is_local_isolated_and_policy_sensitive(tmp_path, monkeypatch):
+    import svx.sv_scan as scan
+    from svx.sv_library_search import _SearchContext, _search
+
+    source = tmp_path / 'aliases.sv'
+    source.write_text('package p; class A; endclass typedef A Alias; endpackage')
+    original = scan.compile_source_trees
+    calls = []
+    def compiled(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(scan, 'compile_source_trees', compiled)
+    library = _SearchContext((), ())
+    token = _search.set(library)
+    try:
+        with frontend.source_analysis():
+            first = scan_sv_sources([source])
+            assert 'p::Alias' in first
+            first.clear()
+            assert 'p::Alias' in scan_sv_sources([source])
+            assert len(calls) == 1
+            library.owners.append(object())
+            assert 'p::Alias' in scan_sv_sources([source])
+            assert len(calls) == 2
+            with frontend.source_elaboration('packages'):
+                assert 'p::Alias' in scan_sv_sources([source])
+            assert len(calls) == 3
+        with frontend.source_analysis():
+            assert 'p::Alias' in scan_sv_sources([source])
+        assert len(calls) == 4
+    finally:
+        _search.reset(token)
+
+
 @pytest.mark.parametrize('shared', [False, True])
 def test_raw_syntax_shared_across_semantic_consumers(tmp_path, shared):
     source = tmp_path / 'driver.sv'
@@ -46,7 +80,7 @@ def test_cli_generation_reuses_verified_syntax_but_not_discovery_semantics(tmp_p
             sessions.append(state)
             yield state
     monkeypatch.setattr(frontend, 'source_analysis', observed)
-    args = ['export', '--class', 'p::A', '--sv-source', str(source),
+    args = ['export', '--audit', '--class', 'p::A', '--sv-source', str(source),
             '--out', str(tmp_path / 'generated')]
     assert main(args, out=StringIO()) == 0
     assert len(sessions) == 2
@@ -117,7 +151,8 @@ def test_class_fact_reuse_is_immutable_and_result_dictionaries_are_independent(t
             fact.symbol = 'other'
         second = scan_sv_sources([source])
         assert second['p::Base'] is fact
-        assert analysis.class_fact_builds == 1 and analysis.class_fact_reuses == 1
+        assert analysis.class_fact_builds == 1 and analysis.class_fact_reuses == 0
+        assert analysis.class_inventory_builds == 1 and analysis.class_inventory_reuses == 1
 
 
 def test_proxy_context_is_applied_after_raw_syntax_reuse(tmp_path, monkeypatch):
@@ -135,6 +170,22 @@ def test_proxy_context_is_applied_after_raw_syntax_reuse(tmp_path, monkeypatch):
         tuple(_parse_sources(_pyslang(), [source], proxy_context=('second',)))
         assert analysis.parse_batches == 1 and analysis.syntax_reuses == 1
     assert contexts == [('first',), ('second',)]
+
+
+def test_equal_parse_options_share_raw_trees_without_dependency_audits(tmp_path):
+    from svx.sv_source_options import _source_parse_options
+    source = tmp_path / 'driver.sv'
+    source.write_text('package p; localparam int WIDTH=`WIDTH; endpackage', encoding='utf-8')
+    with frontend.source_analysis() as analysis:
+        first = tuple(_parse_sources(_pyslang(), [source],
+                                    parse_options=_source_parse_options({'WIDTH': '8'}, ())))
+        same = tuple(_parse_sources(_pyslang(), [source],
+                                   parse_options=_source_parse_options({'WIDTH': '8'}, ())))
+        changed = tuple(_parse_sources(_pyslang(), [source],
+                                      parse_options=_source_parse_options({'WIDTH': '16'}, ())))
+        assert first[0][1] is same[0][1]
+        assert first[0][1] is not changed[0][1]
+        assert analysis.parse_batches == 2 and analysis.syntax_reuses == 1
 
 
 def test_failed_analysis_scope_does_not_leak():

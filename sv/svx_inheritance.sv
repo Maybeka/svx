@@ -163,6 +163,21 @@ class svx_construction_frame;
   endfunction
 endclass
 
+class svx_constructor_ids;
+  typedef longint unsigned id_queue_t[$];
+  static id_queue_t pending[string];
+  static function void prepare(string class_id, longint unsigned object_id);
+    pending[class_id].push_back(object_id);
+  endfunction
+  static function longint unsigned take(string class_id);
+    longint unsigned object_id;
+    if (!pending.exists(class_id) || pending[class_id].size() == 0) return 0;
+    object_id = pending[class_id].pop_back();
+    if (pending[class_id].size() == 0) pending.delete(class_id);
+    return object_id;
+  endfunction
+endclass
+
 class svx_construction_context;
   static svx_construction_frame frames[$];
 
@@ -447,6 +462,7 @@ class svx_inheritance_registry;
     published_object_ids.delete();
     owner_initializers.delete();
     svx_construction_context::clear();
+    svx_constructor_ids::pending.delete();
   endfunction
 
   static function void register_factory(string class_id, svx_factory factory);

@@ -52,8 +52,9 @@ def test_dpi_output_open_array_preserves_caller_capacity(tmp_path, timing, selec
     assert manifest.schema_version == '2.8.0'
     assert parse_manifest(manifest_dict(manifest)) == manifest
     text = emit_sv_mirrors(manifest)
-    assert 'inout svx_call_records_pkg::_svx__array_dynamic_bits32 values' in text
-    assert 'p::f(values);' in text
+    assert 'value.values = request.values;' in text
+    assert '::from_request(req);' in text
+    assert 'p::f(rsp.values);' in text
     assert 'changed capacity' in text
 
 
@@ -87,7 +88,7 @@ def test_cli_dpi_output_array_exports_capacity_contract(tmp_path):
                       encoding='utf-8')
     output = tmp_path / 'generated'
     result = subprocess.run(
-        [sys.executable, '-m', 'svx', 'export', '--sv-source', str(source),
+        [sys.executable, '-m', 'svx', 'export', '--audit', '--sv-source', str(source),
          '--package', 'p', '--out', str(output)],
         env={**os.environ, 'PYTHONPATH': os.pathsep.join(sys.path)},
         capture_output=True, text=True,
@@ -175,10 +176,10 @@ def test_unselected_class_handles_remain_opaque(source):
 
 def test_cli_reports_imports_and_checks_outputs(source, tmp_path):
     output = tmp_path / 'generated'
-    args = ['export', '--callable', 'calc::*', '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--callable', 'calc::*', '--sv-source', str(source), '--out', str(output)]
     stream = io.StringIO()
     assert main(args, out=stream) == 0
-    assert 'from svx_mirror.calc import step' in stream.getvalue()
+    assert 'from svx_mirror.calc import step' not in stream.getvalue()
     assert main(args + ['--check'], out=io.StringIO()) == 0
     artifacts = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     assert artifacts['classes'] == [] and artifacts['generated_types'] == []
@@ -188,7 +189,7 @@ def test_cli_reports_imports_and_checks_outputs(source, tmp_path):
 
 def test_generated_function_calls_existing_static_transport(source, tmp_path):
     output = tmp_path / 'generated'
-    assert main(['export', '--callable', 'add', '--sv-source', str(source), '--out', str(output)],
+    assert main(['export', '--audit', '--callable', 'add', '--sv-source', str(source), '--out', str(output)],
                 out=io.StringIO()) == 0
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONPATH=os.pathsep.join([
         str(output / 'python'), str(Path(__file__).resolve().parents[2] / 'python'),
@@ -229,7 +230,7 @@ def test_ref_is_rejected_before_publication(tmp_path, direction):
     path.write_text(f'package p;function void f({direction} int value);endfunction endpackage', encoding='utf-8')
     output = tmp_path / 'generated'
     with pytest.raises(SVXInheritanceError, match='unsupported ref'):
-        main(['export', '--callable', 'f', '--sv-source', str(path), '--out', str(output)], out=io.StringIO())
+        main(['export', '--audit', '--callable', 'f', '--sv-source', str(path), '--out', str(output)], out=io.StringIO())
     assert not output.exists()
 
 
@@ -270,7 +271,7 @@ package api;
 endpackage
 ''', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--callable', 'api::echo', '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--callable', 'api::echo', '--sv-source', str(source), '--out', str(output)]
     if integrated:
         args.append('--integrated')
     main(args, out=io.StringIO())
@@ -306,7 +307,7 @@ package api;
 endpackage''', encoding='utf-8')
     output = tmp_path / 'generated'
     with pytest.raises(SVXInheritanceError, match='consume.value.*native handle binding'):
-        main(['export', '--callable', 'api::echo', '--sv-source', str(source),
+        main(['export', '--audit', '--callable', 'api::echo', '--sv-source', str(source),
               '--out', str(output)], out=io.StringIO())
     assert not (output / 'inheritance.json').exists()
 

@@ -22,7 +22,7 @@ def test_actual_unit_export_borrows_original_roots_and_preserves_outputs(tmp_pat
     first.write_text('class First;\n`include "field.svh"\n'
                      'function new();included=11;endfunction endclass\n', encoding='utf-8')
     second.write_text('class Second;int value;function new();value=22;endfunction endclass\n', encoding='utf-8')
-    args = ['export', '--class', 'First', 'Second', '--sv-source', str(first),
+    args = ['export', '--audit', '--class', 'First', 'Second', '--sv-source', str(first),
             '--sv-source', str(second)] + (['--sv-compilation-unit'] if shared else [])
     original = selection.borrow_source_copy_syntax
     baseline, output = tmp_path / 'baseline', tmp_path / 'generated'
@@ -90,7 +90,7 @@ def test_source_copy_keeps_explicit_roots_separate_from_demanded_libraries(tmp_p
         assert not snapshot.root_trees[0][1].isLibraryUnit
     filelist = tmp_path / 'project.f'
     filelist.write_text('-y library +libext+.sv\nsource.sv\n', encoding='utf-8')
-    args = ['export', '--class', 'Child', '-f', str(filelist), '--sv-build-directory', str(tmp_path)]
+    args = ['export', '--audit', '--class', 'Child', '-f', str(filelist), '--sv-build-directory', str(tmp_path)]
     baseline, output = tmp_path / 'baseline', tmp_path / 'generated'
     original = selection.borrow_source_copy_syntax
     monkeypatch.setattr(selection, 'borrow_source_copy_syntax', lambda *a, **kw: None)
@@ -118,7 +118,7 @@ def test_package_source_copy_reuses_roots_without_changing_generated_products(tm
         source.write_text(f'package p{index};parameter string FILE=`__FILE__;class C{index};\n'
                           f'`include "field{index}.svh"\nendclass endpackage\n', encoding='utf-8')
         sources.append(source)
-    args = ['export', '--package', 'p0', 'p1', '--integrated']
+    args = ['export', '--audit', '--package', 'p0', 'p1', '--integrated']
     for source in sources:
         args.extend(['--sv-source', str(source)])
     if shared:

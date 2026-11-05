@@ -17,7 +17,7 @@ from types import ModuleType
 from typing import Iterable, TextIO
 from contextlib import contextmanager, nullcontext
 from .source_selection import with_source_observations
-from .export_timing import export_report, measured
+from .export_timing import export_report, measured, phase
 
 from .inheritance import (
     artifact_manifest,
@@ -456,15 +456,17 @@ def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
     from .sv_library_search import library_search
     from .sv_frontend import source_elaboration
     from .sv_codegen_mode import type_reference_mode
+    from .inheritance import call_record_generation
     certified_sources = {}
-    with type_reference_mode(args.use_type_reference), source_elaboration(args.sv_elaboration), library_search(args._sv_build_configuration), _fresh_declaration_entries((), all_sources=True,
+    with call_record_generation(), type_reference_mode(args.use_type_reference), source_elaboration(args.sv_elaboration), library_search(args._sv_build_configuration), _fresh_declaration_entries((), all_sources=True,
                                     cached_sources=certified_sources,
                                     command='inheritance-gen') as consumed:
         return _generate_inheritance(args, out, consumed, certified_sources)
 
 
 def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
-                          certified_sources: dict) -> int:
+                          certified_sources: dict, *, discovered_manifest=None) -> int:
+    direct = discovered_manifest is not None
     macro_config = _sv_macro_config(args)
     integrated_dir = getattr(args, 'sv_integrated_dir', None)
     editable_dir = getattr(args, 'sv_output_dir', None)
@@ -473,29 +475,32 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         raise SystemExit("inheritance-gen accepts only one of --sv-out, --sv-stage-dir, --sv-integrated-dir")
     if integrated_dir and not args.sv_source:
         raise SystemExit('--sv-integrated-dir requires --sv-source')
-    if args.check and (not args.python_out or not any(output_options) or not args.artifact_manifest):
+    if args.check and (not args.python_out or not any(output_options) or (not direct and not args.artifact_manifest)):
         raise SystemExit(
             "inheritance-gen --check requires --python-out, one SV output option, and --artifact-manifest")
     if integrated_dir and len({Path(path).resolve() for path in args.sv_source}) != len(args.sv_source):
         raise SVXInheritanceError('duplicate integrated source input')
     python_dependencies = _python_source_dependencies(args)
     input_root = Path(args.artifact_manifest).parent.resolve() if args.artifact_manifest else Path.cwd()
-    args._generation_imports = _cached_generation_imports(args, input_root)
-    input_fingerprints = _generation_inputs(args, input_root, certified_sources)
-    manifest = load_manifest(Path(args.manifest))
+    args._generation_imports = {} if direct else _cached_generation_imports(args, input_root)
+    input_fingerprints = {} if direct else _generation_inputs(args, input_root, certified_sources)
+    manifest = discovered_manifest if direct else load_manifest(Path(args.manifest))
     from .sv_frontend import source_analysis
-    with source_analysis() if args.sv_source else nullcontext():
-        manifest = enrich_virtual_interface_manifest(
-            manifest, sv_source_files=[Path(item) for item in args.sv_source], **macro_config
-        )
+    if not direct:
+        with source_analysis() if args.sv_source else nullcontext():
+            manifest = enrich_virtual_interface_manifest(
+                manifest, sv_source_files=[Path(item) for item in args.sv_source], **macro_config
+            )
     stage_root = Path(integrated_dir or args.sv_stage_dir or editable_dir) if any((integrated_dir, args.sv_stage_dir, editable_dir)) else None
     startup_metadata = {}
+    _export_progress(args, 'Generating Python mirrors and contracts...')
     if integrated_dir:
         from .source_layout import emit_integrated_sources, integrated_source_paths
         from .inheritance import _emit_source_python_artifacts
         inputs = {str(Path(path).resolve()): Path(path).read_text(encoding='utf-8')
                   for path in args.sv_source}
         python_sources = _emit_source_python_artifacts(manifest)
+        _export_progress(args, 'Generating integrated SV bridges...')
         stage_sources = emit_integrated_sources(
             manifest, inputs, predefines=macro_config['sv_predefines'],
             undefines=macro_config['sv_undefines'], include_dirs=macro_config['sv_include_dirs'],
@@ -508,6 +513,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
             for relative, filename in zip(replacement_paths, inputs)]
     else:
         python_sources = emit_python_mirrors(manifest)
+        _export_progress(args, 'Generating SV bridges...')
         from .inheritance import projection_plans
         if args.sv_source and not any(
                 plan.steps for plan in projection_plans(manifest)) and not args.sv_stage_dir:
@@ -518,6 +524,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         stage_sources = emit_sv_mirror_stages(manifest) if args.sv_stage_dir else None
         if editable_dir:
             stage_sources = {PurePosixPath('mirrors.sv'): sv_text}
+    _export_progress(args, 'Preparing generated support files and filelists...')
     if integrated_dir or editable_dir:
         from .generated_layout import with_sv_support
         from .sv_source_options import _source_parse_options
@@ -542,6 +549,7 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
     from .generated_ownership import baseline_name, baseline_text, protect_baseline
     single_baseline = single_sv.parent / baseline_name(single_inventory) if single_sv is not None else None
     if args.check:
+        _export_progress(args, 'Checking generated outputs...')
         mismatches: list[Path] = []
         inventories = [(Path(args.python_out) / ".svx-generated-python.json", python_sources)]
         if stage_sources is not None:
@@ -570,29 +578,28 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
         for sv_target, source in sv_outputs.items():
             if not sv_target.is_file() or sv_target.read_text(encoding="utf-8") != source:
                 mismatches.append(sv_target)
-        artifact_target = Path(args.artifact_manifest)
-        artifact_text = _generated_artifact_text(
-            manifest, python_sources, sv_text, sv_outputs, args, artifact_target,
-            generation_inputs=input_fingerprints,
-            consumed_sources=consumed,
-        )
-        _require_stable_generation_inputs(args, input_root, input_fingerprints, consumed_sources=consumed)
         bridge_mismatches = bool(mismatches)
-        previous_artifact = artifact_target.read_text(encoding="utf-8") if artifact_target.is_file() else None
-        if (
-            previous_artifact != artifact_text
-        ):
-            mismatches.append(artifact_target)
+        artifact_target = Path(args.artifact_manifest) if args.artifact_manifest else None
+        previous_artifact = artifact_text = None
+        if artifact_target is not None:
+            artifact_text = _generated_artifact_text(
+                manifest, python_sources, sv_text, sv_outputs, args, artifact_target,
+                generation_inputs=input_fingerprints, consumed_sources=consumed)
+            _require_stable_generation_inputs(args, input_root, input_fingerprints, consumed_sources=consumed)
+            previous_artifact = artifact_target.read_text(encoding="utf-8") if artifact_target.is_file() else None
+            if previous_artifact != artifact_text:
+                mismatches.append(artifact_target)
         if mismatches:
             raise SystemExit(
                 "generated inheritance artifacts are stale: "
                 + ", ".join(str(path) for path in mismatches)
-                + _artifact_change_diagnostic(previous_artifact, artifact_text,
-                                              bridge_mismatches=bridge_mismatches)
+                + (_artifact_change_diagnostic(previous_artifact, artifact_text,
+                                              bridge_mismatches=bridge_mismatches) if artifact_target else '')
             )
-        for path in [*python_targets, *sv_outputs, artifact_target]:
+        for path in [*python_targets, *sv_outputs, *([artifact_target] if artifact_target else [])]:
             print(path, file=out)
         return 0
+    _export_progress(args, 'Validating output paths and protecting manual edits...')
     if args.python_out:
         validate_generated_sources(python_sources, Path(args.python_out), ".svx-generated-python.json",
                                    overwrite=getattr(args, 'overwrite_generated', False))
@@ -644,8 +651,9 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
             if parent in resolved:
                 raise SVXInheritanceError(f"generated output paths conflict: {path} and {parent}")
     protected_inputs = {*consumed, *getattr(args, '_generation_imports', {}),
+                        sv_dir() / 'svx_accessors.svh', sv_dir() / 'svx_inheritance.sv',
                         *getattr(args, '_discovery_sources', ()),
-                        Path(args.manifest).resolve(), *_sv_source_dependencies(args),
+                        Path(args.manifest).resolve(), *(() if direct else _sv_source_dependencies(args)),
                         *args._sv_build_configuration.inputs,
                         *(Path(p).resolve() for p in args._excluded_sv_sources),
                         *python_dependencies}
@@ -688,7 +696,9 @@ def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
                 "systemverilog", targets
             ))
     _protect_generation_inputs(recovered_obsolete, protected_inputs)
-    _require_stable_generation_inputs(args, input_root, input_fingerprints, consumed_sources=consumed)
+    if not direct:
+        _require_stable_generation_inputs(args, input_root, input_fingerprints, consumed_sources=consumed)
+    _export_progress(args, 'Writing generated outputs...')
     if args.python_out:
         written = write_generated_sources(python_sources, Path(args.python_out), ".svx-generated-python.json",
                                           overwrite=getattr(args, 'overwrite_generated', False))
@@ -731,7 +741,7 @@ def _artifact_change_diagnostic(previous_text: str | None, expected_text: str,
     details = []
     for key in changed:
         old, new = old_inputs.get(key), new_inputs.get(key)
-        if key in {'manifest', 'python_sources', 'python_imports', 'sv_dependencies'}:
+        if key in {'manifest', 'python_sources', 'python_imports', 'sv_dependencies', 'svx_support'}:
             def records(value):
                 items = [value] if key == 'manifest' else (value if value is not None else [])
                 if (not isinstance(items, list)
@@ -837,6 +847,11 @@ _STDLIB_SOURCE_ROOTS = tuple(dict.fromkeys(
 
 def _is_framework_source(path: Path, *, resolved: bool = False, resolve_root=None,
                          package_name=None) -> bool:
+    return _framework_source_proof(path, resolved=resolved, resolve_root=resolve_root,
+                                   package_name=package_name) is not None
+
+
+def _framework_source_proof(path, *, resolved=False, resolve_root=None, package_name=None):
     """Classify the current source location, without retaining root state."""
     # Framework imports depend on interpreter warm-up, not the user's source graph.
     # Use string path operations: pathlib parent construction itself imports
@@ -850,7 +865,7 @@ def _is_framework_source(path: Path, *, resolved: bool = False, resolve_root=Non
         if within(root):
             relative = os.path.relpath(source, root)
             if os.path.splitext(relative.split(os.sep, 1)[0])[0] in sys.stdlib_module_names:
-                return True
+                return ('stdlib', root, os.path.splitext(relative.split(os.sep, 1)[0])[0])
     packages = ('svx', 'svtypes', 'pyslang')
     if package_name in packages:
         packages = (package_name, *(name for name in packages if name != package_name))
@@ -861,11 +876,11 @@ def _is_framework_source(path: Path, *, resolved: bool = False, resolve_root=Non
             # A canonical source cannot contain an unresolved symlink prefix.
             # Aliased or relative package roots still require live resolution.
             if os.path.isabs(root) and os.path.normpath(root) == root and within(root):
-                return True
+                return ('package', name, package, directory, root)
             root = os.fspath(resolve_root(directory)) if resolve_root is not None else os.path.realpath(directory)
             if within(root):
-                return True
-    return False
+                return ('package', name, package, directory, root)
+    return None
 
 
 def _cached_generation_imports(args, root: Path) -> dict:
@@ -958,6 +973,7 @@ def _require_stable_generation_inputs(args: argparse.Namespace, root: Path, fing
         )
 
 
+@measured('Input provenance and fingerprints')
 def _generation_inputs(args: argparse.Namespace, root: Path, certified_sources=None) -> dict:
     """Record selected source dependencies, not a simulator build recipe."""
     macro_config = _sv_macro_config(args)
@@ -974,6 +990,7 @@ def _generation_inputs(args: argparse.Namespace, root: Path, certified_sources=N
         "manifest": file_record(Path(args.manifest).resolve()),
         "sv_sources": [relative(path) for path in source_paths],
         "sv_dependencies": [file_record(path) for path in sorted(dependencies)],
+        "svx_support": [file_record(sv_dir() / name) for name in ('svx_accessors.svh', 'svx_inheritance.sv')],
         "sv_predefines": dict(sorted(macro_config["sv_predefines"].items())),
         "sv_undefines": sorted(set(macro_config["sv_undefines"])),
         "sv_include_dirs": [relative(Path(path).resolve()) for path in macro_config["sv_include_dirs"]],
@@ -1096,6 +1113,8 @@ def _fresh_declaration_entries(names, source_paths=(), *, all_sources=False,
     original_import = builtins.__import__
     original_import_module = importlib.import_module
     resolved_sources = {}
+    certified_modules = {}
+    import_prefixes = {}
 
     def source_path(origin):
         # Cache path resolution, not source acceptance or content evidence.
@@ -1121,19 +1140,45 @@ def _fresh_declaration_entries(names, source_paths=(), *, all_sources=False,
                 or not spec.origin):
             return
         source = source_path(spec.origin)
-        if (source in consumed or source in cached_sources
-                or _is_framework_source(source, resolved=True, resolve_root=source_path,
-                                        package_name=name.partition('.')[0])):
+        if source in consumed or source in cached_sources:
             return
+        identity = (module, spec, spec.loader, spec.origin, source)
+        previous = certified_modules.get(name)
+        if previous is not None and previous[0] == identity:
+            proof = previous[1]
+            if proof[0] == 'stdlib':
+                if proof[1] in map(os.fspath, _STDLIB_SOURCE_ROOTS) and proof[2] in sys.stdlib_module_names:
+                    return
+            else:
+                _, package_name, package, directory, root = proof
+                if sys.modules.get(package_name) is package and directory in getattr(package, '__path__', ()):
+                    # Canonical source paths are revalidated above on every hit.
+                    # Aliased roots also need live resolution after retargeting.
+                    raw = os.fspath(directory)
+                    if (os.path.isabs(raw) and os.path.normpath(raw) == raw
+                            and (os.fspath(source) == raw or os.fspath(source).startswith(raw.rstrip(os.sep) + os.sep))):
+                        return
+                    if os.fspath(source_path(directory)) == root:
+                        return
+        proof = _framework_source_proof(source, resolved=True, resolve_root=source_path,
+                                        package_name=name.partition('.')[0])
+        if proof is not None:
+            certified_modules[name] = (identity, proof)
+            return
+        certified_modules.pop(name, None)
         raise SVXInheritanceError(
             f'Python dependency is cached without current '
             f'{"generation" if command == "inheritance-gen" else "discovery"} evidence: {name}; '
             f'rerun {command} in a fresh Python process')
 
     def certify_import(name, fromlist=()):
-        parts = name.split('.')
-        for index in range(1, len(parts) + 1):
-            certify('.'.join(parts[:index]))
+        prefixes = import_prefixes.get(name)
+        if prefixes is None:
+            parts = name.split('.')
+            prefixes = tuple('.'.join(parts[:index]) for index in range(1, len(parts) + 1))
+            import_prefixes[name] = prefixes
+        for prefix in prefixes:
+            certify(prefix)
         for member in fromlist or ():
             if isinstance(member, str) and member != '*':
                 certify(name + '.' + member)
@@ -1204,10 +1249,21 @@ def _cmd_export(args: argparse.Namespace, out: TextIO) -> int:
 def _run_export(args: argparse.Namespace, out: TextIO) -> int:
     if args.refresh_cache and not args.incremental:
         raise SVXInheritanceError('--refresh-cache requires --incremental')
+    args._export_progress = lambda message: print(f'[svx export] {message}', file=out, flush=True)
     if args.incremental:
         from .export_cache import run_incremental_export
-        return run_incremental_export(args, out, _export_uncached)
-    return _export_uncached(args, out)
+        _export_progress(args, 'Checking incremental cache and current inputs...')
+        status = run_incremental_export(args, out, _export_uncached)
+    else:
+        status = _export_uncached(args, out)
+    _export_progress(args, 'Check complete.' if args.check else 'Export complete.')
+    return status
+
+
+def _export_progress(args, message):
+    callback = getattr(args, '_export_progress', None)
+    if callback is not None:
+        callback(message)
 
 
 def _cmd_inspect(args: argparse.Namespace, out: TextIO) -> int:
@@ -1245,10 +1301,49 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
     if root.is_file():
         raise SVXInheritanceError(f'export output must be a directory: {root}')
     manifest_path = root / 'inheritance.json'
+    direct = not (getattr(args, 'audit', False) or args.incremental)
     discovery = argparse.Namespace(**vars(args))
     discovery.out = str(manifest_path)
-    _cmd_inheritance_manifest(discovery, StringIO())
-    manifest = load_manifest(manifest_path)
+    _export_progress(args, 'Reading project filelists, defines and include paths...')
+    macro_config = _sv_macro_config(discovery)
+    _export_progress(args, 'Discovering declarations, parsing SV and validating types...')
+    if direct:
+        # Do not leave an obsolete audited record masquerading as current output.
+        if (root / 'artifacts.json').exists() or manifest_path.with_name(manifest_path.name + '.svx-discovery.json').exists():
+            raise SVXInheritanceError('output contains audited export records; use --audit or a new output directory')
+        from .sv_frontend import source_analysis, source_elaboration
+        from .sv_library_search import library_search
+        with (phase('Discovery'), source_elaboration(args.sv_elaboration),
+              library_search(discovery._sv_build_configuration),
+              (source_analysis() if discovery.sv_source else nullcontext()) as analysis):
+            modules = [importlib.import_module(name) for name in args.python_module]
+            manifest = _manifest_from_export_inputs(discovery, modules, macro_config)
+            source_inputs = {Path(p).resolve() for p in discovery.sv_source}
+            if analysis is not None:
+                # Probe and macro-expansion buffers are not additional inputs.
+                # Walk raw tree roots/includes rather than every manager buffer.
+                filenames, seen_trees = set(), set()
+                for trees in analysis.trees.values():
+                    for path, tree in trees:
+                        filenames.add(str(path))
+                        if id(tree) not in seen_trees:
+                            seen_trees.add(id(tree))
+                            filenames.update(tree.sourceManager.getRawFileName(include.buffer.id)
+                                             for include in tree.getIncludeDirectives())
+                for filename in filenames:
+                    if filename and not filename.startswith('<'):
+                        source_inputs.add(Path(filename).resolve())
+        manifest_text = json.dumps(manifest_dict(manifest), indent=2, sort_keys=True) + '\n'
+        validate_output_path(manifest_path)
+        _protect_generation_inputs([manifest_path], [
+            *source_inputs, *_python_source_dependencies(discovery),
+            *(Path(p) for p in args.sv_declarations), *discovery._sv_build_configuration.inputs,
+            *(Path(module.__file__) for module in modules if getattr(module, '__file__', None))])
+        if args.check and (not manifest_path.is_file() or manifest_path.read_text(encoding='utf-8') != manifest_text):
+            raise SVXInheritanceError(f'generated manifest is stale: {manifest_path}')
+    else:
+        _cmd_inheritance_manifest(discovery, StringIO())
+        manifest = load_manifest(manifest_path)
     integrated = args.integrated or any(source.source_scope is not None for target in manifest.classes
                                         for source in (*target.base_lineage, target))
     generation = build_parser().parse_args([
@@ -1256,7 +1351,7 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
         '--python-out', str(root / 'python'),
         *(['--sv-integrated-dir', str(root / 'sv')] if integrated else
           ['--sv-output-dir', str(root)]),
-        '--artifact-manifest', str(root / 'artifacts.json'),
+        *([] if direct else ['--artifact-manifest', str(root / 'artifacts.json')]),
         *(['--use-type-reference'] if args.use_type_reference else []),
         *(['--check'] if args.check else []),
         *(['--overwrite-generated'] if getattr(args, 'overwrite_generated', False) else []),
@@ -1265,7 +1360,24 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
                  'sv_build_directory', 'sv_include_dir', 'sv_compilation_unit',
                  'sv_define', 'sv_undefine', 'sv_elaboration', 'exclude_source', 'python_source'):
         setattr(generation, name, getattr(args, name))
-    _cmd_inheritance_gen(generation, StringIO())
+    generation._export_progress = getattr(args, '_export_progress', None)
+    if direct:
+        from .inheritance import call_record_generation
+        from .sv_codegen_mode import type_reference_mode
+        generation._discovery_sources = [
+            *source_inputs,
+            *(Path(p).resolve() for p in args.sv_declarations),
+            *(Path(module.__file__).resolve() for module in modules if getattr(module, '__file__', None))]
+        _sv_macro_config(generation)
+        with (phase('Generation'), call_record_generation(),
+              type_reference_mode(args.use_type_reference),
+              source_elaboration(args.sv_elaboration),
+              library_search(generation._sv_build_configuration)):
+            _generate_inheritance(generation, StringIO(), {}, {}, discovered_manifest=manifest)
+        if not args.check:
+            write_text_atomic(manifest_path, manifest_text)
+    else:
+        _cmd_inheritance_gen(generation, StringIO())
     for path in getattr(discovery, '_excluded_sv_sources', []):
         print(f'Excluded explicit parse input: {path}', file=out)
     if args.sv_elaboration == 'packages':
@@ -1273,30 +1385,13 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
     print(f'Python path: {root / "python"}', file=out)
     print(f'Python startup: SVX_BOOTSTRAP={root / "python/svx_bootstrap.py"} (without SVX_ARTIFACT_MANIFEST)', file=out)
     print(f'SV generated filelist: -F {root / "sv/sources.f" if integrated else root / "sources.f"}', file=out)
-    for target in manifest.classes:
-        if target.language == 'sv':
-            from .scoped_exports import scoped_public_module
-            from .source_scopes import source_class_parts
-            parts = source_class_parts(target.symbol, target.source_scope)
-            module = scoped_public_module(target.symbol, target.source_scope)
-            print(f'from {module} import {parts[0]}', file=out)
-            if len(parts) > 1:
-                print(f'Type: {module}.{".".join(parts)}', file=out)
-    for value in manifest.value_types:
-        print(f'from {value.module} import {value.qualname.split(".")[0]}', file=out)
-        if '.' in value.qualname:
-            print(f'Type: {value.module}.{value.qualname}', file=out)
-    for value in manifest.constants:
-        print(f'from {value.module} import {value.qualname.split(".")[0]}', file=out)
-        if '.' in value.qualname:
-            print(f'Constant: {value.module}.{value.qualname}', file=out)
-    for item in manifest.callables:
-        print(f'from svx_mirror.{item.package} import {item.name}', file=out)
-    artifact = json.loads((root / 'artifacts.json').read_text(encoding='utf-8'))
+    artifact = ({'source_replacements': getattr(generation, '_source_replacements', []),
+                 **getattr(generation, '_sv_startup_metadata', {})} if direct else
+                json.loads((root / 'artifacts.json').read_text(encoding='utf-8')))
     if integrated:
         for item in artifact['source_replacements']:
-            print(f'SV source: {root / item["output"]}; compile in place of supplied SV sources: '
-                  + ', '.join(str(root / source) for source in item['sources']), file=out)
+            print(f'SV source: {item["output"] if direct else root / item["output"]}; compile in place of supplied SV sources: '
+                  + ', '.join(str(source if direct else root / source) for source in item['sources']), file=out)
     else:
         print(f'SV bridge: {root / "mirrors.sv"}', file=out)
     if artifact.get('systemverilog_startup'):
@@ -1305,8 +1400,23 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
         startup = artifact['systemverilog_startup_module']
         print(f'SV startup module: {startup["module"]} exports(); call exports.{startup["method"]}() after svx_init() and before loading Python', file=out)
         print(f'SV generated source: {root / "sv/exports.sv"}; append after the source replacements', file=out)
-    print(f'Artifacts: {root / "artifacts.json"}', file=out)
+    if not direct:
+        print(f'Artifacts: {root / "artifacts.json"}', file=out)
     return 0
+
+
+def _manifest_from_export_inputs(args, modules, macro_config):
+    return manifest_from_declarations(
+        python_modules=modules,
+        sv_declaration_files=[Path(item) for item in args.sv_declarations],
+        sv_source_files=[Path(item) for item in args.sv_source],
+        sv_class_targets=args.sv_class, sv_package_targets=args.sv_package,
+        sv_recursive_packages=args.recursive_packages, sv_exclude_classes=args.exclude_class,
+        sv_member_targets=args.member, sv_exclude_members=args.exclude_member,
+        sv_type_targets=args.sv_type, sv_exclude_types=args.exclude_type,
+        sv_constant_targets=args.sv_constant, sv_exclude_constants=args.exclude_constant,
+        sv_callable_targets=args.sv_callable, sv_exclude_callables=args.exclude_callable,
+        max_errors=args.max_errors, **macro_config)
 
 
 def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int:
@@ -1347,25 +1457,7 @@ def _discover_inheritance_manifest(args: argparse.Namespace, out: TextIO) -> int
         # Input observations verify current bytes/lookups outside AST reuse.
         # The optional parser is not required for Python-only declarations.
         with source_analysis() if args.sv_source else nullcontext():
-            manifest = manifest_from_declarations(
-                python_modules=modules,
-                sv_declaration_files=[Path(item) for item in args.sv_declarations],
-                sv_source_files=[Path(item) for item in args.sv_source],
-                sv_class_targets=args.sv_class,
-                sv_package_targets=args.sv_package,
-                sv_recursive_packages=args.recursive_packages,
-                sv_exclude_classes=args.exclude_class,
-                sv_member_targets=args.member,
-                sv_exclude_members=args.exclude_member,
-                sv_type_targets=args.sv_type,
-                sv_exclude_types=args.exclude_type,
-                sv_constant_targets=args.sv_constant,
-                sv_exclude_constants=args.exclude_constant,
-                sv_callable_targets=args.sv_callable,
-                sv_exclude_callables=args.exclude_callable,
-                max_errors=args.max_errors,
-                **macro_config,
-            )
+            manifest = _manifest_from_export_inputs(args, modules, macro_config)
         data = manifest_dict(manifest)
         data['discovery_provenance'] = {'schema_version': '1.0.0', 'path': evidence.name}
         text = json.dumps(data, indent=2, sort_keys=True) + "\n"
@@ -1584,6 +1676,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help='emit source copies and bridges, retaining original compilation-unit boundaries; compile instead of original inputs')
     p.add_argument('--incremental', action='store_true',
                    help='reuse unchanged direct-SV exports after content and include/library selection checks')
+    p.add_argument('--audit', action='store_true',
+                   help='write discovery evidence and compatibility artifact records (implicit with --incremental)')
     p.add_argument('--refresh-cache', action='store_true',
                    help='force a full --incremental export; --check remains read-only')
     p.add_argument('--out', required=True, metavar='DIRECTORY', help='dedicated generated output directory')

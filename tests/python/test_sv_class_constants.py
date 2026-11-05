@@ -34,8 +34,8 @@ def export(tmp_path, *selection):
 def test_class_constant_only_export_keeps_namespace_types_and_no_runtime(tmp_path):
     output, data, stream = export(tmp_path, '--constant', 'class_constants_pkg::Limits::*')
     assert data['classes'] == []
-    assert 'from svx_mirror.class_constants_pkg import Limits' in stream
-    assert 'Constant: svx_mirror.class_constants_pkg.Limits.WIDTH' in stream
+    assert 'from svx_mirror.class_constants_pkg import Limits' not in stream
+    assert 'Constant: svx_mirror.class_constants_pkg.Limits.WIDTH' not in stream
     assert all(item['symbol'].startswith('class_constants_pkg::Limits::') for item in data['constants'])
     import_generated(output, '''from svx_mirror.class_constants_pkg import Limits
 import sys
@@ -112,7 +112,7 @@ def test_unit_class_constants_keep_compilation_unit_and_nested_namespace(tmp_pat
     output, data, stream = export(tmp_path, '--constant', '$unit::UnitLimits::*')
     assert data['classes'] == []
     assert {item['source_scope']['kind'] for item in data['constants']} == {'compilation_unit'}
-    assert 'from svx_mirror_unit.unit_0 import UnitLimits' in stream
+    assert 'from svx_mirror_unit.unit_0 import UnitLimits' not in stream
     import_generated(output, '''from svx_mirror_unit.unit_0 import UnitLimits
 import sys
 assert UnitLimits.WIDTH == 12 and UnitLimits.Nested.COUNT == 13

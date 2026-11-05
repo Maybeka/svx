@@ -234,7 +234,7 @@ def test_ordinary_sv_middle_members_share_final_helper_without_extra_projection(
     assert set(sv) == {PurePosixPath(path) for path in ('common.svh', 'a.svh', 'b.svh', 'c.svh')}
     source = sv[PurePosixPath('c.svh')]
     assert '"sv://sv_root_middle_pkg/Middle.middle@svx_field_read": begin' in source
-    assert '"sv://sv_root_middle_pkg/Middle#check": begin' in source
+    assert '"sv://sv_root_middle_pkg/Middle#check": `SVX_INVOKE_CORE(_svx__core_Middle_check)' in source
     assert 'typedef sv_root_middle_pkg::Middle Middle;' in source
     assert 'Middle::check()' in source
     assert 'Middle::middle_value()' in source

@@ -35,7 +35,7 @@ def test_scoped_vif_export_uses_shared_typed_endpoint_records(tmp_path, containe
     source.write_text(bus + '\n' + definition + '\nmodule tb;scoped_bus_if bus0(),bus1();'
                       + instances + 'endmodule', encoding='utf-8')
     root = tmp_path / 'generated'
-    arguments = ['export', '--class', *selectors, '--sv-source', str(source), '--out', str(root)]
+    arguments = ['export', '--audit', '--class', *selectors, '--sv-source', str(source), '--out', str(root)]
     main(arguments, out=io.StringIO())
     main([*arguments, '--check'], out=io.StringIO())
     artifact = json.loads((root / 'artifacts.json').read_text(encoding='utf-8'))

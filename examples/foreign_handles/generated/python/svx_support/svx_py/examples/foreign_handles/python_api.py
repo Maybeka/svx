@@ -2,53 +2,59 @@
 # Private execution contracts for svx_py/examples/foreign_handles/python_api.py.
 # Literal data only; registration remains beside the owning declaration.
 
-foreign_handles_HandlePortal_retain_packet_contract = {'py://examples/foreign_handles/HandlePortal#retain_packet': {'timing': 'function',
-                                                                  'parameters': (('packet',
-                                                                                  'input',
-                                                                                  {'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]',
-                                                                                   'encoding_descriptor': {'binary_format_version': 1,
-                                                                                                           'encoding_fingerprint': '7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92',
-                                                                                                           'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]'},
-                                                                                   'svtypes': {'kind': 'remote_ref',
-                                                                                               'target': 'sv://example_packet_pkg/Packet'}}),),
-                                                                  'request': (('packet',
-                                                                               {'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]',
-                                                                                'encoding_descriptor': {'binary_format_version': 1,
-                                                                                                        'encoding_fingerprint': '7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92',
-                                                                                                        'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]'},
-                                                                                'svtypes': {'kind': 'remote_ref',
-                                                                                            'target': 'sv://example_packet_pkg/Packet'}}),),
-                                                                  'response': (('svx_return_value',
-                                                                                {'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]',
-                                                                                 'encoding_descriptor': {'binary_format_version': 1,
-                                                                                                         'encoding_fingerprint': '7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92',
-                                                                                                         'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]'},
-                                                                                 'svtypes': {'kind': 'remote_ref',
-                                                                                             'target': 'sv://example_packet_pkg/Packet'}}),),
-                                                                  'external_targets': ('sv://example_packet_pkg/Packet',)},
-     'py://examples/foreign_handles/HandlePortal#exercise_bus': {'timing': 'function',
-                                                                 'parameters': (('bus',
-                                                                                 'input',
-                                                                                 {'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]',
-                                                                                  'encoding_descriptor': {'binary_format_version': 1,
-                                                                                                          'encoding_fingerprint': 'df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f',
-                                                                                                          'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]'},
-                                                                                  'svtypes': {'kind': 'remote_ref',
-                                                                                              'target': 'sv-vif://example_bus_if/master'}}),),
-                                                                 'request': (('bus',
-                                                                              {'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]',
-                                                                               'encoding_descriptor': {'binary_format_version': 1,
-                                                                                                       'encoding_fingerprint': 'df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f',
-                                                                                                       'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]'},
-                                                                               'svtypes': {'kind': 'remote_ref',
-                                                                                           'target': 'sv-vif://example_bus_if/master'}}),),
-                                                                 'response': (('svx_return_value',
-                                                                               {'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]',
-                                                                                'encoding_descriptor': {'binary_format_version': 1,
-                                                                                                        'encoding_fingerprint': 'df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f',
-                                                                                                        'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]'},
-                                                                                'svtypes': {'kind': 'remote_ref',
-                                                                                            'target': 'sv-vif://example_bus_if/master'}}),),
-                                                                 'external_targets': ('sv-vif://example_bus_if/master',)}}
+_svx__type_example_packet_pkg_Packet_handle = {
+    'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]',
+    'encoding_descriptor': {
+        'binary_format_version': 1,
+        'encoding_fingerprint': '7c50c0477e541a64b63b066ea238e047914121159b0f5cd4c04f2362c644db92',
+        'unified_type_name': 'svtypes.RemoteRef[target=sv://example_packet_pkg/Packet]',
+    },
+    'svtypes': {
+        'kind': 'remote_ref',
+        'target': 'sv://example_packet_pkg/Packet',
+    },
+}
+
+_svx__type_example_bus_if_master_handle = {
+    'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]',
+    'encoding_descriptor': {
+        'binary_format_version': 1,
+        'encoding_fingerprint': 'df571689d00162f14032031cea7757d4a418a865d99b4cab8bc7fd6f0034c02f',
+        'unified_type_name': 'svtypes.RemoteRef[target=sv-vif://example_bus_if/master]',
+    },
+    'svtypes': {
+        'kind': 'remote_ref',
+        'target': 'sv-vif://example_bus_if/master',
+    },
+}
+
+foreign_handles_HandlePortal_retain_packet_contract = {
+    'py://examples/foreign_handles/HandlePortal#retain_packet': {
+        'timing': 'function',
+        'parameters': (
+            ('packet', 'input', _svx__type_example_packet_pkg_Packet_handle),
+        ),
+        'request': (
+            ('packet', _svx__type_example_packet_pkg_Packet_handle),
+        ),
+        'response': (
+            ('svx_return_value', _svx__type_example_packet_pkg_Packet_handle),
+        ),
+        'external_targets': ('sv://example_packet_pkg/Packet',),
+    },
+    'py://examples/foreign_handles/HandlePortal#exercise_bus': {
+        'timing': 'function',
+        'parameters': (
+            ('bus', 'input', _svx__type_example_bus_if_master_handle),
+        ),
+        'request': (
+            ('bus', _svx__type_example_bus_if_master_handle),
+        ),
+        'response': (
+            ('svx_return_value', _svx__type_example_bus_if_master_handle),
+        ),
+        'external_targets': ('sv-vif://example_bus_if/master',),
+    },
+}
 
 foreign_handles_HandlePortal_parameters = ()

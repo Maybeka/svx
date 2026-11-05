@@ -81,7 +81,7 @@ def test_constant_only_selection_and_automatic_type_dependencies(source, tmp_pat
     stream = io.StringIO()
     assert main(['export', '--constant', 'DEFAULT_PACKET', '--sv-source', str(source),
                  '--out', str(output)], out=stream) == 0
-    assert 'from svx_mirror.values import DEFAULT_PACKET' in stream.getvalue()
+    assert 'from svx_mirror.values import DEFAULT_PACKET' not in stream.getvalue()
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     assert [item['symbol'] for item in data['constants']] == ['values::DEFAULT_PACKET']
     assert {item['symbol'] for item in data['value_types']} == {'values::State', 'values::Packet'}

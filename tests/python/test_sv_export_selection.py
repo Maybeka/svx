@@ -28,7 +28,7 @@ package dispatch_names_pkg;
 endpackage
 ''', encoding='utf-8')
     output = tmp_path / 'out'
-    assert main(['export', '--package', 'dispatch_names_pkg', '--sv-source', str(source),
+    assert main(['export', '--audit', '--package', 'dispatch_names_pkg', '--sv-source', str(source),
                  '--out', str(output)], out=io.StringIO()) == 0
     manifest = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     driver = next(item for item in manifest['classes'] if item['symbol'] == 'dispatch_names_pkg::Driver')
@@ -37,7 +37,7 @@ endpackage
     generated = (output / 'mirrors.sv').read_text(encoding='utf-8')
     generated += '\n'.join(path.read_text(encoding='utf-8') for path in (output / 'support').glob('*.svh'))
     assert '_svx__sv_invoke(' in generated
-    assert 'this._svx__core_Driver_svx_invoke(' in generated
+    assert '`SVX_INVOKE_CORE(_svx__core_Driver_svx_invoke)' in generated
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ def test_selected_packages_preserve_python_inheritance_and_one_constructor(proje
         driver_module = first_module = 'base_pkg'
         packages = ['base_pkg']
     root = tmp_path / 'generated'
-    arguments = ['export', *extra_arguments, '--package', *packages, '--sv-source', str(source),
+    arguments = ['export', '--audit', *extra_arguments, '--package', *packages, '--sv-source', str(source),
                  '--out', str(root)]
     if extra_arguments:
         environment = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
@@ -222,7 +222,7 @@ def test_invalid_selection_reports_input_problem(project, kwargs, message):
 def test_cross_package_ancestor_dispatch_uses_short_qualified_name(tmp_path):
     source = Path('tests/integration/package_export_inheritance.sv')
     root = tmp_path / 'generated'
-    args = ['export', '--package', 'export_base_pkg', 'export_driver_pkg',
+    args = ['export', '--audit', '--package', 'export_base_pkg', 'export_driver_pkg',
             '--sv-include-dir', '.', '--sv-source', str(source), '--out', str(root)]
     assert main(args, out=io.StringIO()) == 0
     text = (root / 'mirrors.sv').read_text(encoding='utf-8')
@@ -234,11 +234,11 @@ def test_cross_package_ancestor_dispatch_uses_short_qualified_name(tmp_path):
 def test_export_reuses_original_filelist_and_generators(project, tmp_path):
     source, filelist = project
     root = tmp_path / 'generated output'
-    args = ['export', '--class', 'drivers::Driver', '-f', str(filelist),
+    args = ['export', '--audit', '--class', 'drivers::Driver', '-f', str(filelist),
             '--sv-build-directory', str(tmp_path), '--out', str(root)]
     out = io.StringIO()
     assert main(args, out=out) == 0
-    assert 'from svx_mirror.drivers import Driver' in out.getvalue()
+    assert 'from svx_mirror.drivers import Driver' not in out.getvalue()
     assert (root / 'python/svx_mirror/drivers.py').is_file()
     assert (root / 'mirrors.sv').is_file()
     assert (root / 'artifacts.json').is_file()
@@ -261,7 +261,7 @@ def test_invalid_direct_target_does_not_publish_files(project, tmp_path):
     source, _ = project
     root = tmp_path / 'generated'
     with pytest.raises(SVXInheritanceError, match='matched no package, compilation-unit or instance class'):
-        main(['export', '--class', 'missing::Class', '--sv-source', str(source),
+        main(['export', '--audit', '--class', 'missing::Class', '--sv-source', str(source),
               '--out', str(root)], out=io.StringIO())
     assert not root.exists()
 
@@ -283,7 +283,7 @@ def test_short_class_names_and_grouped_cli_selection(project, tmp_path):
 def test_public_example_uses_direct_class_selection(tmp_path):
     root = Path(__file__).resolve().parents[2]
     output = tmp_path / 'generated'
-    assert main(['export', '--class', 'export_driver_pkg::Driver',
+    assert main(['export', '--audit', '--class', 'export_driver_pkg::Driver',
                  '-f', str(root / 'examples/sv_export/design.f'),
                  '--sv-build-directory', str(root), '--out', str(output)], out=io.StringIO()) == 0
     assert (output / 'python/svx_mirror/export_driver_pkg.py').is_file()

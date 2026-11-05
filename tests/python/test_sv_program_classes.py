@@ -21,7 +21,7 @@ endprogram
 module tb;owner#(8) a(),b();owner#(13) c();endmodule
 ''', encoding='utf-8')
     output=tmp_path/'generated'
-    args=['export','--class','tb.*.Driver','--sv-source',str(source),'--out',str(output)]
+    args=['export', '--audit','--class','tb.*.Driver','--sv-source',str(source),'--out',str(output)]
     assert main(args,out=io.StringIO())==0
     assert main(args+['--check'],out=io.StringIO())==0
     artifact=json.loads((output/'artifacts.json').read_text(encoding='utf-8'))
@@ -47,7 +47,7 @@ end
 endprogram module tb;owner a();endmodule
 ''', encoding='utf-8')
     output=tmp_path/'generated'
-    assert main(['export','--class','tb.a.lane[*].Driver','--sv-source',str(source),'--out',str(output)],out=io.StringIO())==0
+    assert main(['export', '--audit','--class','tb.a.lane[*].Driver','--sv-source',str(source),'--out',str(output)],out=io.StringIO())==0
     artifact=json.loads((output/'artifacts.json').read_text(encoding='utf-8'))
     assert all(item['bridge_kind']=='generate' and item['initialization_key'] for item in artifact['instance_bindings'])
     assert artifact['systemverilog_startup_module']['timing']=='task'

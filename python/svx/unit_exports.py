@@ -236,7 +236,7 @@ def emit_unit_integrated_sources(manifest, sources, *, compilation_unit=False,
         metadata = {}
         bridge = emit_unit_export_bridge(manifest, index, metadata=metadata)
         if bridge:
-            text += '\n`line 1 ' + json.dumps(f'svx-generated/unit-{index}.sv') + ' 0\n' + bridge
+            text += '\n`include "sv/svx_accessors.svh"\n`line 1 ' + json.dumps(f'svx-generated/unit-{index}.sv') + ' 0\n' + bridge
             unit_modules.append(metadata['registration_module'])
         emitted[output] = text
     startup_task = any(source.source_scope['container'] == 'program' for source in instance_targets)

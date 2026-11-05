@@ -168,7 +168,9 @@ def native_scope_insertions(compilation, entries, *, manager=None, reachable_buf
             raise SVXInheritanceError('native owner source integration requires direct anchors; macro-generated owners remain unfinished')
         if reachable_buffers is not None and location.buffer not in reachable_buffers:
             raise SVXInheritanceError('native owner was loaded from a library; source-copy library replacement remains unfinished')
-        chunk = ('\n`line 1 ' + json.dumps('svx-generated/' + name + '.sv') + ' 0\n' + text
+        preamble = ('\n`include "sv/svx_accessors.svh"\n'
+                    if any(marker in text for marker in ('`SVX_FIELD_', '`SVX_INVOKE_CORE', '`SVX_BIND_CONSTRUCTED_OBJECT')) else '\n')
+        chunk = (preamble + '`line 1 ' + json.dumps('svx-generated/' + name + '.sv') + ' 0\n' + text
                  + '\n`line ' + str(manager.getLineNumber(location)) + ' '
                  + json.dumps(str(manager.getFileName(location)), ensure_ascii=False) + ' 0\n')
         anchored.setdefault((location.buffer, location.offset), []).append(chunk)

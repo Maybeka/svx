@@ -18,6 +18,7 @@ def test_phase_measurement_and_cleanup(monkeypatch):
                 pass
     assert '  Parent: 6.000000 s (1 calls)' in out.getvalue()
     assert '    Child: 2.000000 s (1 calls)' in out.getvalue()
+    assert '    Self / uninstrumented: 4.000000 s' in out.getvalue()
     assert 'Total: 10.000000 s' in out.getvalue()
     assert timing._report.get() is None
 

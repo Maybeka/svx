@@ -58,7 +58,7 @@ def test_instance_value_selection_has_independent_owner_identities(design):
 
 def test_instance_value_cli_generates_importable_types_and_snapshots(design, tmp_path, monkeypatch):
     output = tmp_path / 'generated'
-    args = ['export', '--type', 'tb.*.Mode', 'tb.*.Alias', 'tb.*.Payload', 'tb.*.Word',
+    args = ['export', '--audit', '--type', 'tb.*.Mode', 'tb.*.Alias', 'tb.*.Payload', 'tb.*.Word',
             'tb.*.Packets', 'tb.*.Modes',
             'tb.a.Holder::Tag', 'tb.lanes[*].Index', '--constant', 'tb.*.W',
             'tb.*.DEFAULT_MODE', 'tb.*.DEFAULT_PAYLOAD', 'tb.lanes[*].ID',
@@ -195,7 +195,7 @@ module tb;''')
         text = text.replace('endclass\nendmodule', 'endclass\nend' + container, 1)
     design.write_text(text, encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'tb.*.Driver', '--sv-source', str(design), '--out', str(output)]
+    args = ['export', '--audit', '--class', 'tb.*.Driver', '--sv-source', str(design), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
@@ -226,7 +226,7 @@ endmodule
 module tb;owner a();endmodule
 ''', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'tb.a.Driver', '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--class', 'tb.a.Driver', '--sv-source', str(source), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))

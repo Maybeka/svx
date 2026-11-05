@@ -37,7 +37,7 @@ module tb;owner#(8) a();owner#(13) b();endmodule''', encoding='utf-8')
 
 def export(project, output, *selectors, extra=()):
     source, filelist = project
-    args = ['export', '--class', *selectors, '-f', str(filelist),
+    args = ['export', '--audit', '--class', *selectors, '-f', str(filelist),
             '--sv-build-directory', str(source.parent), '--out', str(output), *extra]
     messages = io.StringIO()
     assert main(args, out=messages) == 0
@@ -55,7 +55,7 @@ def test_instance_cli_discovers_real_type_lineage_and_uses_original_filelist(pro
     assert source['source_scope'] == {'kind': 'instance', 'path': 'tb.a', 'container': 'module'}
     assert [base['canonical_id'] for base in source['base_lineage']] == ['sv://instance/tb/a/class/Base']
     assert source['fields'][0]['type']['sv'].replace(' ', '') == 'bit[7:0]'
-    assert 'from svx_mirror_instance.tb.a.classes import Driver' in messages
+    assert 'from svx_mirror_instance.tb.a.classes import Driver' not in messages
     assert project[0].read_bytes() == before
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     assert artifact['instance_bindings'][0]['instance_path'] == 'tb.a'
@@ -87,7 +87,7 @@ def test_instance_nested_classes_do_not_generate_outer(project, tmp_path):
     output = tmp_path / 'nested'
     data, messages = export(project, output, 'tb.a.Outer::Inner')
     assert [source['symbol'] for source in data['classes']] == ['Outer::Inner']
-    assert 'Type: svx_mirror_instance.tb.a.classes.Outer.Inner' in messages
+    assert 'Type: svx_mirror_instance.tb.a.classes.Outer.Inner' not in messages
     subprocess_import(output, '''from types import SimpleNamespace
 from svx_mirror_instance.tb.a.classes import Outer
 assert isinstance(Outer,SimpleNamespace)
@@ -128,16 +128,16 @@ endinterface : owner
     top.write_text('`include "owner.svh"\nmodule tb;owner a(),b();endmodule\n', encoding='utf-8')
     before = definitions.read_bytes()
     output = tmp_path / 'generated'
-    assert main(['export', '--class', 'tb.*.Driver', '--sv-source', str(top),
+    assert main(['export', '--audit', '--class', 'tb.*.Driver', '--sv-source', str(top),
                  '--sv-include-dir', str(tmp_path), '--out', str(output)], out=io.StringIO()) == 0
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     copied = '\n'.join((output/path).read_text(encoding='utf-8') for path in artifact['systemverilog_compile_order'])
     assert copied.index('class StaticGateway_0 extends Driver') < copied.index('endinterface : owner')
     assert copied.count('Driver::sample(') == 2
-    assert copied.count('static function int _svx__core_Driver_sample(') == 2
+    assert copied.count('static function void _svx__core_Driver_sample(input chandle request,') == 2
     support = '\n'.join(path.read_text(encoding='utf-8') for path in (output/'sv/support').rglob('*.svh'))
-    assert copied.count('result = _svx__core_Driver_sample();') == 4
-    assert 'result = _svx__core_Driver_sample();' not in support
+    assert copied.count('`SVX_INVOKE_CORE(_svx__core_Driver_sample)') == 2
+    assert '`SVX_INVOKE_CORE(_svx__core_Driver_sample)' not in support
     assert 'SVXSourceType::sample(' not in copied
     assert all('initialize_owner(' + json.dumps(binding['static_initialization_key']) + ')' in copied
                for binding in artifact['instance_bindings'])
@@ -154,7 +154,7 @@ endinterface
 module tb;owner#(8,"left") a();owner#(13,"right") b();endmodule
 ''', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'tb.*.Driver', '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--class', 'tb.*.Driver', '--sv-source', str(source), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
@@ -171,7 +171,7 @@ class Driver;static function int sample();return 1;endfunction endclass
 endinterface module tb;owner a();endmodule
 ''', encoding='utf-8')
     with pytest.raises(SVXInheritanceError, match='owner type parameters remains unfinished'):
-        main(['export', '--class', 'tb.a.Driver', '--sv-source', str(source),
+        main(['export', '--audit', '--class', 'tb.a.Driver', '--sv-source', str(source),
               '--out', str(tmp_path/'generated')], out=io.StringIO())
 
 
@@ -187,7 +187,7 @@ def test_original_top_selection_controls_instance_discovery(project, tmp_path):
     command.write_text(json.dumps({'directory': str(tmp_path),
         'arguments': ['compiler', '-top', 'tb', str(source)]}), encoding='utf-8')
     output = tmp_path / 'generated'
-    assert main(['export', '--class', '*.Driver', '--sv-build-command', str(command),
+    assert main(['export', '--audit', '--class', '*.Driver', '--sv-build-command', str(command),
                  '--exclude-class', 'tb.b.Driver', '--out', str(output)], out=io.StringIO()) == 0
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     assert [source['source_scope']['path'] for source in data['classes']] == ['tb.a']
@@ -201,7 +201,7 @@ def test_instance_array_path_is_literal_and_preserves_evaluated_owner(tmp_path):
 class Driver;bit[WIDTH-1:0] mask;endclass endmodule
 module tb;for(genvar i=0;i<2;i++)begin:lanes owner#(8+i) u();end endmodule''', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'tb.lanes[1].u.Driver', '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--class', 'tb.lanes[1].u.Driver', '--sv-source', str(source), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
@@ -212,7 +212,7 @@ module tb;for(genvar i=0;i<2;i++)begin:lanes owner#(8+i) u();end endmodule''', e
 assert Driver.__name__=='Driver'
 ''')
     wildcard = tmp_path / 'wildcard'
-    assert main(['export', '--class', 'tb.lanes[*].u.Driver', '--sv-source', str(source),
+    assert main(['export', '--audit', '--class', 'tb.lanes[*].u.Driver', '--sv-source', str(source),
                  '--out', str(wildcard)], out=io.StringIO()) == 0
     values = json.loads((wildcard / 'inheritance.json').read_text(encoding='utf-8'))
     assert {item['source_scope']['path'] for item in values['classes']} == {'tb.lanes[0].u', 'tb.lanes[1].u'}
@@ -225,7 +225,7 @@ class Width#(int W=4);bit[W-1:0] mask;endclass
 class Driver extends Width#(13);endclass
 endmodule module tb;owner a();endmodule''', encoding='utf-8')
     output = tmp_path / 'generated'
-    assert main(['export', '--class', 'tb.a.Driver', '--sv-source', str(source),
+    assert main(['export', '--audit', '--class', 'tb.a.Driver', '--sv-source', str(source),
                  '--out', str(output)], out=io.StringIO()) == 0
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     base, = data['classes'][0]['base_lineage']
@@ -248,7 +248,7 @@ def test_package_export_never_creates_instance_workspace(project, tmp_path, monk
     source.write_text(source.read_text(encoding='utf-8') + '\npackage p;class Api;int value;endclass endpackage\n', encoding='utf-8')
     monkeypatch.setattr(instances, 'prepare_instance_analysis', lambda *a, **k: pytest.fail('package export elaborated instance workspace'))
     output = tmp_path / 'package'
-    assert main(['export', '--package', 'p', '--sv-elaboration', 'packages',
+    assert main(['export', '--audit', '--package', 'p', '--sv-elaboration', 'packages',
                  '--sv-source', str(source), '--out', str(output)], out=io.StringIO()) == 0
 
 

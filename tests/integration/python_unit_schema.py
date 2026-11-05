@@ -29,7 +29,8 @@ def manifest_data():
 def emit_sources(*, base_macros=False):
     manifest = parse_manifest(manifest_data())
     records = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
-    records.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    from svx.owner_records import render_call_record
+    records.extend(render_call_record(record, 1) for record in _manifest_sv_record_types(manifest))
     records.append('endpackage')
     source = Path(__file__).with_name('python_unit_source.sv').read_text()
     if base_macros:

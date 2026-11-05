@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from contextvars import ContextVar
 from collections.abc import Mapping
 from functools import wraps
 from dataclasses import dataclass, replace
@@ -16,6 +17,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Annotated, Any, Callable, Generic, Iterable, TypeAlias, TypeVar
 
 from .errors import SVXInheritanceError
+from .export_timing import measured
 from ._svtypes_contract import require_type_spec_api
 from .sv_source_options import _source_parse_options
 from .sv_instance_scan import with_instance_discovery
@@ -34,6 +36,32 @@ from .inheritance import (
 from .sv_scan import SVVirtualInterfaceFact, discover_sv_class_declarations, normalize_sv_handle_types, resolve_sv_field_handles, scan_sv_sources, scan_sv_virtual_interfaces, validate_sv_declarations
 
 import svtypes
+
+_source_bindings = ContextVar('svx_source_primitive_bindings', default=None)
+_primitive_declarations = frozenset((svtypes.Int, svtypes.LongInt, svtypes.String,
+                                   svtypes.Real, svtypes.ShortReal, svtypes.RealTime))
+
+
+def _with_source_bindings(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        token = _source_bindings.set({})
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _source_bindings.reset(token)
+    return wrapped
+
+
+def _source_binding(annotation, *, where):
+    cache = _source_bindings.get()
+    eligible = cache is not None and isinstance(annotation, type) and annotation in _primitive_declarations
+    if eligible and annotation in cache:
+        return copy.deepcopy(cache[annotation])
+    result = _svtypes_binding(annotation, where=where)
+    if eligible:
+        cache[annotation] = copy.deepcopy(result)
+    return result
 from svtypes import SvObject
 
 
@@ -53,6 +81,7 @@ class _FunctionMarker:
     return_type: Any
 
 
+@measured('SvTypes boundary metadata')
 def _svtypes_binding(annotation: Any, *, where: str) -> dict[str, Any]:
     """Derive all manifest data from SvTypes' public boundary contract."""
 
@@ -328,6 +357,46 @@ class SVMirror(SvObject):
     """
 
     _svx_remote_object_id: int | None = None
+    __svx_base_field_ids__: dict[str, str] = {}
+    __svx_projected_fields_by_class_id__: dict[str, dict[str, str]] = {}
+
+    def _svx_bind_active_projected_fields(self) -> None:
+        declaration = getattr(type(self), '__svx_inheritance_class__', {})
+        class_id = declaration.get('canonical_id') if isinstance(declaration, dict) else None
+        fields = dict(self.__svx_base_field_ids__)
+        fields.update(self.__svx_projected_fields_by_class_id__.get(class_id, {}))
+        if fields:
+            self._svx_bind_projected_fields(fields)
+
+    @classmethod
+    def __svx_create_from_sv__(cls, remote_object_id: int, *args: Any):
+        from .inheritance import bind_instance
+
+        instance = cls.__new__(cls)
+        SVMirror.__init__(instance)
+        instance._svx_bind_remote_object(remote_object_id)
+        bind_instance(remote_object_id, instance)
+        try:
+            instance._svx_bind_active_projected_fields()
+            cls.__init__(instance, *args)
+        except BaseException as initialization_error:
+            SVMirror._svx_retire_failed_python_companion(instance, initialization_error)
+            raise
+        return instance
+
+    def _svx_finish_created_object(self, object_id: int, fields: dict[str, str]) -> None:
+        from . import _native
+        from .inheritance import bind_instance
+
+        self._svx_bind_remote_object(object_id)
+        try:
+            bind_instance(object_id, self)
+            self._svx_bind_projected_fields(fields)
+        except BaseException:
+            self._svx_release_projected_fields()
+            _native.inheritance_close(object_id)
+            raise
+        self._svx_target_constructor_completed = True
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -857,6 +926,8 @@ from .export_diagnostics import with_export_diagnostics, raise_errors, has_error
 @with_export_diagnostics
 @with_value_discovery
 @with_instance_discovery
+@_with_source_bindings
+@measured('Declaration discovery and type mapping')
 def manifest_from_declarations(
     *,
     python_modules: Iterable[ModuleType] = (),
@@ -1106,7 +1177,10 @@ def manifest_from_declarations(
     return parse_manifest(
         {
             "schema_uri": SCHEMA_URI,
-            "schema_version": ('2.8.0' if auto_values and any(
+            "schema_version": ('2.9.0' if any(parameter.get('sv_default') is not None
+                                   for cls in classes for item in (*cls.get('base_lineage', []), cls)
+                                   for parameter in (item.get('constructor') or {}).get('parameters', [])) else
+                               '2.8.0' if auto_values and any(
                                    parameter.get('dpi_output_buffer') for item in auto_values.callables.values()
                                    for parameter in item['method']['parameters']) else
                                '2.7.0' if auto_values and any(item.default_class_owners for item in
@@ -1219,6 +1293,7 @@ def _validate_source_value_schema(actual, schema, *, where):
     raise SVXInheritanceError(f"{where} has no matching SvTypes value layout")
 
 
+@measured('Source type conversion')
 def _source_semantic_type_declaration(actual: Any, *, where: str,
                                       value_annotations=None, value_exports=None) -> dict[str, Any]:
     def assigned_type(source):
@@ -1299,7 +1374,7 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
         return svtypes.type_spec_from_identity(binding["svtypes"], location=where)
 
     selected_annotation = annotation(actual)
-    result = _svtypes_binding(selected_annotation, where=where)
+    result = _source_binding(selected_annotation, where=where)
     if actual.canonicalType.kind.name in {"ScalarType", "PredefinedIntegerType", "FloatingType"}:
         result["sv"] = str(actual.canonicalType)
     elif actual.kind.name == "TypeAlias" and actual.canonicalType.kind.name in {
@@ -1330,7 +1405,7 @@ def _source_scalar_type_declaration(sv_type: str, *, where: str) -> dict[str, An
 
     normalized = " ".join(sv_type.split())
     def binding(annotation):
-        result = _svtypes_binding(annotation, where=where)
+        result = _source_binding(annotation, where=where)
         result["sv"] = normalized
         return result
 
@@ -1748,6 +1823,8 @@ def _class_declaration(cls: Any) -> dict[str, Any]:
         }
         if parameter.dpi_output_buffer:
             result["dpi_output_buffer"] = True
+        if parameter.sv_default is not None:
+            result['sv_default'] = parameter.sv_default
         if parameter.handle is not None:
             result["handle"] = handle_declaration(parameter.handle)
         return result

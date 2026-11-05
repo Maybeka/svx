@@ -85,7 +85,7 @@ def test_nested_field_codegen_uses_public_typedef_context():
     from tests.integration.sv_field_mirror_schema import manifest_data
 
     text = emit_sv_mirrors(parse_manifest(manifest_data(include_nested_fields=True)))
-    assert 'function void _svx__core_field_Base_nested_values(' in text
+    assert 'function void _svx__field_nested_values(' in text
     assert 'typedef int __svx_field_nested_values_0_t [$];' in text
     assert 'queue_packer#(__svx_field_nested_values_0_t,' in text
     assert '__svx_field_nested_values_0_t field_value;' in text
@@ -106,8 +106,8 @@ def test_field_and_method_core_names_share_collision_scope():
                     fields=(), methods=(method,))
     text = '\n'.join(_emit_sv_projection_invoke(
         child, base_methods=(method,), inherited_sv_sources=(base,), generated_name='Mirror'))
-    assert 'function void _svx__core_field_Base_count(' in text
-    assert 'function int _svx__core_field_Base_count_2(' in text
+    assert 'function void _svx__field_count(' in text
+    assert 'function void _svx__core_field_Base_count(input chandle request,' in text
 
 
 def test_deep_field_codegen_resolves_member_key_and_index_with_public_descriptors():

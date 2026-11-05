@@ -170,10 +170,10 @@ def test_unit_export_cli_automatically_integrates_and_checks(tmp_path):
     source = tmp_path / 'driver.sv'
     source.write_text('class Driver;int count;endclass', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'Driver', '--sv-source', str(source), '--out', str(output), '--incremental']
+    args = ['export', '--audit', '--class', 'Driver', '--sv-source', str(source), '--out', str(output), '--incremental']
     message = io.StringIO()
     assert main(args, out=message) == 0
-    assert 'from svx_mirror_unit.unit_0 import Driver' in message.getvalue()
+    assert 'from svx_mirror_unit.unit_0 import Driver' not in message.getvalue()
     assert 'svx_exports exports()' in message.getvalue()
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
     assert artifact['systemverilog_compile_order'] == ['sv/source.sv', 'sv/exports.sv']
@@ -190,7 +190,7 @@ def test_unit_export_independent_replacements_do_not_count_startup_as_original(t
     for source in sources:
         source.write_text('class Driver;int count;endclass', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', '$unit::*', '--sv-source', str(sources[0]),
+    args = ['export', '--audit', '--class', '$unit::*', '--sv-source', str(sources[0]),
             '--sv-source', str(sources[1]), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     artifact = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
@@ -222,7 +222,7 @@ endclass''', encoding='utf-8')
     later.write_text('package later_pkg;typedef enum bit[2:0]{IDLE=0} Unused;endpackage\n'
                      'typedef enum bit[1:0]{ON=1} UnitUnused;', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'Driver', '--type', 'later_pkg::Unused', '$unit::UnitUnused',
+    args = ['export', '--audit', '--class', 'Driver', '--type', 'later_pkg::Unused', '$unit::UnitUnused',
             '--sv-source', str(source), '--sv-source', str(later), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     text = (output / 'sv/units/000000_driver.sv').read_text(encoding='utf-8')

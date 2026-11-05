@@ -16,7 +16,7 @@ def test_unit_handle_dependencies_use_one_shared_native_type_adapter(tmp_path):
     source = tmp_path / 'handles.sv'
     source.write_text(BODY, encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', 'Owner', 'Consumer', '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--class', 'Owner', 'Consumer', '--sv-source', str(source), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
@@ -56,7 +56,7 @@ def test_instance_class_handles_keep_their_actual_owner_without_exporting_item(t
                       + '\nmodule tb;owner a(),b();owner#(13)c();endmodule', encoding='utf-8')
     prefix = 'tb.*.lane[0]' if container == 'generate' else 'tb.*'
     output = tmp_path / 'generated'
-    args = ['export', '--class', prefix+'.Owner', prefix+'.Consumer',
+    args = ['export', '--audit', '--class', prefix+'.Owner', prefix+'.Consumer',
             '--sv-source', str(source), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0

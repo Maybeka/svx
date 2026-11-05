@@ -77,7 +77,7 @@ def test_single_nested_target_does_not_construct_or_export_owner(source, tmp_pat
     args = ['export', '--class', 'classes_pkg::Outer::Inner', '--sv-source', str(source), '--out', str(output)]
     stream = io.StringIO()
     assert main(args, out=stream) == 0
-    assert 'Type: svx_mirror.classes_pkg.Outer.Inner' in stream.getvalue()
+    assert 'Type: svx_mirror.classes_pkg.Outer.Inner' not in stream.getvalue()
     assert main(args + ['--check'], out=io.StringIO()) == 0
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     assert [item['symbol'] for item in data['classes']] == ['classes_pkg::Outer::Inner']

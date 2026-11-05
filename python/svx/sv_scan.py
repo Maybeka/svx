@@ -14,6 +14,7 @@ import re
 from typing import Callable, Iterable
 
 from .errors import SVXInheritanceError
+from .export_timing import measured
 from .generated_names import sv_name_scope
 from .sv_frontend import (_analysis, analysis_source_manager, elaborate_sources, compile_source_trees,
                           source_elaboration_mode)
@@ -257,7 +258,13 @@ def _parse_sources(syntax, paths, source_manager=None, *, parse_options=None, co
     state = _analysis.get()
     shared = state is not None and source_manager is state.source_manager
     search = _search.get()
-    key = (tuple(str(path) for path in paths), id(parse_options), compilation_unit,
+    from .source_selection import _parse_options_fingerprint
+    # Independently built equivalent options may share command-local syntax.
+    # Custom parser/compiler options or callbacks retain identity-only caching.
+    options_key = _parse_options_fingerprint(parse_options)
+    if options_key is None:
+        options_key = ('identity', id(parse_options))
+    key = (tuple(str(path) for path in paths), options_key, compilation_unit,
            id(search), source_elaboration_mode())
     if shared and key in state.trees:
         trees = state.trees[key]
@@ -531,6 +538,7 @@ def _semantic_class_selector(actual):
     return actual.lexicalPath
 
 
+@measured('SV class inventory')
 def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, parse_options=None,
                     compilation_unit=False, proxy_context=()) -> dict[str, SVClassFact]:
     """Parse SV package classes with pyslang and return inheritance facts.
@@ -545,6 +553,19 @@ def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, p
     paths = tuple(paths)
     trees = tuple(_parse_sources(syntax, paths, parse_options=parse_options,
                                  compilation_unit=compilation_unit, proxy_context=proxy_context))
+    from .sv_library_search import _search
+    from .sv_instance_scan import active_instance_facts
+    state, library = _analysis.get(), _search.get()
+    def inventory_key():
+        return (trees, allow_no_packages, source_elaboration_mode(), id(library),
+                tuple(map(id, library.owners)) if library is not None else ())
+    if state is not None:
+        cached = state.class_inventories.get(inventory_key())
+        if cached is not None:
+            state.class_inventory_reuses += 1
+            facts = dict(cached)
+            facts.update(active_instance_facts(paths, parse_options, compilation_unit))
+            return facts
     aliases = []
 
     def class_members(scope, members):
@@ -617,7 +638,9 @@ def scan_sv_sources(paths: Iterable[Path], *, allow_no_packages: bool = False, p
                 facts[fact.symbol] = replace(fact, direct_base=resolved)
         for alias_symbol, source_symbol in alias_sources.items():
             facts[alias_symbol] = replace(facts[source_symbol], symbol=alias_symbol, parameter_kinds=())
-    from .sv_instance_scan import active_instance_facts
+    if state is not None:
+        state.class_inventories[inventory_key()] = dict(facts)
+        state.class_inventory_builds += 1
     facts.update(active_instance_facts(paths, parse_options, compilation_unit))
     return facts
 
@@ -803,6 +826,7 @@ def scan_sv_virtual_interfaces(paths: Iterable[Path], *, parse_options=None, com
     return facts
 
 
+@measured('SV class declarations and lineage')
 def discover_sv_class_declarations(
     paths: Iterable[Path], class_ids: Iterable[str],
     binding: Callable[..., dict], *, parse_options=None, compilation_unit=False,
@@ -972,7 +996,12 @@ def discover_sv_class_declarations(
                     continue
                 binding = attempt(value_type, argument.type, f"{location}.{argument.name}")
                 if binding is not None:
-                    result.append({"name": argument.name, "direction": direction, **binding})
+                    entry = {"name": argument.name, "direction": direction, **binding}
+                    syntax = argument.syntax
+                    initializer = getattr(syntax, 'initializer', None)
+                    if location.endswith('.new') and initializer is not None:
+                        entry['sv_default'] = str(initializer.expr).strip()
+                    result.append(entry)
             return result
 
         def value_type(actual, location):
@@ -1056,6 +1085,7 @@ def discover_sv_class_declarations(
 
 
 @with_instance_discovery
+@measured('SV declaration validation')
 def validate_sv_declarations(
     declarations: Iterable[dict[str, object]], paths: Iterable[Path], *, parse_options=None,
     compilation_unit=False, proxy_context=(), value_types=()
@@ -1304,6 +1334,7 @@ def _source_handle_metadata(actual, *, where, collections=False, value_exports=N
     return None
 
 
+@measured('Native handle normalization')
 def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compilation_unit=False,
                                proxy_context=(), vif_enricher=None) -> None:
     """Canonicalize all resolvable endpoint types together, not field by field."""
@@ -1423,6 +1454,7 @@ def normalize_sv_handle_types(declarations, paths, *, parse_options=None, compil
         handle.update(normalized)
 
 
+@measured('Native field handle resolution')
 def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compilation_unit=False,
                               proxy_context=()) -> dict[tuple[int, str], dict[str, str]]:
     """Resolve native handle leaves, including collection fields and aliases."""
@@ -1525,6 +1557,7 @@ def resolve_sv_field_handles(declarations, paths, *, parse_options=None, compila
 
 
 @sv_name_scope()
+@measured('Native member signature validation')
 def _validate_member_types(declarations, paths, facts, *, parse_options=None, compilation_unit=False,
                            proxy_context=(), value_types=()) -> None:
     """Compare language types without inferring or replacing SvTypes codecs."""

@@ -2,11 +2,15 @@
 # Private execution contracts for svx_mirror/example_driver_pkg.py.
 # Literal data only; registration remains beside the owning declaration.
 
-example_driver_pkg_BaseDriver_drive_contract = {'sv://example_driver_pkg/BaseDriver#drive': {'timing': 'task',
-                                                  'parameters': (),
-                                                  'request': (),
-                                                  'response': (),
-                                                  'external_targets': ()}}
+example_driver_pkg_BaseDriver_drive_contract = {
+    'sv://example_driver_pkg/BaseDriver#drive': {
+        'timing': 'task',
+        'parameters': (),
+        'request': (),
+        'response': (),
+        'external_targets': (),
+    },
+}
 
 register_contract_contract = {}
 

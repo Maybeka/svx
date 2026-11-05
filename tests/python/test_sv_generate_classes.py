@@ -38,7 +38,7 @@ module tb;owner#(8) a(),b();owner#(13) c();endmodule
 
 
 def export(source, output, *selectors):
-    args = ['export', '--class', *selectors, '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--class', *selectors, '--sv-source', str(source), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
     return (json.loads((output/'inheritance.json').read_text(encoding='utf-8')),
@@ -96,7 +96,7 @@ def test_generate_class_from_independent_filelist_units_and_include(source, tmp_
     filelist = tmp_path/'project.f'
     filelist.write_text('+incdir+.\ndesign.sv\ntop.sv\n', encoding='utf-8')
     output = tmp_path/'generated'
-    args = ['export', '--class', 'tb.a.lanes[1].Driver', '-f', str(filelist),
+    args = ['export', '--audit', '--class', 'tb.a.lanes[1].Driver', '-f', str(filelist),
             '--sv-build-directory', str(tmp_path), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     assert main(args+['--check'], out=io.StringIO()) == 0

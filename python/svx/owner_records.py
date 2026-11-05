@@ -11,6 +11,78 @@ from .value_exports import native_value_name
 _local_call_records = ContextVar('svx_local_call_records', default=False)
 
 
+def record_api_name(fields, name):
+    return '_svx__' + name if name in fields else name
+
+
+def render_call_record(record, indent=0):
+    """Add payload-level convenience methods without changing SvTypes encoding."""
+    from .sv_codegen_mode import render_sv_object
+    text = render_sv_object(record, indent)
+    name = record.__name__
+    import svtypes
+    fields = {field['name'] for field in svtypes.schema_descriptor(record).to_dict()['schema']['fields']}
+    decode = record_api_name(fields, 'decode')
+    encode = record_api_name(fields, 'encode')
+    initialize = record_api_name(fields, 'from_request')
+    methods = f'''
+    static function {name} {decode}(input chandle payload);
+      byte unsigned bytes[$];
+      int offset;
+      {name} value;
+      value = new();
+      offset = 0;
+      svx_pkg::svx_payload_to_byte_queue(payload, bytes);
+      value.unpack(bytes, offset);
+      svx_pkg::svx_require_unpacked_all("{name}", "request", "record", offset, bytes.size());
+      return value;
+    endfunction
+
+    function chandle {encode}();
+      byte unsigned bytes[$];
+      this.pack(bytes);
+      return svx_pkg::svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+    endfunction
+'''
+    position = text.rfind('endclass')
+    constructor_fields = getattr(record, '__svx_constructor_fields__', ())
+    if constructor_fields:
+        from .inheritance import _codec_from_spec
+        used = {field for field, _ in constructor_fields}
+        local = '_svx__record'
+        while local in used:
+            local += '_'
+        declarations = ', '.join('input ' + svtypes.sv_declaration(
+            _codec_from_spec(binding.runtime_spec()), field).rstrip(';')
+            for field, binding in constructor_fields)
+        assignments = '\n'.join(f'      {local}.{field} = {field};' for field, _ in constructor_fields)
+        method = record_api_name(fields, 'encode_arguments')
+        methods += f'''
+    static function chandle {method}({declarations});
+      {name} {local};
+      {local} = new();
+{assignments}
+      return {local}.{encode}();
+    endfunction
+'''
+    request_type = getattr(record, '__svx_request_type__', None)
+    if request_type:
+        assignments = '\n'.join(f'      value.{field} = request.{field};'
+                                for field in record.__svx_inout_fields__)
+        methods += f'''
+    static function {name} {initialize}(input {request_type} request);
+      {name} value;
+      value = new();
+{assignments}
+      return value;
+    endfunction
+'''
+    if position < 0:
+        raise ValueError(f'call record {name} has no generated SV class')
+    return '\n'.join(line.rstrip() for line in
+                     (text[:position] + methods + text[position:]).split('\n'))
+
+
 def emit_owner_initializer(key, *, owner_root=None, owner_path=None):
     """Register one lexical callback without invoking user constructors early."""
     conditions = ['1']
@@ -150,5 +222,5 @@ def emit_owner_records(manifest, source_scope, *, native_references=None, inline
             lines.append(text)
     lines.extend(_manifest_sv_collection_typedefs(manifest))
     from .sv_codegen_mode import render_sv_object
-    lines.extend(render_sv_object(record, 0) for record in _manifest_sv_record_types(manifest))
+    lines.extend(render_call_record(record, 0) for record in _manifest_sv_record_types(manifest))
     return lines

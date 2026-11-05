@@ -35,7 +35,7 @@ endclass
 
 
 def run(source, output, *selectors):
-    args = ['export', '--class', *selectors, '--sv-source', str(source), '--out', str(output)]
+    args = ['export', '--audit', '--class', *selectors, '--sv-source', str(source), '--out', str(output)]
     message = io.StringIO()
     assert main(args, out=message) == 0
     assert main(args + ['--check'], out=io.StringIO()) == 0
@@ -45,8 +45,8 @@ def run(source, output, *selectors):
 def test_unit_inner_export_keeps_namespace_and_does_not_export_outer(source, tmp_path):
     output = tmp_path / 'generated'
     message = run(source, output, '$unit::Outer::Inner')
-    assert 'from svx_mirror_unit.unit_0 import Outer' in message
-    assert 'Type: svx_mirror_unit.unit_0.Outer.Inner' in message
+    assert 'from svx_mirror_unit.unit_0 import Outer' not in message
+    assert 'Type: svx_mirror_unit.unit_0.Outer.Inner' not in message
     data = json.loads((output / 'inheritance.json').read_text(encoding='utf-8'))
     assert [item['symbol'] for item in data['classes']] == ['$unit::Outer::Inner']
     artifacts = json.loads((output / 'artifacts.json').read_text(encoding='utf-8'))
@@ -93,7 +93,7 @@ def test_same_nested_class_names_from_independent_units_keep_public_owners(tmp_p
     for path in sources:
         path.write_text('class Outer;class Inner;endclass endclass', encoding='utf-8')
     output = tmp_path / 'generated'
-    args = ['export', '--class', '$unit::*::Inner', '--sv-source', str(sources[0]),
+    args = ['export', '--audit', '--class', '$unit::*::Inner', '--sv-source', str(sources[0]),
             '--sv-source', str(sources[1]), '--out', str(output)]
     assert main(args, out=io.StringIO()) == 0
     subprocess_import(output, '''from svx_mirror_unit.unit_0 import Outer as First

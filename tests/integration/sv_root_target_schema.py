@@ -3,6 +3,7 @@
 import json
 from pathlib import Path, PurePosixPath
 import sys
+from svx.owner_records import render_call_record
 
 from svx.inheritance import (
     _emit_sv_root_artifacts, _emit_sv_root_sv_packages, _manifest_sv_record_types,
@@ -93,7 +94,7 @@ def emit_sources(*, extended=False, inherited_slot=False, branches=False, ordina
                                           branches=branches, ordinary_middle=ordinary_middle, sv_prefix=sv_prefix))
     common = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
     for record in _manifest_sv_record_types(manifest):
-        common.append(record.to_sv_obj(1))
+        common.append(render_call_record(record, 1))
     common.append('endpackage')
     sources = {PurePosixPath('common.svh'): '\n'.join(common) + '\n'}
     paths = {'svx_mirror_sv_sv_root_pkg_A': 'a.svh', 'svx_proxy_sv_root_target_test': 'b.svh',

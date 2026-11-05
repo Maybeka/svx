@@ -36,7 +36,8 @@ def source_inputs(*, diagnostic=False, configured=False):
 def emit_sources(*, diagnostic=False, configured=False):
     manifest = parse_manifest(manifest_data())
     common = ['package svx_call_records_pkg;', '  import svtypes_pkg::*;']
-    common.extend(record.to_sv_obj(1) for record in _manifest_sv_record_types(manifest))
+    from svx.owner_records import render_call_record
+    common.extend(render_call_record(record, 1) for record in _manifest_sv_record_types(manifest))
     common.append('endpackage')
     sv = {PurePosixPath('common.svh'): '\n'.join(common) + '\n',
           PurePosixPath('source.sv'): _emit_sv_root_source_units(manifest, source_inputs(diagnostic=diagnostic, configured=configured),

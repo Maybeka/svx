@@ -94,10 +94,26 @@ def select_sv_classes(paths, facts, *, classes=(), packages=(), recursive=False,
                   and fact.python_proxy_id is None}
     selected = {symbol for symbol in candidates if symbol.split('::')[0] in selected_packages}
 
+    # Most large explicit exports list fully qualified package classes. Index
+    # these names once while retaining relative-unit and instance ambiguities.
+    qualified, relative_units = {}, {}
+    for symbol in candidates:
+        instance, unit = _instance_scope(symbol), _unit_scope(symbol)
+        if unit is not None:
+            relative_units.setdefault(unit[1], set()).add(symbol)
+        else:
+            name = instance[1] if instance is not None else symbol
+            qualified.setdefault(name, set()).add(symbol)
+
     for pattern in classes:
         canonical = pattern.startswith('sv://')
         pattern = _source_class_selector(pattern) if canonical and not pattern.startswith('sv://instance/') else pattern
-        found = {symbol for symbol in candidates if matches_sv_selector(symbol, pattern, relative_units=not canonical)}
+        if re.fullmatch(r'[A-Za-z_]\w*(?:::[A-Za-z_]\w*)+', pattern):
+            found = set(qualified.get(pattern, ()))
+            if not canonical:
+                found.update(relative_units.get(pattern, ()))
+        else:
+            found = {symbol for symbol in candidates if matches_sv_selector(symbol, pattern, relative_units=not canonical)}
         exact_pattern = re.sub(r'\[-?[0-9]+\]', '', re.sub(r'^\$unit\[\d+\]', '$unit', pattern))
         exact = not any(char in exact_pattern for char in '*?[')
         if exact and len(found) > 1:

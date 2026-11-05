@@ -46,7 +46,7 @@
       "language": "python",
       "module": "svx_support.svx_py.examples.foreign_handles.python_api",
       "path": "python/svx_support/svx_py/examples/foreign_handles/python_api.py",
-      "sha256": "1f103cf5e2fae54658b180a254e60703292255b3a05fc6102125f1c5519fc88e"
+      "sha256": "b0375486f8d15839a74ab076f3cefe8c41a18247ecab9d681ed7dd39d965238b"
     },
     {
       "language": "python",
@@ -64,7 +64,7 @@
       "language": "python",
       "module": "svx_support.svx_vif.example_bus_if.master",
       "path": "python/svx_support/svx_vif/example_bus_if/master.py",
-      "sha256": "9ecd8e0eb236cceb37c8d91caaffd5d70a938304bd2e93d9268c4cf002ebfe6a"
+      "sha256": "1cfcb13d74cccdc3ab38fb693e39660490b2e3a307b9be1a93c489cc36d0fc7b"
     },
     {
       "language": "python",
@@ -87,7 +87,7 @@
     {
       "language": "systemverilog",
       "path": "mirrors.sv",
-      "sha256": "288c55d41f96c5b91d50acaba628d89ba7597957e99f28c5d9e7b1b95f1322e7"
+      "sha256": "aa727858a105ed5bb2ccc9141b7517949e94046e017e86e6402a8042bfb22a9e"
     }
   ],
   "callables": [
@@ -211,7 +211,17 @@
     "sv_sources": [
       "../bus_if.sv"
     ],
-    "sv_undefines": []
+    "sv_undefines": [],
+    "svx_support": [
+      {
+        "path": "../../../sv/svx_accessors.svh",
+        "sha256": "693dc4683227b4c93d2618c4aca4b2f81bcf88ac2bbdcc60e190b6b0e5a280bf"
+      },
+      {
+        "path": "../../../sv/svx_inheritance.sv",
+        "sha256": "919ce218868769525b48bc118434446c1f96cc3ae333699e905ec95cb5b2540f"
+      }
+    ]
   },
   "generator_abi_version": 2,
   "inheritance_manifest": {
@@ -227,17 +237,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 1602,
+        "line": 1704,
         "path": "mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 1671,
-        "path": "mirrors.sv"
-      },
-      {
-        "language": "systemverilog",
-        "line": 1733,
+        "line": 1787,
         "path": "mirrors.sv"
       }
     ],
@@ -249,17 +254,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 1564,
+        "line": 1666,
         "path": "mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 1647,
-        "path": "mirrors.sv"
-      },
-      {
-        "language": "systemverilog",
-        "line": 1709,
+        "line": 1763,
         "path": "mirrors.sv"
       }
     ]

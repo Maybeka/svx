@@ -260,8 +260,9 @@ def test_source_discovery_preserves_collection_methods(tmp_path, declaration, an
     emitted = emit_sv_mirrors(manifest)
     expected = dimension + (" = '{default: 32'd0};" if dimension == "[2]" else ";")
     assert expected in emitted
-    assert "source_formals_pkg::values_t values;" in emitted
-    assert "source_formals_pkg::values_t result;" in emitted
+    assert "super.inspect(req.values);" in emitted
+    assert "::decode(request);" in emitted
+    assert "rsp.svx_return_value = super.inspect(req.values);" in emitted
 
 
 @pytest.mark.parametrize("declaration, annotation", [

@@ -36,10 +36,9 @@ endpackage
     assert 'bit [7:0] [4] value_to_write;' not in texts
     assert 'bit [2:0] [7:0] [3] [2] result;' not in texts
     assert 'bit [2:0] [7:0] [3] [2] value_to_write;' not in texts
-    assert 'return this.value.values;' in core
-    assert 'this.value.values = value;' in texts
-    assert 'return this.value.vectors;' in texts
-    assert 'this.value.vectors = value;' in texts
+    assert '`SVX_FIELD_ACCESSORS(' in core
+    assert '_svx__core_write_values, this.value.values)' in texts
+    assert '_svx__core_write_vectors, this.value.vectors)' in texts
     assert 'result = _svx__core_read_values();' in texts
     assert 'result = _svx__core_read_values();' in core
     assert '_svx__core_write_values(value_to_write);' in texts

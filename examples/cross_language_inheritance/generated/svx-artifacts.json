@@ -16,7 +16,7 @@
       "language": "python",
       "module": "svx_mirror.example_driver_pkg",
       "path": "python/svx_mirror/example_driver_pkg.py",
-      "sha256": "2e350d4ef5f4c296bb0829524989513886427fa0884b758db66ac10b85972b37"
+      "sha256": "576a17e56110f852b70d488df9b9e2bb5b56e0c478e788ee33279b49a1652b36"
     },
     {
       "language": "python",
@@ -34,12 +34,12 @@
       "language": "python",
       "module": "svx_support.svx_mirror.example_driver_pkg",
       "path": "python/svx_support/svx_mirror/example_driver_pkg.py",
-      "sha256": "e51984596788a7696d14d650690a9b525df45086a33d1b567db5bbc7a628c983"
+      "sha256": "c31ea2756fda07656514ad87b72044d28e0450ad3542a5f0452d382e364149d5"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "7a65ea1ee831a9c2efba6599e51a28d135a39df60ef5f936773a153e14cbdac3"
+      "sha256": "016ff6742eed42066be781ed9f651fc43ea8b4778de4b140254a7a19a7c45275"
     }
   ],
   "callables": [
@@ -86,7 +86,17 @@
     "sv_include_dirs": [],
     "sv_predefines": {},
     "sv_sources": [],
-    "sv_undefines": []
+    "sv_undefines": [],
+    "svx_support": [
+      {
+        "path": "../../../sv/svx_accessors.svh",
+        "sha256": "693dc4683227b4c93d2618c4aca4b2f81bcf88ac2bbdcc60e190b6b0e5a280bf"
+      },
+      {
+        "path": "../../../sv/svx_inheritance.sv",
+        "sha256": "919ce218868769525b48bc118434446c1f96cc3ae333699e905ec95cb5b2540f"
+      }
+    ]
   },
   "generator_abi_version": 2,
   "inheritance_manifest": {
@@ -97,22 +107,22 @@
     "sv://example_driver_pkg/BaseDriver#drive": [
       {
         "language": "python",
-        "line": 76,
+        "line": 46,
         "path": "python/svx_mirror/example_driver_pkg.py"
       },
       {
         "language": "systemverilog",
-        "line": 46,
+        "line": 28,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 65,
+        "line": 47,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 77,
+        "line": 61,
         "path": "inheritance_mirrors.sv"
       }
     ]

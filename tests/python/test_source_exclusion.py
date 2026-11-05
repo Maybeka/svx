@@ -39,7 +39,7 @@ def test_export_and_check_skip_only_explicit_root(project, tmp_path):
     _, rtl, _ = project
     output = io.StringIO()
     root = tmp_path / 'generated'
-    argv = ['export', '--package', 'api', *arguments(project), '--out', str(root)]
+    argv = ['export', '--audit', '--package', 'api', *arguments(project), '--out', str(root)]
     main(argv, out=output)
     assert 'Excluded explicit parse input:' in output.getvalue()
     provenance = json.loads((root / 'inheritance.json.svx-discovery.json').read_text(encoding='utf-8'))
@@ -80,12 +80,12 @@ def test_exclusion_does_not_disable_include_dependencies(project, tmp_path):
     rtl.write_text('`define COUNT_TYPE int\n', encoding='utf-8')
     api.write_text('`include "rtl.sv"\npackage api; class Driver; `COUNT_TYPE count; endclass endpackage', encoding='utf-8')
     root = tmp_path / 'generated'
-    main(['export', '--package', 'api', *arguments(project), '--out', str(root)], out=io.StringIO())
+    main(['export', '--audit', '--package', 'api', *arguments(project), '--out', str(root)], out=io.StringIO())
     record = json.loads((root / 'inheritance.json.svx-discovery.json').read_text(encoding='utf-8'))
     assert rtl in [Path(root, p).resolve() for p in record['configuration']['sv_dependencies']]
     rtl.write_text('`define COUNT_TYPE longint\n', encoding='utf-8')
     with pytest.raises((SVXInheritanceError, SystemExit), match='stale|changed'):
-        main(['export', '--package', 'api', *arguments(project), '--out', str(root), '--check'], out=io.StringIO())
+        main(['export', '--audit', '--package', 'api', *arguments(project), '--out', str(root), '--check'], out=io.StringIO())
 
 
 def test_excluding_required_base_does_not_fabricate_a_replacement(project, tmp_path):
@@ -94,13 +94,13 @@ def test_excluding_required_base_does_not_fabricate_a_replacement(project, tmp_p
     rtl.write_text('package bases; class Base; endclass endpackage', encoding='utf-8')
     api.write_text('package api; class Driver extends bases::Base; endclass endpackage', encoding='utf-8')
     with pytest.raises(SVXInheritanceError, match='bases|Base|base'):
-        main(['export', '--package', 'api', *arguments(project), '--out', str(tmp_path / 'generated')], out=io.StringIO())
+        main(['export', '--audit', '--package', 'api', *arguments(project), '--out', str(tmp_path / 'generated')], out=io.StringIO())
     assert not (tmp_path / 'generated/inheritance.json').exists()
 
 
 def test_excluded_only_edit_keeps_zero_parse_incremental_hit(project, tmp_path, monkeypatch):
     pytest.importorskip('pyslang')
-    argv = ['export', '--package', 'api', *arguments(project), '--out', str(tmp_path / 'generated'), '--incremental']
+    argv = ['export', '--audit', '--package', 'api', *arguments(project), '--out', str(tmp_path / 'generated'), '--incremental']
     main(argv, out=io.StringIO())
     project[1].write_text('unrelated RTL changed, still not a parse input', encoding='utf-8')
     import svx.sv_scan as scan

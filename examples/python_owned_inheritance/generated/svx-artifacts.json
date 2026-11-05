@@ -46,12 +46,12 @@
       "language": "python",
       "module": "svx_support.svx_py.examples.python_owned_inheritance.base_monitor",
       "path": "python/svx_support/svx_py/examples/python_owned_inheritance/base_monitor.py",
-      "sha256": "270ce4bc60cb5ba1183f656b23129e8937ac06b94f400eef02b0cde94333975d"
+      "sha256": "bb746fe8d55bfec881e0fd90d4c48325fb5ec4137fb29f5356fca67b68389e23"
     },
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "eac6508718ade1863ecf87f0d2bb165254259ecdbba70730909114f21e5d558d"
+      "sha256": "1294dbd3d0020eb5ce634f480334d2f63c7e2f6a60ff9d1c7f3f9efebbe19c46"
     }
   ],
   "callables": [
@@ -125,7 +125,17 @@
     "sv_include_dirs": [],
     "sv_predefines": {},
     "sv_sources": [],
-    "sv_undefines": []
+    "sv_undefines": [],
+    "svx_support": [
+      {
+        "path": "../../../sv/svx_accessors.svh",
+        "sha256": "693dc4683227b4c93d2618c4aca4b2f81bcf88ac2bbdcc60e190b6b0e5a280bf"
+      },
+      {
+        "path": "../../../sv/svx_inheritance.sv",
+        "sha256": "919ce218868769525b48bc118434446c1f96cc3ae333699e905ec95cb5b2540f"
+      }
+    ]
   },
   "generator_abi_version": 2,
   "inheritance_manifest": {
@@ -141,12 +151,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 580,
+        "line": 624,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 620,
+        "line": 650,
         "path": "inheritance_mirrors.sv"
       }
     ],
@@ -158,17 +168,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 549,
+        "line": 593,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 606,
-        "path": "inheritance_mirrors.sv"
-      },
-      {
-        "language": "systemverilog",
-        "line": 643,
+        "line": 673,
         "path": "inheritance_mirrors.sv"
       }
     ]

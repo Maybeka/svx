@@ -12,6 +12,28 @@ import pytest
 from svx.cli import _fresh_declaration_entries
 
 
+def test_import_audit_caches_framework_certification_not_module_state(monkeypatch):
+    from types import ModuleType
+    import svx.cli as cli
+
+    name = 'svx_certification_cache_probe'
+    module = ModuleType(name)
+    origin = str(Path(cli.__file__).resolve())
+    module.__spec__ = importlib.machinery.ModuleSpec(name,
+        importlib.machinery.SourceFileLoader(name, origin), origin=origin)
+    monkeypatch.setitem(sys.modules, name, module)
+    original = cli._framework_source_proof
+    calls = []
+    def observed(*args, **kwargs):
+        calls.append(args[0])
+        return original(*args, **kwargs)
+    monkeypatch.setattr(cli, '_framework_source_proof', observed)
+    with _fresh_declaration_entries((), all_sources=True, cached_sources={}):
+        for _ in range(50):
+            assert importlib.import_module(name) is module
+    assert calls.count(Path(origin)) == 1
+
+
 def test_import_audit_reuses_resolution_but_rechecks_module_origin(tmp_path, monkeypatch):
     from types import ModuleType
     import svx.cli
