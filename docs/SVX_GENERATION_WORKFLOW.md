@@ -26,6 +26,29 @@ executed appear; an incremental reuse may have no discovery or generation rows.
 Total time also includes validation and output handling outside the named
 phases, but excludes Python interpreter startup and command-line parsing.
 
+Discovery now separates declaration/type mapping and source type conversion;
+generation separates manifest/input validation, Python and SV emission, contract
+layout, call-record type construction, support layout and artifact metadata.
+`Self / uninstrumented` shows a parent's elapsed time minus its directly measured
+children. It includes that stage's own work and work without a finer timer; it
+is not extra time to add to the parent and is not necessarily parsing time.
+The report remains a phase summary, not a complete function-level profiler.
+
+Ordinary export passes its discovered manifest directly to the generator in
+memory. It does not reload that manifest, repeat source enrichment, audit Python
+imports, fingerprint discovery inputs, or build compatibility artifact metadata.
+Necessary source/type/signature checks and wire conversions still run. Output
+snapshots remain generation-time safeguards against overwriting manual repairs;
+they are not simulation-time checks.
+
+The opt-in audited path reuses verified framework-import classifications, immutable source
+primitive metadata and matching call-record types only within the current
+command. Module origin, source-path and aliased framework-root changes remain
+checked; mutable user type declarations are not treated as primitive-cache hits.
+Record reuse distinguishes native bindings, concrete codec classes, allocated
+names and type-reference mode. These caches neither reuse changed semantic ASTs
+nor change the persistent incremental-export contract or generated wire format.
+
 The same flag works with `--incremental` and `--check`, does not change generated
 files or cache eligibility, and is disabled by default. Failed exports print
 a partial report marked `failed` before propagating the original error.
@@ -52,6 +75,25 @@ registration calls remain beside their owning declarations, without numbered
 registration trampolines. Shared SV call records live under `support/` beside
 the generated SV roots. Keep these required data/codec files when building;
 they are not optional diagnostic sidecars.
+Python contract literals use fixed four-space nesting rather than aligning
+under long method IDs or constant names. Parameter names and directions stay
+beside their type records, and constructor metadata uses the same formatting.
+Dictionary order, tuples, descriptors and registration order remain unchanged;
+long atomic type names and fingerprints are not split or rewritten. This is
+generation-time formatting only, with no additional runtime formatting logic.
+Repeated complete type specifications are declared once in that module's
+existing support file, using readable `_svx__type_*` constants. Method and
+constructor contracts reference those same read-only descriptions; nominal
+types with different identities or descriptors are never merged merely because
+their bit layouts match. Mutable SvTypes values, record instances and call
+buffers are not shared. No new data directory or runtime type resolver is added.
+
+Generated `SVMirror` classes inherit the common existing-object binding,
+projected-field selection and initialization rollback from `SVMirror`.
+Constructors keep their original signatures, explicit constructor argument
+mapping and native allocation call; their final binding/rollback uses the
+shared `_svx_finish_created_object` helper. Methods still show the canonical
+target and actual arguments locally, rather than using a reflective dispatcher.
 Generated VIF endpoints expose short `_svx__core_*` functions/tasks containing the
 actual signal access or native method call. Dispatch, constructor decoding,
 field operations and callbacks stay in the same SV file, not numbered includes.
@@ -69,6 +111,83 @@ Class fields similarly have a short `_svx__core_field_*` entry that operates on
 the original SV variable. In the default mode its path operations execute in
 the same class scope; with `--use-type-reference`, a type-parameterized kernel
 accesses the original field by `ref`. Neither mode allocates a second field.
+Whole-value accessors for ordinary fields in the default mode, and VIF signal
+accessors, use small macros from [svx_accessors.svh](../sv/svx_accessors.svh):
+
+```systemverilog
+`SVX_FIELD_ACCESSORS(StatusType, _svx__core_read_status,
+                     _svx__core_write_status, this.status)
+```
+
+The arguments show the exact native member and stable getter/setter names.
+Types containing array dimensions or template commas use a local typedef.
+Read-only or write-only VIF signals use the getter or setter macro alone.
+The generated source includes this one framework header; retain the SVX include
+root from the normal build setup. The optional ref kernel and native-handle
+adapters keep their existing explicit binding paths. Deep member/index/key
+operations still address the original SV storage directly, without reading and
+writing back the complete container through a getter/setter.
+
+For an emergency change, replace a single accessor macro with ordinary functions
+using the same type and names: the getter returns the member, and the setter
+assigns its input to that member. No manifest, decoder, registration, or other
+file needs to change. Complex methods, virtual callbacks, `super` calls and
+constructor order are not hidden in these macros.
+
+For generated SV instance, static and VIF callable methods, each
+`_svx__core_*` owns the complete request/operation/response path. Short local
+Request/Response aliases expose `decode`, `from_request` and `encode`.
+`from_request` copies inout initial values and caller-sized output buffers;
+ordinary output fields retain their declared initialization. The core directly
+calls the original method with request/response members. Native-handle adapters
+still perform their required typed reference conversion. Payload queues, offsets
+and record pack/unpack stay inside the record interfaces, reusing SvTypes codecs.
+`SVX_INVOKE_CORE` handles common success/error initialization at dispatch.
+Task dispatch contains only task methods; function dispatch owns function methods
+and field operations. Empty task interfaces retain only their rejection or
+delegation path, rather than repeating all function cases.
+
+Split output groups factory declarations and registration templates in one
+`support/<root>_factories.svh`. Conditional include sections preserve each
+declaration's original package and position; factories are not hoisted across
+later native class definitions. The generated root retains the corresponding
+include points and the ordinary construction logic.
+
+Ordinary SV-root mirrors preserve constructor parameter order, concrete types
+and discovered SV defaults. Their new() calls super.new(...) explicitly and
+uses `SVX_BIND_CONSTRUCTED_OBJECT` for common registration/companion rollback.
+Its request expression calls a constructor-record `encode_arguments` interface;
+record allocation, field assignment and encoding do not appear in new(). The
+macro evaluates this expression only for SV-initiated creation (identity zero).
+For native-handle constructor parameters, a typed constructor-request adapter
+performs native-to-wire conversion in the same factory support file; new() still
+passes only its original arguments. No encoding is performed on the already
+paired, nonzero-identity path.
+The factory supplies identity through a private constructor context, not an
+extra positional argument. A trailing optional identity argument remains for
+compatibility with existing manually derived bridge code; normal callers need
+not provide it. Special alternating-lineage constructors retain their explicit
+ordering and binding paths. SV constructor defaults are not evaluated as Python
+expressions: Python callers still supply the generated constructor arguments.
+For SV-initiated bridge construction, load the generated Python modules first.
+An explicitly registered Python-derived class remains preferred; if none is
+registered, the loaded source Mirror binds the existing SV instance without
+allocating another one. This does not automatically register a UVM factory type.
+
+In split output, ordinary default-mode value fields are bound using concrete-type
+macros in a single `support/<root>_fields.svh`. A binding supplies only its private
+name, original native member and stable field identity. The macro includes its
+concrete native type, accessor functions and whole/deep operation implementation;
+it expands inside the owning class and directly accesses that original member.
+Fields with identical concrete-type operation bodies share one definition;
+different nominal enum types remain separate even when their layouts match.
+Macros are undefined after their generated root. Handle adapters and optional
+type-reference kernels retain explicit specialized paths where applicable.
+This shares repeated generated operations; it does not create secondary storage
+or turn local writes into whole-container read/modify/write. To change a single
+binding manually, replace its macro invocation with an explicit implementation
+under the same private function name. Changing a shared macro affects all fields
+bound through it.
 For a selected method, the optional artifact inventory's `member_locations`
 table points to its generated Python call and SV core operation. These are
 generation-time locations, not runtime authority; manual edits can shift lines.
@@ -290,8 +409,14 @@ svx export --callable tools_pkg::check tools_pkg::wait_ready -f design.f --out g
 svx export --type types_pkg::State types_pkg::Packet -f design.f --out generated
 ```
 
-The output contains inheritance.json and its discovery record, python/,
-mirrors.sv, support/, sources.f and artifacts.json. Add python/ to the simulation
+The default output contains inheritance.json, python/, mirrors.sv, support/ and
+sources.f. The manifest is a readable snapshot, not an intermediate file reloaded
+during export. No discovery evidence or artifacts.json is produced by default.
+Add `--audit` when you need file-backed discovery evidence and a compatibility
+artifact manifest; `--incremental` implicitly uses that audited workflow. Use a
+new directory when switching an existing audited export to direct output, or
+continue passing `--audit`, so old audit records cannot be mistaken for current
+ones. Add python/ to the simulation
 import path, configure its svx_bootstrap.py as described above, and compile
 the generated -F sources.f after the original classes and runtime packages. Before calling
 generated constructors/methods, explicitly register their factories and dispatchers:
@@ -308,15 +433,21 @@ simulation. It registers generated factories/dispatchers, not application
 objects. It also provides explicit references to the generated packages when
 the project analyzes files in separate compiler invocations; relying only on
 package-variable initializers can leave their registries empty in that flow.
-The artifact's systemverilog_startup names the generated entry. It is build/startup
+The command prints the generated startup entry; audited output also records it
+as systemverilog_startup. It is build/startup
 guidance, not a command executed by Python or by artifact loading.
 Pure type/constant exports have no runtime registrations and need no such entry.
 
-The command
-prints exact Python imports, for example `from svx_mirror.drivers_pkg import Driver`.
-It composes the existing discovery and generation operations; it does not define
-a separate manifest or runtime. Use a dedicated output directory. `export --check`
-checks both operations without modifying their outputs. Publication/ownership
+The command prints flushed progress messages for configuration import, discovery,
+Python/SV generation, support layout, output validation and writing (or checking).
+It does not print per-symbol Python import statements or type/constant listings.
+Public names still follow the documented mapping, for example
+`from svx_mirror.drivers_pkg import Driver`.
+It uses the same discovery and code-generation implementations through an
+in-memory path, not a separate manifest or runtime. Use a dedicated output
+directory. `export --check` rediscovers and compares the manifest and generated
+code without modifying their outputs. It does not require audit records.
+Publication/ownership
 rules below apply to each operation; the entire command is not a multi-file
 transaction. A failure does not mean that every output was rolled back.
 
@@ -833,7 +964,8 @@ svx export --class 'tb_instance_runtime_values.*.Driver' \
   -f examples/sv_scoped/instance_runtime_values.f --out .tmp/instance-runtime-values
 ```
 
-Compile the source replacements and startup unit listed in artifacts.json, not
+Compile the source replacements and startup unit printed by export (also listed
+in artifacts.json with `--audit`), not
 the original file alongside its replacement. Module and interface adapters bind
 native typedefs as type arguments; program adapters keep declarations in the
 original lexical owner. Public codecs remain standard SvTypes codecs. The
@@ -1155,7 +1287,8 @@ write ordered generated/sv/units/000000_<name>.sv, 000001_<name>.sv, and so on,
 one per supplied input. Compile these in place of the supplied original SV
 inputs, never alongside them, preserving the original independent/shared unit
 semantics. Do not combine independent files into one include wrapper. Python
-imports and artifact paths remain under generated/python and generated/artifacts.json.
+imports remain under generated/python. With `--audit`, compatibility metadata
+is written to generated/artifacts.json.
 The original sources are not edited; active includes are copied with logical
 source locations, and original classes/types stay in their original package and
 lexical scope. The normal bridge renderer supplies the same Python/SV contract,
@@ -1212,7 +1345,8 @@ Do not maintain a second hand-expanded dependency list just for SVX.
 
 ## Source Evidence
 
-Discovery writes the normalized manifest and a sibling
+`inheritance-manifest` (also used by `export --audit` and `export --incremental`)
+writes the normalized manifest and a sibling
 <manifest-name>.svx-discovery.json. Keep them together. The record binds the
 manifest contract to selected source paths, source bytes and parsing context.
 Generation validates this evidence before materializing classes or codec factories.
@@ -1332,7 +1466,7 @@ subroutines remain dependencies; only the inventory's declaration walk skips
 subroutine bodies, whose local declarations are not externally named export
 targets. Distinct trees and later analysis scopes do not share these import facts.
 Python Proxy member enrichment is reapplied for the current declaration context.
-Initial and final input observations independently re-read current source bytes
+In the explicit audited workflow, initial and final input observations independently re-read current source bytes
 and replay parser-recorded include/library lookups. Within one CLI operation,
 discovery and generation may reuse a proven dependency graph after those fresh
 checks; changed or non-replayable selections use the full parser path. This does

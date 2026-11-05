@@ -8,10 +8,14 @@ package 内的嵌套类，不把用户类搬迁或复制到生成的 package 中
 
 ## 生成
 
+这些作用域示例使用 `--audit`，因为下文还会读取生成报告来安排编译。
+普通 `svx export` 默认直接在内存中连接发现与生成；不需要审计记录时，
+按 CLI 打印的 filelist、启动入口以及 `SVX_BOOTSTRAP` 配置运行即可。
+
 从仓库根目录执行：
 
 ```sh
-svx export --class 'scoped_classes_pkg::*::Inner' scoped_classes_pkg::Outer_Inner \
+svx export --audit --class 'scoped_classes_pkg::*::Inner' scoped_classes_pkg::Outer_Inner \
   -f examples/sv_scoped/design.f --out examples/sv_scoped/generated
 ```
 
@@ -64,7 +68,7 @@ echo_local 往返 packed struct，并修改其原生 mode 字段，保留 flags 
 仅导出这组值类型而不生成任何可构造类，可执行：
 
 ```sh
-svx export --type scoped_classes_pkg::Outer::LocalPacket \
+svx export --audit --type scoped_classes_pkg::Outer::LocalPacket \
   -f examples/sv_scoped/design.f --out examples/sv_scoped/generated-values
 ```
 
@@ -73,7 +77,7 @@ Outer.LocalMode 枚举自动生成。这个纯类型导入只需 SvTypes，无�
 ## 集成副本模式
 
 ```sh
-svx export --package scoped_classes_pkg --integrated \
+svx export --audit --package scoped_classes_pkg --integrated \
   -f examples/sv_scoped/design.f --out .tmp/sv-scoped-integrated
 ```
 
@@ -96,7 +100,7 @@ Python 路径和 artifact 配置分别使用 .tmp/sv-scoped-integrated/python、
 数组别名、常量及 Holder 中的公开嵌套类型：
 
 ```sh
-svx export --type '$unit::*' --constant '$unit::*' \
+svx export --audit --type '$unit::*' --constant '$unit::*' \
   --sv-source examples/sv_scoped/unit_values.sv --out .tmp/unit-values
 PYTHONPATH=.tmp/unit-values/python python examples/sv_scoped/unit_values.py
 ```
@@ -156,7 +160,7 @@ include 到同一单元。
 直接复用[工程 filelist](unit_classes.f)：
 
 ```sh
-svx export --class Driver -f examples/sv_scoped/unit_classes.f \
+svx export --audit --class Driver -f examples/sv_scoped/unit_classes.f \
   --sv-elaboration packages --out .tmp/unit-classes
 ```
 
@@ -188,7 +192,7 @@ UNIT_CLASSES_NATIVE_PASS。这套实际 CLI 生成、检查、原生运行已在
 [Python 入口](unit_nested.py)使用同一套 owner-local 架构：
 
 ```sh
-svx export --class '$unit::*::Inner' Outer_Inner Outer::Alias \
+svx export --audit --class '$unit::*::Inner' Outer_Inner Outer::Alias \
   --type UnitModes -f examples/sv_scoped/unit_nested.f \
   --sv-elaboration packages --out .tmp/unit-nested
 ```
@@ -222,7 +226,7 @@ Inner 中另一个 UnitMode typedef 也验证了显式 $unit 类型不会被局�
 按真实模块实例选择，不要把源模块定义名当成实例路径：
 
 ```sh
-svx export --class 'tb_instance_classes.*.Driver' \
+svx export --audit --class 'tb_instance_classes.*.Driver' \
   -f examples/sv_scoped/instance_classes.f --out .tmp/instance-classes
 ```
 
@@ -257,7 +261,7 @@ INSTANCE_CLASSES_NATIVE_PASS。这条源码直接 CLI、检查、编译、仿真
 直接复用原始 filelist，选择实际 lane 中的类：
 
 ```sh
-svx export --class 'tb_generate_classes.*.lane[*].active.Driver' \
+svx export --audit --class 'tb_generate_classes.*.lane[*].active.Driver' \
   -f examples/sv_scoped/generate_classes.f --out .tmp/generate-classes
 ```
 
@@ -290,7 +294,7 @@ GENERATE_CLASSES_PYTHON_PASS 和 GENERATE_CLASSES_NATIVE_PASS。普通源码 CLI
 [原始 filelist](generate_runtime_values.f)。
 
 ```sh
-svx export --class 'tb_generate_runtime_values.*.lane[0].Driver' \
+svx export --audit --class 'tb_generate_runtime_values.*.lane[0].Driver' \
   -f examples/sv_scoped/generate_runtime_values.f --out .tmp/generate-runtime-values
 ```
 
@@ -317,7 +321,7 @@ GENERATE_RUNTIME_VALUES_PYTHON_PASS 和 GENERATE_RUNTIME_VALUES_NATIVE_PASS。
 [Python](program_classes.py)、[filelist](program_classes.f)。
 
 ```sh
-svx export --class 'tb_program_classes.*.Driver' \
+svx export --audit --class 'tb_program_classes.*.Driver' \
   -f examples/sv_scoped/program_classes.f --out .tmp/program-classes
 ```
 

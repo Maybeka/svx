@@ -9,10 +9,15 @@ copying the native classes into generated packages.
 
 ## Generate
 
+These scope examples request `--audit` because their build instructions also
+inspect artifact metadata. Ordinary `svx export` uses the direct in-memory path;
+use its printed filelist/startup instructions and `SVX_BOOTSTRAP` when audit
+records are not needed.
+
 From the repository root:
 
 ```sh
-svx export --class 'scoped_classes_pkg::*::Inner' scoped_classes_pkg::Outer_Inner \
+svx export --audit --class 'scoped_classes_pkg::*::Inner' scoped_classes_pkg::Outer_Inner \
   -f examples/sv_scoped/design.f --out examples/sv_scoped/generated
 ```
 
@@ -70,7 +75,7 @@ They are available on either the unselected Outer namespace or its selected
 mirror class. To export just that value API without any class target, run:
 
 ```sh
-svx export --type scoped_classes_pkg::Outer::LocalPacket \
+svx export --audit --type scoped_classes_pkg::Outer::LocalPacket \
   -f examples/sv_scoped/design.f --out examples/sv_scoped/generated-values
 ```
 
@@ -81,7 +86,7 @@ SvTypes, not a running simulation.
 ## Integrated Variant
 
 ```sh
-svx export --package scoped_classes_pkg --integrated \
+svx export --audit --package scoped_classes_pkg --integrated \
   -f examples/sv_scoped/design.f --out .tmp/sv-scoped-integrated
 ```
 
@@ -105,7 +110,7 @@ lineages with automatic value records remain unfinished. See the current
 aliases, dynamic-array alias, constants and Holder's public nested types:
 
 ```sh
-svx export --type '$unit::*' --constant '$unit::*' \
+svx export --audit --type '$unit::*' --constant '$unit::*' \
   --sv-source examples/sv_scoped/unit_values.sv --out .tmp/unit-values
 PYTHONPATH=.tmp/unit-values/python python examples/sv_scoped/unit_values.py
 ```
@@ -173,7 +178,7 @@ The [original top](tb_unit_classes.sv)
 includes it in the same unit. Reuse the project's [filelist](unit_classes.f):
 
 ```sh
-svx export --class Driver -f examples/sv_scoped/unit_classes.f \
+svx export --audit --class Driver -f examples/sv_scoped/unit_classes.f \
   --sv-elaboration packages --out .tmp/unit-classes
 ```
 
@@ -210,7 +215,7 @@ The [native declarations](unit_nested.sv), [top](tb_unit_nested.sv) and
 [Python entry](unit_nested.py) use the same owner-local layout:
 
 ```sh
-svx export --class '$unit::*::Inner' Outer_Inner Outer::Alias \
+svx export --audit --class '$unit::*::Inner' Outer_Inner Outer::Alias \
   --type UnitModes -f examples/sv_scoped/unit_nested.f \
   --sv-elaboration packages --out .tmp/unit-nested
 ```
@@ -250,7 +255,7 @@ for indexed independent owners and remaining specialization/instance layouts.
 Select a concrete module instance, not just the source module definition:
 
 ```sh
-svx export --class 'tb_instance_classes.*.Driver' \
+svx export --audit --class 'tb_instance_classes.*.Driver' \
   -f examples/sv_scoped/instance_classes.f --out .tmp/instance-classes
 ```
 
@@ -289,7 +294,7 @@ Sources: [design](generate_classes.sv), [testbench](tb_generate_classes.sv),
 Export actual lanes directly from the original filelist:
 
 ```sh
-svx export --class 'tb_generate_classes.*.lane[*].active.Driver' \
+svx export --audit --class 'tb_generate_classes.*.lane[*].active.Driver' \
   -f examples/sv_scoped/generate_classes.f --out .tmp/generate-classes
 ```
 
@@ -328,7 +333,7 @@ Sources: [SV project](generate_runtime_values.sv),
 [Python](generate_runtime_values.py), [original filelist](generate_runtime_values.f).
 
 ```sh
-svx export --class 'tb_generate_runtime_values.*.lane[0].Driver' \
+svx export --audit --class 'tb_generate_runtime_values.*.lane[0].Driver' \
   -f examples/sv_scoped/generate_runtime_values.f --out .tmp/generate-runtime-values
 ```
 
@@ -359,7 +364,7 @@ Sources: [program](program_classes.sv), [top](tb_program_classes.sv),
 [Python](program_classes.py), [filelist](program_classes.f).
 
 ```sh
-svx export --class 'tb_program_classes.*.Driver' \
+svx export --audit --class 'tb_program_classes.*.Driver' \
   -f examples/sv_scoped/program_classes.f --out .tmp/program-classes
 ```
 

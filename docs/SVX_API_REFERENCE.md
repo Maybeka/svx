@@ -327,6 +327,11 @@ implementation exceptions are not suppressed.
   `--member` and `--exclude-member` control selection. `--check` verifies both
   discovery and generation. See [Direct SV Export](SVX_GENERATION_WORKFLOW.md#direct-sv-export)
   for ownership/import semantics, output paths and current type/scope limits.
+  The default pipeline passes the discovered manifest in memory directly to
+  generation, without discovery provenance or compatibility artifact reports.
+  `--audit` enables those records; `--incremental` implicitly enables that
+  workflow. Output manual-edit protection and required type checking remain
+  enabled in either mode.
   `--type` selects named value typedefs as public SvTypes declarations;
   `--exclude-type` excludes optional value targets. Package selection includes
   owned classes, supported value typedefs and parameter/localparam snapshots.
@@ -567,7 +572,7 @@ private classes inherit their private classification.
 | Private | Object registries | `svx_object_id_allocator`, `svx_external_handle_registry`, `svx_inheritance_registry` |
 | Private | Typed class reference adapters | `svx_class_reference`, `svx_class_reference_endpoint` |
 | Private | Callback execution isolation | `svx_callback_contexts`, `svx_inheritance_context_id` |
-| Private | Staged construction context | `svx_construction_frame`, `svx_construction_context`, `svx_constructor_cache`, `svx_constructor_cache_registry` |
+| Private | Staged construction context | `svx_construction_frame`, `svx_construction_context`, `svx_constructor_ids`, `svx_constructor_cache`, `svx_constructor_cache_registry` |
 | Private | Field envelopes | `svx_field_operation`, `svx_field_take_u32`, `svx_field_take_bytes`, `svx_field_operation_unpack` |
 | Private | Object dispatch and lifecycle | `svx_create_object`, `svx_create_object_function`, `svx_invoke_object`, `svx_invoke_object_function`, `svx_invoke_static`, `svx_invoke_static_function`, `svx_release_object`, `svx_release_object_function`, `svx_publish_object`, `svx_require_published_object` |
 | Private | Inheritance DPI imports | `svx_inheritance_call_python`, `svx_inheritance_call_python_function`, `svx_inheritance_shutdown`, `svx_inheritance_release_python`, `svx_inheritance_release_python_function`, `svx_inheritance_create_python`, `svx_inheritance_create_python_function` |
@@ -608,7 +613,7 @@ SVX type schema.
 | root | Stable | `schema_uri`, `schema_version`, `generator_abi_version`, `required_runtime_capabilities`, `classes`, `discovery_provenance`, `value_types`, `constants`, `callables` | The first five fields are required; classes contains only explicit class generation targets and may be empty when value_types, constants or callables is nonempty. Optional discovery_provenance requires validated file-backed evidence. Source-generated values use schema2.1.0; constants use schema2.2.0; callables use schema2.3.0; unit value scope uses schema2.4.0; unit class scope uses schema2.5.0; instance value scope uses schema2.6.0; generator ABI2 is unchanged. |
 | class | Stable | `canonical_id`, `language`, `symbol`, `methods`, `constructor`, `specialization`, `fields`, `base_lineage`, `source_scope` | ID, language and symbol required; methods, fields and lineage default empty; constructor and specialization optional. Lineage entries cannot contain base_lineage. Unit-owned class discovery emits schema2.5 and the source_scope descriptor below. |
 | method | Stable | `canonical_id`, `name`, `parameters`, `return_type`, `return_handle`, `timing`, `virtual`, `pure_virtual`, `static` | ID, name, return_type, timing and virtual required; parameters default empty; pure_virtual and static default false; return_handle optional. |
-| parameter | Stable | `name`, `type`, `direction`, `handle`, `dpi_output_buffer` | Name and type required; direction defaults input independently for each parameter; handle optional. dpi_output_buffer defaults false; schema2.8 discovery marks DPI output open-array buffers for caller-supplied capacity, only on package callable output arrays. ref and const ref rejected. |
+| parameter | Stable | `name`, `type`, `direction`, `handle`, `dpi_output_buffer`, `sv_default` | Name and type required; direction defaults input independently for each parameter; handle optional. dpi_output_buffer defaults false; schema2.8 discovery marks DPI output open-array buffers for caller-supplied capacity, only on package callable output arrays. Schema2.9 adds optional nonempty sv_default expressions for preserving original SV constructor defaults; these do not become Python default expressions. ref and const ref rejected. |
 | field | Stable | `name`, `type`, `handle` | Name and type required; optional handle uses the same static endpoint metadata as parameters. Declaration defaults come from the SvTypes declaration, not an extra manifest initializer key. |
 | constructor | Stable | `initiator`, `parameters` | Initiator required, python or sv; parameters default empty and must be input. Per-ancestor transport records are generated privately. |
 | type_binding | Stable | `unified_type_name`, `svtypes`, `python`, `sv`, `sv_packer`, `encoding_descriptor` | Exactly one of canonical svtypes or legacy python; other fields required. Identity and encoding are compared with the materialized codec. Native SV type/packer expressions receive syntax validation, not a semantic equivalence proof; canonical collection metadata uses public SvTypes declaration/template APIs. The string void is accepted only in return positions. |

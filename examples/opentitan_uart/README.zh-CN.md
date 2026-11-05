@@ -52,7 +52,7 @@ dvsim hw/ip/uart/dv/uart_sim_cfg.hjson \
 
 ```sh
 svx compile-config --sv-build-command "$UART_BUILD_COMMAND"
-svx export --class uart_svx_bridge_pkg::UartSequence \
+svx export --audit --class uart_svx_bridge_pkg::UartSequence \
   --member body process_tx process_rx uart_init dut_shutdown \
     spinwait_txidle spinwait_rxidle send_tx_byte send_rx_byte read_rx \
     observed_count observed_item parity_enabled parity_odd \
@@ -61,6 +61,8 @@ svx export --class uart_svx_bridge_pkg::UartSequence \
   --sv-source examples/opentitan_uart/uart_bridge.sv --out "$UART_GENERATED"
 ```
 
+本配方为下文按 artifact 报告安排编译而显式启用 `--audit`。
+普通直接导出可省略该选项，改用 CLI 打印的编译提示和生成的 Python bootstrap。
 CLI 从源码自动发现这20个方法的签名和完整11层祖先，包括已经求值的原生类
 类型参数；无需 declarations JSON，也无需人为添加 Python target。
 只有 UartSequence 是导出目标，import 和原生 class handle 不会请求导出整个 UVM。

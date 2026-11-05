@@ -58,7 +58,7 @@ dependencies, definitions and include paths again:
 
 ```sh
 svx compile-config --sv-build-command "$UART_BUILD_COMMAND"
-svx export --class uart_svx_bridge_pkg::UartSequence \
+svx export --audit --class uart_svx_bridge_pkg::UartSequence \
   --member body process_tx process_rx uart_init dut_shutdown \
     spinwait_txidle spinwait_rxidle send_tx_byte send_rx_byte read_rx \
     observed_count observed_item parity_enabled parity_odd \
@@ -67,6 +67,9 @@ svx export --class uart_svx_bridge_pkg::UartSequence \
   --sv-source examples/opentitan_uart/uart_bridge.sv --out "$UART_GENERATED"
 ```
 
+This recipe opts into `--audit` for the artifact-based build instructions below.
+Omit it for direct in-memory export and use the CLI's printed build instructions
+and generated Python bootstrap instead of an artifact manifest.
 The CLI discovers the 20 selected signatures and complete 11-ancestor lineage
 from source, including evaluated native class type parameters. There is no
 declarations JSON or artificial Python target. Only UartSequence is an export

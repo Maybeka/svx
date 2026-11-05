@@ -592,7 +592,9 @@ svx export --class 'tb_instance_runtime_values.*.Driver' \
   -f examples/sv_scoped/instance_runtime_values.f --out .tmp/instance-runtime-values
 ```
 
-按 artifacts.json 编译替换后的源文件和启动单元，不能再重复编译原文件。
+按 export 打印的替换源文件、启动单元及生成的 sources.f 编译，不能再重复编译原文件。
+默认 export 在内存中直接连接发现与生成，不输出审计记录；需要发现证据和
+artifacts.json 时显式增加 `--audit`，`--incremental` 也会启用该记录流程。
 [运行时示例](../examples/sv_scoped/README.zh-CN.md#实例局部类型的运行时传输)
 展示字段局部更新、枚举/结构体/数组/队列传参、构造、虚方法回调，以及
 output/inout task。module/interface/program 三种作用域已验证；generate
