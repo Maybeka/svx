@@ -36,6 +36,7 @@ GENERATOR_ABI_VERSION = 2
 REQUIRED_RUNTIME_CAPABILITIES = SVTYPES_REQUIRED_CAPABILITIES
 _type_binding_cache = ContextVar('svx_manifest_type_bindings', default=None)
 _call_record_types = ContextVar('svx_call_record_generation', default=None)
+_python_contract_literals = ContextVar('svx_python_contract_literals', default=None)
 
 
 @contextmanager
@@ -1786,10 +1787,14 @@ def _register_contract_lines(methods: tuple[Method, ...] | list[Method], *, func
     """Format generated call contracts for review without changing their data."""
 
     from .python_literals import format_literal
-    rendered = format_literal(
-        {method.canonical_id: _contract_data(method) for method in methods},
-        level=1,
-    )
+    data = {method.canonical_id: _contract_data(method) for method in methods}
+    literals = _python_contract_literals.get()
+    if literals is not None:
+        token = f'_svx__contract_literal_{len(literals)}'
+        literals[token] = data
+        return ['# --- SvTypes call contracts (private bridge metadata) ---',
+                f'{function_name}({token})']
+    rendered = format_literal(data, level=1)
     return [
         "# --- SvTypes call contracts (private bridge metadata) ---",
         f"{function_name}(",
@@ -2458,10 +2463,17 @@ def _vif_view_class_name(binding: HandleBinding) -> str:
 def emit_python_mirrors(manifest: Manifest, **options) -> dict[PurePosixPath, str]:
     """Return the complete editable Python artifact set and execution support."""
     from .generated_bootstrap import with_bootstrap
-    return with_bootstrap(_emit_python_mirrors(manifest, **options))
+    literals = {}
+    token = _python_contract_literals.set(literals)
+    try:
+        sources = _emit_python_mirrors(manifest, **options)
+    finally:
+        _python_contract_literals.reset(token)
+    return with_bootstrap(sources, contract_literals=literals)
 
 
 @with_value_types
+@measured('Python declaration emission')
 def _emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool | frozenset[str] = True,
                         include_sv_ancestor_members: bool = True,
                         separate_package_layout: bool = True,
@@ -3397,15 +3409,23 @@ def _sv_record_type(
         raise SVXInheritanceError(
             "SvTypes 1.0 generated-call contract is unavailable: missing RecordSchema"
         )
+    cache = _call_record_types.get()
     def record_codec(binding):
-        codec = _codec_from_spec(binding.runtime_spec())
+        spec = binding.runtime_spec()
+        identity = spec.get('svtypes')
+        codec_key = (('codec', binding) if cache is not None and identity is not None
+                     and _intrinsic_type_identity(identity) else None)
+        if codec_key is not None and codec_key in cache:
+            return cache[codec_key]
+        codec = _codec_from_spec(spec)
         # Transport envelopes are codecs, not user randomization/coverage hosts.
-        identity = binding.runtime_spec().get('svtypes')
         if identity is not None:
             declaration = svtypes.type_spec_from_identity(identity, location='generated call record')
             codec = declaration(rand=False, cov=False, plusarg=False, dump=False)
             if svtypes.encoding_descriptor(codec).to_dict() != dict(binding.encoding_descriptor):
                 raise SVXInheritanceError('disabling transport extras must not change encoding')
+        if codec_key is not None:
+            cache[codec_key] = codec
         return codec
 
     type_id = _call_record_type_id(owner_id, kind)
@@ -3414,7 +3434,6 @@ def _sv_record_type(
     from .sv_codegen_mode import use_type_reference
     key = (type_id, class_name, use_type_reference(), tuple((name, type(codec), binding)
                                     for (name, codec), (_, binding) in zip(codecs, fields)))
-    cache = _call_record_types.get()
     if cache is not None and key in cache:
         return cache[key]
     schema = schema_type(type_id, codecs, class_name=class_name)
@@ -3426,6 +3445,7 @@ def _sv_record_type(
     _validate_call_record_members(value_type, tuple(name for name, _ in fields), owner_id, kind)
     if cache is not None:
         cache[key] = value_type
+        cache[('fields', value_type)] = tuple(name for name, _ in fields)
     return value_type
 
 
@@ -5744,6 +5764,7 @@ def _projection_helper_package(source: ForeignClass, kind: str) -> str:
         raise ValueError(f"unknown projection helper kind {kind!r}")
 
 
+@measured('SV projection emission')
 def _emit_sv_projection_helpers(
     manifest: Manifest,
     *,

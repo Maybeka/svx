@@ -5,12 +5,13 @@ from pathlib import PurePosixPath
 BOOTSTRAP_PATH = PurePosixPath('svx_bootstrap.py')
 
 
-def with_bootstrap(sources):
+def with_bootstrap(sources, *, contract_literals=None):
     """Attach a bootstrap to the final, fully assembled Python artifact set."""
     if BOOTSTRAP_PATH in sources:
         raise ValueError('generated bootstrap path collides with an existing output')
     from .generated_layout import split_python_support
-    sources = split_python_support(sources)
+    sources = (split_python_support(sources) if contract_literals is None else
+               split_python_support(sources, contract_literals=contract_literals))
     modules = tuple('.'.join(path.parent.parts if path.name == '__init__.py'
                              else path.with_suffix('').parts)
                     for path in sorted(sources, key=str) if path.suffix == '.py')

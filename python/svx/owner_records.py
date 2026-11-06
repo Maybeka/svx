@@ -6,6 +6,7 @@ from dataclasses import replace
 import json
 
 from .value_exports import native_value_name
+from .export_timing import measured
 
 
 _local_call_records = ContextVar('svx_local_call_records', default=False)
@@ -15,13 +16,18 @@ def record_api_name(fields, name):
     return '_svx__' + name if name in fields else name
 
 
+@measured('Call-record SV rendering')
 def render_call_record(record, indent=0):
     """Add payload-level convenience methods without changing SvTypes encoding."""
     from .sv_codegen_mode import render_sv_object
     text = render_sv_object(record, indent)
     name = record.__name__
     import svtypes
-    fields = {field['name'] for field in svtypes.schema_descriptor(record).to_dict()['schema']['fields']}
+    from .inheritance import _call_record_types
+    cache = _call_record_types.get()
+    fields = cache.get(('fields', record)) if cache is not None else None
+    if fields is None:
+        fields = {field['name'] for field in svtypes.schema_descriptor(record).to_dict()['schema']['fields']}
     decode = record_api_name(fields, 'decode')
     encode = record_api_name(fields, 'encode')
     initialize = record_api_name(fields, 'from_request')

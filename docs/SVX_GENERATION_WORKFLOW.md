@@ -33,6 +33,12 @@ layout, call-record type construction, support layout and artifact metadata.
 children. It includes that stage's own work and work without a finer timer; it
 is not extra time to add to the parent and is not necessarily parsing time.
 The report remains a phase summary, not a complete function-level profiler.
+Native signature validation separates expected-type preparation, probe parsing,
+semantic binding and member comparisons. Python generation separates declaration
+emission from contract layout; SV generation separately reports call-record
+construction, SV rendering and projection emission. Moving work into a named
+child reduces `Self / uninstrumented` without necessarily making the operation
+faster: compare the enclosing phase and total time to judge actual improvements.
 Output handling is further split into path/ownership preflight, input overwrite
 protection, obsolete-file inventory scanning, manual-edit snapshot/content checks,
 inventory/hash serialization, directory preparation, existing-content comparison,
@@ -79,6 +85,17 @@ the project inputs; this is not persistent configuration caching. Python contrac
 layout indexes lexical scopes and registration statements in one traversal and
 does not revisit operands already verified as literal data. Nonliteral calls,
 shadowing and generated-name collision protection retain their existing behavior.
+
+Ordinary separate-bridge Python method contracts pass structured data directly
+into support layout, avoiding an intermediate large literal render/parse round trip. The
+published Python files retain the same readable contract format. Ordinary native
+signature probes are parsed as one batch; source-unit and owner-local probes
+remain in their original semantic owners. A failed probe parse falls back to
+individual parsing to preserve declaration-specific diagnostics. Expected-type
+preparation and transport codec reuse are limited to intrinsic declarations
+within the current operation; actual member types and qualifiers are still
+compared for each source class. Named or custom Python type factories are not
+treated as immutable intrinsic cache entries.
 
 The same flag works with `--incremental` and `--check`, does not change generated
 files or cache eligibility, and is disabled by default. Failed exports print

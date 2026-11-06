@@ -8,7 +8,7 @@ from .export_timing import measured
 
 
 @measured('Python contract layout')
-def split_python_support(sources):
+def split_python_support(sources, *, contract_literals=None):
     from .generated_names import readable
     from .python_literals import format_literal, LiteralName
     result = dict(sources)
@@ -66,7 +66,9 @@ def split_python_support(sources):
                 api = registration(call, scope)
                 if api is not None:
                     try:
-                        values = {id(value): ast.literal_eval(value)
+                        values = {id(value): (contract_literals[value.id]
+                                  if contract_literals is not None and isinstance(value, ast.Name)
+                                  and value.id in contract_literals else ast.literal_eval(value))
                                   for value in (*call.args, *(keyword.value for keyword in call.keywords))}
                     except (ValueError, TypeError):
                         pass

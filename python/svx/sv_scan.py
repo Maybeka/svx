@@ -14,7 +14,7 @@ import re
 from typing import Callable, Iterable
 
 from .errors import SVXInheritanceError
-from .export_timing import measured
+from .export_timing import measured, phase
 from .generated_names import sv_name_scope
 from .sv_frontend import (_analysis, analysis_source_manager, elaborate_sources, compile_source_trees,
                           source_elaboration_mode)
@@ -1567,6 +1567,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
     from .inheritance import (
         _sv_specialization_value, _type_binding, _sv_collection_typedef,
         _handle_binding, _handle_adapter_name, _sv_native_handle_collection_typedefs, _codec_from_spec,
+        _intrinsic_type_identity,
     )
     import svtypes
     from .value_exports import native_value_name, value_modules
@@ -1586,33 +1587,35 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             if name:
                 occupied.add(name)
     probes = []
+    probe_sources = []
+    probe_sequence = 0
     unit_probes = {}
+    signature_types = {}
+    named_value_typedefs = {}
+    for value in value_types:
+        data = value.as_dict()
+        if value.source_scope is not None or data['schema']['type_name'] != value.module + '.' + value.qualname:
+            continue
+        kind = data['schema']['kind']
+        if kind in {'struct', 'enum'}:
+            alias = native_value_name(value.symbol) + ('_t' if kind == 'struct' else '')
+            named_value_typedefs[alias] = f'typedef {value.native_reference} {alias};'
     for declaration in declarations:
         symbol = declaration.get("symbol")
         if not isinstance(symbol, str):
             continue
         checks = []
         value_typedefs = {}
-        named_value_typedefs = {}
-        for value in value_types:
-            data = value.as_dict()
-            if value.source_scope is not None or data['schema']['type_name'] != value.module + '.' + value.qualname:
-                continue
-            kind = data['schema']['kind']
-            if kind in {'struct', 'enum'}:
-                alias = native_value_name(value.symbol) + ('_t' if kind == 'struct' else '')
-                named_value_typedefs[alias] = f'typedef {value.native_reference} {alias};'
-
-        def expected_type(raw_binding, handle):
+        def build_expected_type(raw_binding, handle, aliases):
             expected = _declared_sv_type(raw_binding, handle)
             if (isinstance(raw_binding, dict) and isinstance(handle, dict)
                     and ("svtypes" in raw_binding or "python" in raw_binding)):
                 binding = _type_binding(raw_binding, f"SV declaration {symbol} signature", allow_void=False)
                 native = _handle_binding(handle, binding, f"SV declaration {symbol} handle")
                 if native.collection_binding is not None and _sv_collection_typedef(binding) is not None:
-                    aliases, root = _sv_native_handle_collection_typedefs(
+                    declarations, root = _sv_native_handle_collection_typedefs(
                         native, _handle_adapter_name(native) + '_native')
-                    value_typedefs.update(aliases)
+                    aliases.update(declarations)
                     return root
             if (isinstance(raw_binding, dict) and handle is None
                     and ("svtypes" in raw_binding or "python" in raw_binding)):
@@ -1626,12 +1629,32 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
                     with value_modules(value_types, codegen=False):
                         original_expression = svtypes.sv_type_expression(_codec_from_spec(binding.runtime_spec()))
                     if binding.sv == original_expression:
-                        value_typedefs.update(required_typedefs)
+                        aliases.update(required_typedefs)
                         binding = replace(binding, sv=native_expression)
                 alias = _sv_collection_typedef(binding)
                 if alias is not None:
-                    value_typedefs[alias[0]] = alias[1]
+                    aliases[alias[0]] = alias[1]
                     return alias[0]
+            return expected
+
+        @measured('Signature expected-type preparation')
+        def expected_type(raw_binding, handle):
+            key = None
+            if (isinstance(raw_binding, dict) and isinstance(raw_binding.get('svtypes'), dict)
+                    and _intrinsic_type_identity(raw_binding['svtypes'])):
+                try:
+                    key = json.dumps((raw_binding, handle), sort_keys=True, separators=(',', ':'))
+                except (TypeError, ValueError):
+                    pass  # Keep malformed metadata on its contextual error path.
+            if key is not None and key in signature_types:
+                expected, aliases = signature_types[key]
+                value_typedefs.update(aliases)
+                return expected
+            aliases = {}
+            expected = build_expected_type(raw_binding, handle, aliases)
+            value_typedefs.update(aliases)
+            if key is not None and len(signature_types) < 512:
+                signature_types[key] = expected, aliases
             return expected
 
         for method in declaration.get("methods", []):
@@ -1672,9 +1695,11 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
                 else:
                     arguments.append(_sv_specialization_value(argument["value"], argument.get('sv_type')))
             reference += "#(" + ", ".join(arguments) + ")"
-        package = "svx_signature_probe"
+        package = f"svx_signature_probe_{probe_sequence}"
         while package in occupied:
-            package += "_"
+            probe_sequence += 1
+            package = f"svx_signature_probe_{probe_sequence}"
+        probe_sequence += 1
         occupied.add(package)
         unit = _unit_scope(_declaration_source_symbol(declaration))
         instance = _instance_scope(_declaration_source_symbol(declaration))
@@ -1715,14 +1740,32 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
                           f'bind {instance[0]} {package} #(.SVXNativeType({reference})) {package}();'])
         else:
             lines.append('endpackage')
-        tree = syntax.SyntaxTree.fromText("\n".join(lines) + "\n", source_manager,
-                                          **({} if parse_options is None else {"options": parse_options}))
-        _check_source_diagnostics(tree, f"method signatures of {symbol}")
-        compilation.addSyntaxTree(tree)
+        probe_sources.append((symbol, "\n".join(lines) + "\n"))
         probes.append((symbol, (f'$instance[{instance[0]}.{package}]::Probe' if instance is not None
                                 else package + '::Probe'), checks, constructor, methods))
-    compilation = _compile_owner_probes(compilation, unit_probes, source_manager, parse_options, source_units,
-                                         proxy_context, scope_probes)
+    if probe_sources:
+        with phase('Signature probe parsing'):
+            options = {} if parse_options is None else {'options': parse_options}
+            tree = syntax.SyntaxTree.fromText(''.join(text for _, text in probe_sources), source_manager, **options)
+            try:
+                _check_source_diagnostics(tree, 'native member signature probes')
+            except SVXInheritanceError:
+                # Recover the original declaration-specific diagnostic on errors.
+                for symbol, text in probe_sources:
+                    item = syntax.SyntaxTree.fromText(text, source_manager, **options)
+                    _check_source_diagnostics(item, f'method signatures of {symbol}')
+                raise
+            compilation.addSyntaxTree(tree)
+    with phase('Signature probe semantic binding'):
+        compilation = _compile_owner_probes(compilation, unit_probes, source_manager, parse_options, source_units,
+                                             proxy_context, scope_probes)
+    _compare_signature_probes(compilation, probes)
+
+
+@measured('Signature member comparisons')
+def _compare_signature_probes(compilation, probes):
+    from pyslang.ast import MethodFlags
+
     for symbol, package, checks, constructor, methods in probes:
         probe = _lookup_sv_symbol(compilation, package)
         if probe is None:
