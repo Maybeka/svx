@@ -16,6 +16,29 @@
   `SVX_FIELD_GETTER(TYPE, GETTER, MEMBER) \
   `SVX_FIELD_SETTER(TYPE, SETTER, MEMBER)
 
+`define SVX_FIELD_READ_PAYLOAD(TYPE, PACKER, VALUE) \
+  TYPE _svx__value; \
+  if (bytes.size() != 0) begin \
+    ok = 0; error = "field read request must be empty"; \
+  end else begin \
+    bytes.delete(); \
+    _svx__value = VALUE; \
+    PACKER::pack(_svx__value, bytes); \
+    ok = 1; error = ""; \
+    response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance"); \
+  end
+
+`define SVX_FIELD_WRITE_PAYLOAD(TYPE, PACKER, SETTER, FIELD_ID) \
+  TYPE _svx__value; \
+  int _svx__offset; \
+  _svx__offset = 0; \
+  PACKER::unpack(_svx__value, bytes, _svx__offset); \
+  svx_require_unpacked_all(FIELD_ID, "field write", "field value", _svx__offset, bytes.size()); \
+  SETTER(_svx__value); \
+  bytes.delete(); \
+  ok = 1; error = ""; \
+  response = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+
 `define SVX_INVOKE_CORE(CORE) \
   begin \
     ok = 1; error = ""; \

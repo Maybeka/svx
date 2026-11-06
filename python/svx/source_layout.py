@@ -23,6 +23,7 @@ from .inheritance import (
 )
 from .sv_scan import _pyslang, _source_class_name, _python_proxy_id
 from .sv_source_options import _source_parse_options
+from .export_timing import phase
 
 
 def _startup_registrations(package, *, owner=None):
@@ -57,20 +58,10 @@ def _export_startup_source(registrations, metadata):
 
 def emit_sv_export_bridge(manifest: Manifest, *, metadata=None) -> str:
     """Make direct-export registration explicit across separately analyzed units."""
-    from .sv_scan import _check_source_diagnostics
-
-    bridge = emit_sv_mirrors(manifest)
-    from .cli import sv_dir
-    from pyslang import SourceManager
-    manager = SourceManager()
-    manager.addUserDirectories(str(sv_dir().parent))
-    tree = _pyslang().SyntaxTree.fromText(bridge, manager)
-    _check_source_diagnostics(tree, 'generated export bridge')
-    roots = [tree.root] if hasattr(tree.root, 'header') else getattr(tree.root, 'members', ())
-    registrations = [entry for package in roots
-                     if str(package.kind) == 'SyntaxKind.PackageDeclaration'
-                     for entry in _startup_registrations(package)]
-    return bridge + _export_startup_source(registrations, metadata)
+    registrations = []
+    bridge = emit_sv_mirrors(manifest, startup_registrations=registrations)
+    with phase('SV export startup assembly'):
+        return bridge + _export_startup_source(registrations, metadata)
 
 
 def integrated_source_paths(sources, *, compilation_unit=False):

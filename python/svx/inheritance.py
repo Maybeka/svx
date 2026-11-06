@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 import re
 import tempfile
 from typing import Any, Callable, Iterable, Mapping
-from .export_timing import measured
+from .export_timing import measured, phase
 
 from .errors import SVXCancellationError, SVXInheritanceError, SVXRemoteError
 from ._constructor_continuation import ConstructorContinuations
@@ -834,11 +834,25 @@ def _specialization_dict(specialization: Specialization) -> dict[str, Any]:
     return {"arguments": arguments}
 
 
-def _sv_specialization_value(value: Any) -> str:
+def _sv_specialization_value(value: Any, sv_type: str | None = None) -> str:
     if isinstance(value, bool):
         return "1'b1" if value else "1'b0"
     if isinstance(value, str):
         return json.dumps(value)
+    if isinstance(value, int) and sv_type:
+        packed = re.fullmatch(r'(bit|logic)\s*(signed|unsigned)?\s*(?:\[\s*(-?\d+)\s*:\s*(-?\d+)\s*\])?', sv_type.strip())
+        atom = re.fullmatch(r'(byte|shortint|int|longint|integer|time)\s*(signed|unsigned)?', sv_type.strip())
+        if packed or atom:
+            if packed:
+                width = abs(int(packed[3]) - int(packed[4])) + 1 if packed[3] is not None else 1
+                signed = packed[2] == 'signed'
+            else:
+                width = {'byte': 8, 'shortint': 16, 'int': 32, 'longint': 64, 'integer': 32, 'time': 64}[atom[1]]
+                signed = atom[2] != 'unsigned' and atom[1] != 'time'
+                if width == 32 and signed and -(1 << 31) <= value < (1 << 31):
+                    return str(value)
+            # Signed decimal literals put the sign before the sized literal.
+            return ('-' if value < 0 else '') + f"{width}'{'s' if signed else ''}d{abs(value)}"
     return str(value)
 
 
@@ -856,7 +870,7 @@ def _sv_class_reference(cls: ForeignClass) -> str:
             assert argument.type_binding is not None
             arguments.append(argument.type_binding.sv)
         else:
-            arguments.append(_sv_specialization_value(argument.value))
+            arguments.append(_sv_specialization_value(argument.value, argument.sv_type))
     return f"{cls.symbol}#({', '.join(arguments)})"
 
 
@@ -1452,7 +1466,8 @@ def _all_manifest_classes(manifest: Manifest) -> tuple[ForeignClass, ...]:
     origins: dict[str, str] = {}
     for target in manifest.classes:
         for cls in (*target.base_lineage, target):
-            cls = replace(cls, base_lineage=())
+            if cls.base_lineage:
+                cls = replace(cls, base_lineage=())
             previous = resolved.setdefault(cls.canonical_id, cls)
             origin = origins.setdefault(cls.canonical_id, target.canonical_id)
             if previous != cls:
@@ -3384,24 +3399,13 @@ def _sv_record_type(
         )
     def record_codec(binding):
         codec = _codec_from_spec(binding.runtime_spec())
-        options = None
-        if isinstance(codec, svtypes.Enum):
-            # Native class-owned enum literals are not visible in record scope.
-            options = {'cov': False, 'plusarg': False}
-        elif isinstance(codec, svtypes.SvStruct):
-            # Native struct aliases can contain native handles, not wire RemoteRefs.
-            # Private transport records must not expand them as wire dump fields.
-            options = {'dump': False, 'cov': False, 'plusarg': False}
-        elif isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.Queue, svtypes.AssocArray)):
-            # Transport collections are not user coverage hosts.
-            options = {'cov': False}
-        if options is not None:
-            identity = binding.runtime_spec().get('svtypes')
-            if identity is not None:
-                declaration = svtypes.type_spec_from_identity(identity, location='generated call record')
-                codec = declaration(**options)
-                if svtypes.encoding_descriptor(codec).to_dict() != dict(binding.encoding_descriptor):
-                    raise SVXInheritanceError('disabling transport extras must not change encoding')
+        # Transport envelopes are codecs, not user randomization/coverage hosts.
+        identity = binding.runtime_spec().get('svtypes')
+        if identity is not None:
+            declaration = svtypes.type_spec_from_identity(identity, location='generated call record')
+            codec = declaration(rand=False, cov=False, plusarg=False, dump=False)
+            if svtypes.encoding_descriptor(codec).to_dict() != dict(binding.encoding_descriptor):
+                raise SVXInheritanceError('disabling transport extras must not change encoding')
         return codec
 
     type_id = _call_record_type_id(owner_id, kind)
@@ -3824,6 +3828,17 @@ def _emit_sv_value_field_dispatch_cases(cls: ForeignClass, field: Field, *, acce
     import svtypes
     codec = _codec_from_spec(field.type_binding.runtime_spec())
     packer = svtypes.sv_packer_expression(codec)
+    if accessors is not None and len(accessors) == 3:
+        getter, setter, alias = accessors
+        return [
+            f'        {json.dumps(field_id + "@svx_field_read")}: begin',
+            f'          `SVX_FIELD_READ_PAYLOAD({alias}, {packer}, {getter}())',
+            '        end',
+            f'        {json.dumps(field_id + "@svx_field_set")}: begin',
+            f'          `SVX_FIELD_WRITE_PAYLOAD({alias}, {packer}, {setter}, {json.dumps(field_id)})',
+            '        end',
+            *_emit_sv_field_operation_case(cls, field),
+        ]
     struct_value = isinstance(codec, svtypes.SvStruct)
     lines = [
         f"        {json.dumps(field_id + '@svx_field_read')}: begin",
@@ -4762,7 +4777,7 @@ def _emit_sv_field_bindings(owners, *, occupied=None):
                                    else svtypes.sv_declaration(codec, alias))
                     lines.extend([f'    typedef {declaration.rstrip(";")};',
                                   f'    `SVX_FIELD_ACCESSORS({alias}, {getter}, {setter}, this.{field.name})'])
-                    accessors = (getter, setter)
+                    accessors = (getter, setter, alias)
                 core, dispatch = field_kernel(field, _emit_sv_field_dispatch_cases(owner, field, accessors=accessors), core_name)
                 lines.extend(core)
                 field_cases[field_id] = dispatch
@@ -5509,6 +5524,7 @@ def _emit_sv_static_gateway(
     source_type: str | None = None,
     inherit_source: bool = True,
     automatic_instance: bool = True,
+    register_startup=None,
 ) -> list[str]:
     """Emit a class-owned static dispatch gateway without allocating ``source``.
 
@@ -5521,6 +5537,8 @@ def _emit_sv_static_gateway(
     static_methods = tuple(method for method in source.methods if method.is_static)
     if not static_methods:
         return []
+    if automatic_instance and register_startup is not None:
+        register_startup(instance_name or source.generated_name + '_static_dispatcher')
     source_type = source_type or _sv_class_reference(source)
     constructor_lines = []
     if inherit_source and source.constructor is not None and source.constructor.parameters:
@@ -5624,12 +5642,15 @@ def _emit_sv_factory_core(native_type: str, parameters: tuple[Parameter, ...], *
 
 
 def _emit_sv_projection_factory(source: ForeignClass, helper_name: str, *, announce_receiver: bool = False,
-                                automatic_instance: bool = True, implicit_id: bool | None = None) -> list[str]:
+                                automatic_instance: bool = True, implicit_id: bool | None = None,
+                                register_startup=None) -> list[str]:
     """Factory used when Python creates the paired SV mirror/proxy object."""
 
     constructor = source.constructor
     if source.language == "python" and constructor is not None and constructor.initiator != "python":
         return []
+    if automatic_instance and register_startup is not None:
+        register_startup(f'{helper_name}_factory_instance')
     parameters = constructor.parameters if constructor is not None else ()
     handle_declarations, handle_decode, arguments = _sv_constructor_handle_arguments(parameters)
     record_name = _call_record_class_name(source.canonical_id, "request")
@@ -5728,6 +5749,7 @@ def _emit_sv_projection_helpers(
     *,
     has_call_records: bool,
     has_external_handles: bool,
+    startup_registrations=None,
 ) -> list[str]:
     """Materialize only mirrors/proxies implied by top-level target lineages."""
 
@@ -5794,6 +5816,7 @@ def _emit_sv_projection_helpers(
 
     lines: list[str] = []
     for package in ordered_packages:
+        register_startup = _sv_startup_collector(startup_registrations, package)
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
         lines.extend(
             [
@@ -5852,6 +5875,8 @@ def _emit_sv_projection_helpers(
                 static_methods = tuple(method for method in source.methods if method.is_static)
                 if static_methods:
                     dispatcher_name = f"{source.generated_name}StaticDispatcher"
+                    if register_startup is not None:
+                        register_startup(source.generated_name + '_static_dispatcher')
                     lines.extend(
                         [
                             "",
@@ -5872,6 +5897,7 @@ def _emit_sv_projection_helpers(
                         ]
                     )
                 lines.extend(_emit_sv_projection_factory(source, source.generated_name,
+                    register_startup=register_startup,
                     implicit_id=not super_accepts_object_id and not any(
                         mirror_source.canonical_id == source.canonical_id
                         for _proxy_source, mirror_source, _child in proxies.values())))
@@ -5902,6 +5928,7 @@ def _emit_sv_projection_helpers(
                         gateway_name=names[source.generated_name + 'StaticGateway'],
                         dispatcher_name=names[source.generated_name + 'StaticDispatcher'],
                         instance_name=names[source.generated_name + '_static_dispatcher'],
+                        register_startup=register_startup,
                     ))
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
     return lines
@@ -5944,10 +5971,20 @@ def _emit_sv_implementation_factory(cls: ForeignClass) -> list[str]:
     ]
 
 
+def _sv_startup_collector(registrations, package):
+    if registrations is None:
+        return None
+
+    def register(name):
+        registrations.append(f'    {package}::{name} = new();')
+
+    return register
+
+
 @with_sv_names
 @with_value_types(codegen=True)
 @measured('SV generation')
-def emit_sv_mirrors(manifest: Manifest) -> str:
+def emit_sv_mirrors(manifest: Manifest, *, startup_registrations=None) -> str:
     """Emit target-scoped SV AMirror and Proxy projection helpers."""
 
     if any(cls.source_scope is not None for cls in _all_manifest_classes(manifest)):
@@ -6026,10 +6063,12 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                                      if not uses_generic_handle(binding))
     lines.extend(_emit_sv_external_handle_adapters(manifest, bindings=external_handle_bindings))
     lines.extend(emit_sv_package_callables(manifest, has_records=has_call_package,
-                                          has_handles=bool(external_handle_bindings)))
+                                          has_handles=bool(external_handle_bindings),
+                                          startup_registrations=startup_registrations))
     record_import = ["  import svx_call_records_pkg::*;"] if has_call_package else []
     external_handle_import = ["  import svx_external_handles_pkg::*;"] if external_handle_bindings else []
     for package, classes in sorted(packages.items()):
+        register_startup = _sv_startup_collector(startup_registrations, package)
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
         lines.extend([
             "",
@@ -6111,6 +6150,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
                     gateway_name=names[proxy_name + "StaticGateway"],
                     dispatcher_name=names[proxy_name + "StaticDispatcher"],
                     instance_name=names[proxy_name + "_static_dispatcher"],
+                    register_startup=register_startup,
                 ))
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
 
@@ -6138,6 +6178,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             package = "svx_static_" + "_".join(source.symbol.split("::")[:-1]) + "_" + source.generated_name + "_pkg"
         static_packages.setdefault(package, []).append(source)
     for package, sources in sorted(static_packages.items()):
+        register_startup = _sv_startup_collector(startup_registrations, package)
         guard = re.sub(r"[^A-Za-z0-9_]", "_", package.upper()) + "__SV"
         source_package = sources[0].symbol.split("::")[0]
         lines.extend(
@@ -6166,7 +6207,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             occupied.update(names.values())
             lines.extend(_emit_sv_static_gateway(
                 source, gateway_name=names[gateway], dispatcher_name=names[dispatcher],
-                instance_name=names[instance]))
+                instance_name=names[instance], register_startup=register_startup))
         lines.extend([f"endpackage : {package}", "", f"`endif // {guard}"])
 
     lines.extend(
@@ -6181,6 +6222,7 @@ def emit_sv_mirrors(manifest: Manifest) -> str:
             manifest,
             has_call_records=has_call_package,
             has_external_handles=bool(external_handle_bindings),
+            startup_registrations=startup_registrations,
         )
     )
     return "\n".join(lines).rstrip() + "\n"
@@ -6530,6 +6572,7 @@ def artifact_manifest(
     }
 
 
+@measured('Obsolete output inventory scan')
 def obsolete_generated_sources(output_dir: Path, sources: dict, inventory: str) -> list[Path]:
     index = output_dir / inventory
     if not index.exists():
@@ -6565,6 +6608,7 @@ def obsolete_generated_sources(output_dir: Path, sources: dict, inventory: str) 
     return obsolete
 
 
+@measured('Generated output preflight')
 def validate_generated_sources(sources: dict, output_dir: Path, inventory: str | None = None, *, overwrite: bool = False) -> list[Path]:
     """Preflight ownership and paths before changing a generated output set."""
 
@@ -6597,6 +6641,7 @@ def validate_generated_sources(sources: dict, output_dir: Path, inventory: str |
     return obsolete
 
 
+@measured('Output path validation')
 def validate_output_path(path: Path) -> None:
     """Reject known filesystem conflicts before any generated output is written."""
     if path.exists() and not path.is_file():
@@ -6606,22 +6651,26 @@ def validate_output_path(path: Path) -> None:
             raise SVXInheritanceError(f"generated target parent is not a directory: {parent}")
 
 
+@measured('Generated file publication')
 def write_generated_sources(sources: dict, output_dir: Path, inventory: str, *, overwrite: bool = False) -> list[Path]:
     obsolete = validate_generated_sources(sources, output_dir, inventory, overwrite=overwrite)
     written: list[Path] = []
     for relative_path, text in sources.items():
         path = output_dir / relative_path
-        path.parent.mkdir(parents=True, exist_ok=True)
+        with phase('Output directory preparation'):
+            path.parent.mkdir(parents=True, exist_ok=True)
         write_text_atomic(path, text)
         written.append(path)
-    for path in obsolete:
-        path.unlink()
+    with phase('Obsolete output deletion'):
+        for path in obsolete:
+            path.unlink()
     write_text_atomic(output_dir / inventory, generated_inventory_text(sources))
     from .generated_ownership import baseline_name, baseline_text
     write_text_atomic(output_dir / baseline_name(inventory), baseline_text(sources))
     return written
 
 
+@measured('Generated inventory serialization')
 def generated_inventory_text(sources: dict) -> str:
     return json.dumps(sorted(str(path) for path in sources), indent=2) + "\n"
 
@@ -6684,14 +6733,18 @@ def _stage_text(path: Path, text: str) -> Path:
         raise
 
 
+@measured('Output compare and atomic write')
 def write_text_atomic(path: Path, text: str) -> None:
     """Replace changed artifacts atomically; preserve unchanged build inputs."""
 
-    if path.is_file() and path.read_bytes() == text.encode("utf-8"):
-        return
-    temporary = _stage_text(path, text)
+    with phase('Existing output comparison'):
+        if path.is_file() and path.read_bytes() == text.encode("utf-8"):
+            return
+    with phase('Stage changed output'):
+        temporary = _stage_text(path, text)
     try:
-        temporary.replace(path)
+        with phase('Atomic output replacement'):
+            temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -6911,6 +6964,14 @@ class _CallContract:
     timing: str = "task"
     request_schema: Any | None = dataclass_field(default=None, compare=False, repr=False)
     response_schema: Any | None = dataclass_field(default=None, compare=False, repr=False)
+    parameter_names: frozenset[str] = dataclass_field(init=False, compare=False, repr=False)
+    request_names: frozenset[str] = dataclass_field(init=False, compare=False, repr=False)
+    return_names: frozenset[str] = dataclass_field(init=False, compare=False, repr=False)
+
+    def __post_init__(self):
+        self.parameter_names = frozenset(name for name, _, _ in self.parameters)
+        self.request_names = frozenset(name for name, _ in self.request_fields)
+        self.return_names = frozenset({'result', _return_slot_name(self.parameter_names)} - self.parameter_names)
 
 
 @dataclass(frozen=True)
@@ -6926,6 +6987,34 @@ class _RecordSchemaAdapter:
             session=context.session if context is not None else None
         )
         return prototype.unpack(payload, context)
+
+
+class _PreparedCallSchema:
+    """Schema-owned execution decisions; live values are never cached."""
+
+    def __init__(self, schema, value_type, fields, codecs):
+        self.schema = schema
+        self.value_type = value_type
+        self.fields = fields
+        self.field_names = frozenset(name for name, _ in fields)
+        self.validators = tuple((name, validator) for name, codec in codecs
+                                if (validator := _remote_ref_validator(codec)) is not None)
+        self.pack_with_context = self._accepts_context(schema.pack)
+        self.unpack_with_context = self._accepts_context(schema.unpack)
+
+    @staticmethod
+    def _accepts_context(method):
+        try:
+            inspect.signature(method).bind(None, None)
+        except TypeError:
+            return False
+        return True
+
+    def pack(self, value, context=None):
+        return self.schema.pack(value, context) if self.pack_with_context else self.schema.pack(value)
+
+    def unpack(self, payload, context=None):
+        return self.schema.unpack(payload, context) if self.unpack_with_context else self.schema.unpack(payload)
 
 
 _method_contracts: dict[str, _CallContract] = {}
@@ -7375,8 +7464,8 @@ def _call_record_schema(
     if callable(getattr(schema, "pack", None)) and callable(
         getattr(schema, "unpack", None)
     ):
-        return schema
-    return _RecordSchemaAdapter(schema, value_type)
+        return _PreparedCallSchema(schema, value_type, fields, codecs)
+    return _PreparedCallSchema(_RecordSchemaAdapter(schema, value_type), value_type, fields, codecs)
 
 
 def _contract_schema(contract: _CallContract, method_id: str, kind: str):
@@ -7509,11 +7598,19 @@ def _validate_remote_ref_target(target_type_name: str, value: Any) -> None:
 def _validate_remote_refs(codec: Any, value: Any) -> None:
     """Resolve every opaque reference described by the public SvTypes schema."""
 
+    validator = _remote_ref_validator(codec)
+    if validator is not None:
+        validator(value)
+
+
+def _remote_ref_validator(codec):
+    """Prepare static schema traversal, retaining live reference resolution."""
+
     import svtypes
 
     if isinstance(codec, (svtypes.Bit, svtypes.Logic, svtypes.Int, svtypes.LongInt,
                           svtypes.String, svtypes.Real, svtypes.Enum)):
-        return  # These public scalar codecs cannot contain object references.
+        return None  # These public scalar codecs cannot contain object references.
 
     try:
         schema = svtypes.schema_descriptor(codec).to_dict()["schema"]
@@ -7521,6 +7618,21 @@ def _validate_remote_refs(codec: Any, value: Any) -> None:
         raise SVXInheritanceError(
             f"cannot inspect SvTypes schema for nested RemoteRef validation: {error}"
         ) from error
+
+    def contains_references(node):
+        kind = node.get('kind')
+        if kind in {'remote_ref', 'object_ref'}:
+            return True
+        if kind in {'object', 'struct'}:
+            return any(contains_references(field['type']) for field in node.get('fields', ()))
+        if kind in {'array', 'queue', 'dyn_array'}:
+            return contains_references(node['element'])
+        if kind == 'assoc_array':
+            return contains_references(node['key']) or contains_references(node['value'])
+        return False
+
+    if not contains_references(schema):
+        return None
 
     def visit(node: dict[str, Any], item: Any, seen: set[int]) -> None:
         kind = node.get("kind")
@@ -7556,13 +7668,14 @@ def _validate_remote_refs(codec: Any, value: Any) -> None:
                 visit(node["key"], key, seen)
                 visit(node["value"], element, seen)
 
-    visit(schema, value, set())
+    return lambda value: visit(schema, value, set())
 
 
 def _record_value(schema: Any, fields: tuple[tuple[str, dict[str, Any]], ...], values: dict[str, Any]):
-    expected = {name for name, _ in fields}
-    supplied = set(values)
-    if supplied != expected:
+    prepared = isinstance(schema, _PreparedCallSchema) and fields is schema.fields
+    expected = schema.field_names if prepared else frozenset(name for name, _ in fields)
+    if values.keys() != expected:
+        supplied = set(values)
         missing = sorted(expected - supplied)
         extra = sorted(supplied - expected)
         details = []
@@ -7574,8 +7687,12 @@ def _record_value(schema: Any, fields: tuple[tuple[str, dict[str, Any]], ...], v
     normalized_values = {
         name: _encode_vif_view(value) for name, value in values.items()
     }
-    for name, spec in fields:
-        _validate_remote_refs(_svtypes_codec(spec), normalized_values[name])
+    if prepared:
+        for name, validator in schema.validators:
+            validator(normalized_values[name])
+    else:
+        for name, spec in fields:
+            _validate_remote_refs(_svtypes_codec(spec), normalized_values[name])
     try:
         return schema.value_type(**normalized_values)
     except (AttributeError, TypeError):
@@ -7605,8 +7722,12 @@ def _record_field(value: Any, name: str) -> Any:
 
 
 def _validate_record_fields(
-    value: Any, fields: tuple[tuple[str, dict[str, Any]], ...]
+    value: Any, fields: tuple[tuple[str, dict[str, Any]], ...], *, schema=None
 ) -> None:
+    if isinstance(schema, _PreparedCallSchema) and fields is schema.fields:
+        for name, validator in schema.validators:
+            validator(_record_field(value, name))
+        return
     for name, spec in fields:
         _validate_remote_refs(_svtypes_codec(spec), _record_field(value, name))
 
@@ -7631,9 +7752,9 @@ def _call_values(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Validate a full Python prototype and extract its request payload."""
 
-    expected = {name for name, _, _ in contract.parameters}
-    supplied = set(values)
-    if supplied != expected:
+    expected = contract.parameter_names
+    if values.keys() != expected:
+        supplied = set(values)
         missing = sorted(expected - supplied)
         extra = sorted(supplied - expected)
         details = []
@@ -7655,16 +7776,14 @@ def _call_values(
         else:
             holder = _copyout_holder("output", value, where=f"inheritance argument {name}")
             holders[name] = holder
-            if any(field_name == name for field_name, _ in contract.request_fields):
+            if name in contract.request_names:
                 request[name] = holder.value if holder._svx_copyout_is_set else []
     return request, holders
 
 
 def _is_call_return_field(contract: _CallContract, name: str) -> bool:
     # 'result' was an older private slot, but it is also a legal formal name.
-    return name in {"result", _return_slot_name(p[0] for p in contract.parameters)} and all(
-        name != parameter_name for parameter_name, _, _ in contract.parameters
-    )
+    return name in contract.return_names
 
 
 def _consume_call_response(
@@ -7696,7 +7815,8 @@ def _pack_call_record(schema: Any, value: Any) -> bytes:
     context = svtypes.PackContext(codec_session())
     try:
         try:
-            inspect.signature(schema.pack).bind(value, context)
+            if not isinstance(schema, _PreparedCallSchema):
+                inspect.signature(schema.pack).bind(value, context)
         except TypeError:
             payload = schema.pack(value)
         else:
@@ -7722,7 +7842,8 @@ def _unpack_call_record(schema: Any, payload: bytes):
 
     context = svtypes.UnpackContext(codec_session())
     try:
-        inspect.signature(schema.unpack).bind(payload, context)
+        if not isinstance(schema, _PreparedCallSchema):
+            inspect.signature(schema.unpack).bind(payload, context)
     except TypeError:
         value, consumed = schema.unpack(payload)
     else:
@@ -7779,7 +7900,7 @@ def invoke_sv(object_id: int, method_id: str, values: dict[str, Any]):
             )
         return None
     response = _unpack_call_record(response_schema, payload)
-    _validate_record_fields(response, contract.response_fields)
+    _validate_record_fields(response, contract.response_fields, schema=response_schema)
     return _consume_call_response(contract, method_id, response, holders)
 
 
@@ -7811,7 +7932,7 @@ def invoke_sv_static(class_id: str, method_id: str, values: dict[str, Any]):
             )
         return None
     response = _unpack_call_record(response_schema, payload)
-    _validate_record_fields(response, contract.response_fields)
+    _validate_record_fields(response, contract.response_fields, schema=response_schema)
     return _consume_call_response(contract, method_id, response, holders)
 
 
@@ -7914,7 +8035,7 @@ def _dispatch_python_call(object_id: int, method_id: str, payload: bytes) -> byt
         request_values: dict[str, Any] = {}
     else:
         request = _unpack_call_record(request_schema, payload)
-        _validate_record_fields(request, contract.request_fields)
+        _validate_record_fields(request, contract.request_fields, schema=request_schema)
         request_values = {
             name: _decode_vif_view(_record_field(request, name))
             for name, _ in contract.request_fields
@@ -8261,7 +8382,7 @@ def _decode_constructor_arguments(class_id: str, payload: bytes) -> tuple[Any, .
             raise SVXInheritanceError(f"void constructor request {class_id} contains data")
         return ()
     request = _unpack_call_record(schema, payload)
-    _validate_record_fields(request, contract.request_fields)
+    _validate_record_fields(request, contract.request_fields, schema=schema)
     return tuple(_decode_vif_view(_record_field(request, name)) for name, _ in contract.request_fields)
 
 
@@ -8484,7 +8605,7 @@ def _create_python_instance(class_id: str, object_id: int, payload: bytes) -> No
         arguments = ()
     else:
         request = _unpack_call_record(schema, payload)
-        _validate_record_fields(request, contract.request_fields)
+        _validate_record_fields(request, contract.request_fields, schema=schema)
         arguments = tuple(
             _decode_vif_view(_record_field(request, name)) for name, _ in contract.request_fields
         )

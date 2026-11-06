@@ -16,10 +16,11 @@ def compact_field_bindings(source, header_name, native_aliases=None):
     def replace(match):
         member, function = match.group('member', 'function')
         body = match.group('body')
-        parameters, arguments = ['NAME', 'MEMBER'], [function, 'this.' + member]
-        body = re.sub(r'\b' + re.escape(function) + r'\b', 'NAME', body)
-        for group, replacement in (('getter', 'NAME``_read'), ('setter', 'NAME``_write')):
+        parameters, arguments = ['NAME', 'MEMBER'], [function.removeprefix('_svx__field_'), 'this.' + member]
+        body = re.sub(r'\b' + re.escape(function) + r'\b', '_svx__field_``NAME', body)
+        for group, replacement in (('getter', '_svx__read_``NAME'), ('setter', '_svx__write_``NAME')):
             body = re.sub(r'\b' + re.escape(match.group(group)) + r'\b', replacement, body)
+        body = re.sub(r'\b' + re.escape(match.group('alias')) + r'\b', '_svx__type_``NAME', body)
         body = body.replace('this.' + member, 'this.MEMBER')
         body = body.replace('this.MEMBER', 'MEMBER')
         literals = re.findall(r'"(?:\\.|[^"\\])*"', body)
@@ -32,16 +33,16 @@ def compact_field_bindings(source, header_name, native_aliases=None):
                 if decoded.startswith(identity):
                     suffix = decoded[len(identity):]
                     body = body.replace(value, '{FIELD_ID, ' + json.dumps(suffix) + '}' if suffix else 'FIELD_ID')
-        declaration = re.sub(r'\b' + re.escape(match.group('alias')) + r'\b', 'NAME``_type', match.group('declaration'))
+        declaration = re.sub(r'\b' + re.escape(match.group('alias')) + r'\b', '_svx__type_``NAME', match.group('declaration'))
         body = ('    typedef ' + declaration + ';\n'
-                '    `SVX_FIELD_ACCESSORS(NAME``_type, NAME``_read, NAME``_write, MEMBER)\n' + body)
+                '    `SVX_FIELD_ACCESSORS(_svx__type_``NAME, _svx__read_``NAME, _svx__write_``NAME, MEMBER)\n' + body)
         body = re.sub(r'\bSVX(?:Scoped)?Value_\w+\b',
                       lambda token: native_aliases.get(token[0], token[0]), body)
         body = '\n'.join(line[4:] if line.startswith('    ') else line
                          for line in body.splitlines() if not line.strip().startswith('//'))
         key = (tuple(parameters), body)
         if key not in shapes:
-            type_name = re.sub(r'\bNAME``_type\b', '', declaration).strip()
+            type_name = re.sub(r'\b_svx__type_``NAME\b', '', declaration).strip()
             type_name = re.sub(r'\bSVX(?:Scoped)?Value_\w+\b',
                                lambda token: native_aliases.get(token[0], token[0]), type_name)
             readable_type = re.sub(r'[^A-Za-z0-9_]+', '_', type_name).strip('_')
@@ -79,7 +80,9 @@ def field_kernel(field, cases, core_name):
     from .sv_scan import _pyslang, _check_source_diagnostics
     from .errors import SVXInheritanceError
 
-    prefix = 'class SVXFieldScan; function void invoke(); case(method_id)\n'
+    from .cli import sv_dir
+    prefix = ('`include ' + json.dumps(str(sv_dir() / 'svx_accessors.svh')) + '\n'
+              'class SVXFieldScan; function void invoke(); case(method_id)\n')
     suffix = '\nendcase endfunction endclass\n'
     source = prefix+'\n'.join(cases)+suffix
     tree = _pyslang().SyntaxTree.fromText(source, SourceManager())

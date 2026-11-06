@@ -218,8 +218,8 @@ def merge_callable_sources(manifest, sources):
     return sources
 
 
-def emit_sv_package_callables(manifest, *, has_records, has_handles):
-    from .inheritance import _emit_sv_static_gateway, _sv_value_package_imports
+def emit_sv_package_callables(manifest, *, has_records, has_handles, startup_registrations=None):
+    from .inheritance import _emit_sv_static_gateway, _sv_value_package_imports, _sv_startup_collector
 
     lines = []
     for owner in callable_owners(manifest):
@@ -232,6 +232,7 @@ def emit_sv_package_callables(manifest, *, has_records, has_handles):
         if has_handles:
             lines.append('  import svx_external_handles_pkg::*;')
         lines.extend(_emit_sv_static_gateway(owner, gateway_name='PackageGateway',
-            dispatcher_name='PackageDispatcher', instance_name='package_dispatcher', inherit_source=False))
+            dispatcher_name='PackageDispatcher', instance_name='package_dispatcher', inherit_source=False,
+            register_startup=_sv_startup_collector(startup_registrations, package)))
         lines.append(f'endpackage : {package}')
     return lines

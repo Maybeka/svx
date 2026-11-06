@@ -51,7 +51,7 @@
     {
       "language": "systemverilog",
       "path": "inheritance_mirrors.sv",
-      "sha256": "1294dbd3d0020eb5ce634f480334d2f63c7e2f6a60ff9d1c7f3f9efebbe19c46"
+      "sha256": "b3e19698d416e888a2d4c3cb0bc1082f1d68cc1b9771e871a6adcb08f301dd3a"
     }
   ],
   "callables": [
@@ -129,7 +129,7 @@
     "svx_support": [
       {
         "path": "../../../sv/svx_accessors.svh",
-        "sha256": "693dc4683227b4c93d2618c4aca4b2f81bcf88ac2bbdcc60e190b6b0e5a280bf"
+        "sha256": "f49d30f6a61be76967ca2b8717f4c1089b4169501243e8da08707792fc529de4"
       },
       {
         "path": "../../../sv/svx_inheritance.sv",
@@ -151,12 +151,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 624,
+        "line": 412,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 650,
+        "line": 438,
         "path": "inheritance_mirrors.sv"
       }
     ],
@@ -168,12 +168,12 @@
       },
       {
         "language": "systemverilog",
-        "line": 593,
+        "line": 381,
         "path": "inheritance_mirrors.sv"
       },
       {
         "language": "systemverilog",
-        "line": 673,
+        "line": 461,
         "path": "inheritance_mirrors.sv"
       }
     ]

@@ -90,7 +90,7 @@
     "svx_support": [
       {
         "path": "../../../sv/svx_accessors.svh",
-        "sha256": "693dc4683227b4c93d2618c4aca4b2f81bcf88ac2bbdcc60e190b6b0e5a280bf"
+        "sha256": "f49d30f6a61be76967ca2b8717f4c1089b4169501243e8da08707792fc529de4"
       },
       {
         "path": "../../../sv/svx_inheritance.sv",

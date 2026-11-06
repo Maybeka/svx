@@ -465,9 +465,10 @@ def _cmd_inheritance_gen(args: argparse.Namespace, out: TextIO) -> int:
 
 
 def _generate_inheritance(args: argparse.Namespace, out: TextIO, consumed: dict,
-                          certified_sources: dict, *, discovered_manifest=None) -> int:
+                          certified_sources: dict, *, discovered_manifest=None, macro_config=None) -> int:
     direct = discovered_manifest is not None
-    macro_config = _sv_macro_config(args)
+    if macro_config is None:
+        macro_config = _sv_macro_config(args)
     integrated_dir = getattr(args, 'sv_integrated_dir', None)
     editable_dir = getattr(args, 'sv_output_dir', None)
     output_options = (args.sv_out, args.sv_stage_dir, integrated_dir, editable_dir)
@@ -833,12 +834,32 @@ def _generated_artifact_text(
     )
 
 
+@measured('Input overwrite protection')
 def _protect_generation_inputs(targets, inputs) -> None:
+    inputs = set(inputs)
+    if not inputs:
+        return
+    identities = None
     for target in targets:
         path = target.resolve()
-        for source in inputs:
-            if path == source or (target.exists() and source.exists() and target.samefile(source)):
-                raise SVXInheritanceError(f"generated output would replace or remove input source: {target}")
+        collision = path in inputs
+        if not collision:
+            try:
+                status = target.stat()
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            # Build the hard-link index lazily: new outputs need only path checks.
+            if identities is None:
+                identities = set()
+                for source in inputs:
+                    try:
+                        source_status = source.stat()
+                    except (FileNotFoundError, NotADirectoryError):
+                        continue
+                    identities.add((source_status.st_dev, source_status.st_ino))
+            collision = (status.st_dev, status.st_ino) in identities
+        if collision:
+            raise SVXInheritanceError(f"generated output would replace or remove input source: {target}")
 
 
 _STDLIB_SOURCE_ROOTS = tuple(dict.fromkeys(
@@ -1359,7 +1380,7 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
     for name in ('sv_source', 'sv_filelist', 'sv_relative_filelist', 'sv_build_command',
                  'sv_build_directory', 'sv_include_dir', 'sv_compilation_unit',
                  'sv_define', 'sv_undefine', 'sv_elaboration', 'exclude_source', 'python_source'):
-        setattr(generation, name, getattr(args, name))
+        setattr(generation, name, getattr(discovery if direct else args, name))
     generation._export_progress = getattr(args, '_export_progress', None)
     if direct:
         from .inheritance import call_record_generation
@@ -1368,12 +1389,15 @@ def _export_uncached(args: argparse.Namespace, out: TextIO) -> int:
             *source_inputs,
             *(Path(p).resolve() for p in args.sv_declarations),
             *(Path(module.__file__).resolve() for module in modules if getattr(module, '__file__', None))]
-        _sv_macro_config(generation)
+        generation._sv_build_configuration = discovery._sv_build_configuration
+        generation._sv_build_recipe = discovery._sv_build_recipe
+        generation._excluded_sv_sources = discovery._excluded_sv_sources
         with (phase('Generation'), call_record_generation(),
               type_reference_mode(args.use_type_reference),
               source_elaboration(args.sv_elaboration),
               library_search(generation._sv_build_configuration)):
-            _generate_inheritance(generation, StringIO(), {}, {}, discovered_manifest=manifest)
+            _generate_inheritance(generation, StringIO(), {}, {}, discovered_manifest=manifest,
+                                  macro_config=macro_config)
         if not args.check:
             write_text_atomic(manifest_path, manifest_text)
     else:

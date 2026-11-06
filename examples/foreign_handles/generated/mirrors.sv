@@ -56,7 +56,7 @@ package svx_call_records_pkg;
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv://example_packet_pkg/Packet"))::apply(this.packet, "packet", 1'b0, 1'b1, 1'b1, 1'b0, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv://example_packet_pkg/Packet"))::apply(this.packet, "packet", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -220,7 +220,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv://example_packet_pkg/Packet"))::apply(this.svx_return_value, "svx_return_value", 1'b0, 1'b1, 1'b1, 1'b0, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv://example_packet_pkg/Packet"))::apply(this.svx_return_value, "svx_return_value", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -391,7 +391,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv-vif://example_bus_if/master"))::apply(this.bus, "bus", 1'b0, 1'b1, 1'b1, 1'b0, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv-vif://example_bus_if/master"))::apply(this.bus, "bus", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -555,7 +555,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv-vif://example_bus_if/master"))::apply(this.svx_return_value, "svx_return_value", 1'b0, 1'b1, 1'b1, 1'b0, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::remote_ref_field_operations#(svtypes_pkg::remote_ref, svtypes_pkg::bound_remote_ref_packer#("sv-vif://example_bus_if/master"))::apply(this.svx_return_value, "svx_return_value", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -679,7 +679,7 @@ endclass
 endclass
 
   class _svx__call_example_bus_if_master_read_Response extends svtypes_pkg::sv_object;
-    rand logic [7:0] svx_return_value;
+    logic [7:0] svx_return_value;
 
     protected bit __svtypes_layered_randomize_active;
     protected int __svtypes_layered_randomize_priority;
@@ -694,128 +694,22 @@ endclass
       int __svtypes_ok;
       bit __svtypes_previous_layered_active;
       int __svtypes_previous_layered_priority;
-      int __svtypes_rand_svx_return_value;
       __svtypes_ok = 1;
       __svtypes_previous_layered_active = __svtypes_layered_randomize_active;
       __svtypes_previous_layered_priority = __svtypes_layered_randomize_priority;
       __svtypes_layered_randomize_active = 1;
-      __svtypes_rand_svx_return_value = svx_return_value.rand_mode();
-      svx_return_value.rand_mode(0);
       if (__svtypes_ok) begin
         __svtypes_layered_randomize_priority = 0;
-        svx_return_value.rand_mode(1);
         if (!this.randomize()) begin
           __svtypes_ok = 0;
         end
         else begin
-          svx_return_value.rand_mode(0);
         end
       end
-      svx_return_value.rand_mode(__svtypes_rand_svx_return_value);
       __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
       __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
       return __svtypes_ok;
     endfunction
-
-    class _svx__call_example_bus_if_master_read_Response__svtypes_coverage;
-      covergroup cg with function sample(_svx__call_example_bus_if_master_read_Response item);
-        option.at_least = 1;
-        option.auto_bin_max = 64;
-        option.comment = "";
-        option.cross_num_print_missing = 0;
-        option.detect_overlap = 0;
-        option.goal = 100;
-        option.per_instance = 0;
-        option.weight = 1;
-        type_option.comment = "";
-        type_option.goal = 100;
-        type_option.weight = 1;
-        svx_return_value: coverpoint item.svx_return_value {
-            option.at_least = 1;
-            option.auto_bin_max = 64;
-            option.comment = "";
-            option.detect_overlap = 0;
-            option.goal = 100;
-            option.weight = 1;
-            bins auto_0_3_ = {[0:3]};
-            bins auto_100_103_ = {[100:103]};
-            bins auto_104_107_ = {[104:107]};
-            bins auto_108_111_ = {[108:111]};
-            bins auto_112_115_ = {[112:115]};
-            bins auto_116_119_ = {[116:119]};
-            bins auto_120_123_ = {[120:123]};
-            bins auto_124_127_ = {[124:127]};
-            bins auto_128_131_ = {[128:131]};
-            bins auto_12_15_ = {[12:15]};
-            bins auto_132_135_ = {[132:135]};
-            bins auto_136_139_ = {[136:139]};
-            bins auto_140_143_ = {[140:143]};
-            bins auto_144_147_ = {[144:147]};
-            bins auto_148_151_ = {[148:151]};
-            bins auto_152_155_ = {[152:155]};
-            bins auto_156_159_ = {[156:159]};
-            bins auto_160_163_ = {[160:163]};
-            bins auto_164_167_ = {[164:167]};
-            bins auto_168_171_ = {[168:171]};
-            bins auto_16_19_ = {[16:19]};
-            bins auto_172_175_ = {[172:175]};
-            bins auto_176_179_ = {[176:179]};
-            bins auto_180_183_ = {[180:183]};
-            bins auto_184_187_ = {[184:187]};
-            bins auto_188_191_ = {[188:191]};
-            bins auto_192_195_ = {[192:195]};
-            bins auto_196_199_ = {[196:199]};
-            bins auto_200_203_ = {[200:203]};
-            bins auto_204_207_ = {[204:207]};
-            bins auto_208_211_ = {[208:211]};
-            bins auto_20_23_ = {[20:23]};
-            bins auto_212_215_ = {[212:215]};
-            bins auto_216_219_ = {[216:219]};
-            bins auto_220_223_ = {[220:223]};
-            bins auto_224_227_ = {[224:227]};
-            bins auto_228_231_ = {[228:231]};
-            bins auto_232_235_ = {[232:235]};
-            bins auto_236_239_ = {[236:239]};
-            bins auto_240_243_ = {[240:243]};
-            bins auto_244_247_ = {[244:247]};
-            bins auto_248_251_ = {[248:251]};
-            bins auto_24_27_ = {[24:27]};
-            bins auto_252_255_ = {[252:255]};
-            bins auto_28_31_ = {[28:31]};
-            bins auto_32_35_ = {[32:35]};
-            bins auto_36_39_ = {[36:39]};
-            bins auto_40_43_ = {[40:43]};
-            bins auto_44_47_ = {[44:47]};
-            bins auto_48_51_ = {[48:51]};
-            bins auto_4_7_ = {[4:7]};
-            bins auto_52_55_ = {[52:55]};
-            bins auto_56_59_ = {[56:59]};
-            bins auto_60_63_ = {[60:63]};
-            bins auto_64_67_ = {[64:67]};
-            bins auto_68_71_ = {[68:71]};
-            bins auto_72_75_ = {[72:75]};
-            bins auto_76_79_ = {[76:79]};
-            bins auto_80_83_ = {[80:83]};
-            bins auto_84_87_ = {[84:87]};
-            bins auto_88_91_ = {[88:91]};
-            bins auto_8_11_ = {[8:11]};
-            bins auto_92_95_ = {[92:95]};
-            bins auto_96_99_ = {[96:99]};
-        }
-      endgroup
-
-      function new();
-        cg = new();
-      endfunction
-
-      function void sample(_svx__call_example_bus_if_master_read_Response item);
-        cg.sample(item);
-      endfunction
-
-      function real get_coverage();
-        return cg.get_coverage();
-      endfunction
-    endclass
 
     // SvTypes support: descriptors, plusargs, display, and wire codecs.
 
@@ -832,7 +726,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::bit_field_operations#(logic [$bits(this.svx_return_value)-1:0], svtypes_pkg::logic_packer#(logic [$bits(this.svx_return_value)-1:0]))::apply(this.svx_return_value, "svx_return_value", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::bit_field_operations#(logic [$bits(this.svx_return_value)-1:0], svtypes_pkg::logic_packer#(logic [$bits(this.svx_return_value)-1:0]))::apply(this.svx_return_value, "svx_return_value", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -949,7 +843,7 @@ endclass
 endclass
 
   class _svx__call_example_bus_if_master_write_Request extends svtypes_pkg::sv_object;
-    rand logic [7:0] value;
+    logic [7:0] value;
 
     protected bit __svtypes_layered_randomize_active;
     protected int __svtypes_layered_randomize_priority;
@@ -964,128 +858,22 @@ endclass
       int __svtypes_ok;
       bit __svtypes_previous_layered_active;
       int __svtypes_previous_layered_priority;
-      int __svtypes_rand_value;
       __svtypes_ok = 1;
       __svtypes_previous_layered_active = __svtypes_layered_randomize_active;
       __svtypes_previous_layered_priority = __svtypes_layered_randomize_priority;
       __svtypes_layered_randomize_active = 1;
-      __svtypes_rand_value = value.rand_mode();
-      value.rand_mode(0);
       if (__svtypes_ok) begin
         __svtypes_layered_randomize_priority = 0;
-        value.rand_mode(1);
         if (!this.randomize()) begin
           __svtypes_ok = 0;
         end
         else begin
-          value.rand_mode(0);
         end
       end
-      value.rand_mode(__svtypes_rand_value);
       __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
       __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
       return __svtypes_ok;
     endfunction
-
-    class _svx__call_example_bus_if_master_write_Request__svtypes_coverage;
-      covergroup cg with function sample(_svx__call_example_bus_if_master_write_Request item);
-        option.at_least = 1;
-        option.auto_bin_max = 64;
-        option.comment = "";
-        option.cross_num_print_missing = 0;
-        option.detect_overlap = 0;
-        option.goal = 100;
-        option.per_instance = 0;
-        option.weight = 1;
-        type_option.comment = "";
-        type_option.goal = 100;
-        type_option.weight = 1;
-        value: coverpoint item.value {
-            option.at_least = 1;
-            option.auto_bin_max = 64;
-            option.comment = "";
-            option.detect_overlap = 0;
-            option.goal = 100;
-            option.weight = 1;
-            bins auto_0_3_ = {[0:3]};
-            bins auto_100_103_ = {[100:103]};
-            bins auto_104_107_ = {[104:107]};
-            bins auto_108_111_ = {[108:111]};
-            bins auto_112_115_ = {[112:115]};
-            bins auto_116_119_ = {[116:119]};
-            bins auto_120_123_ = {[120:123]};
-            bins auto_124_127_ = {[124:127]};
-            bins auto_128_131_ = {[128:131]};
-            bins auto_12_15_ = {[12:15]};
-            bins auto_132_135_ = {[132:135]};
-            bins auto_136_139_ = {[136:139]};
-            bins auto_140_143_ = {[140:143]};
-            bins auto_144_147_ = {[144:147]};
-            bins auto_148_151_ = {[148:151]};
-            bins auto_152_155_ = {[152:155]};
-            bins auto_156_159_ = {[156:159]};
-            bins auto_160_163_ = {[160:163]};
-            bins auto_164_167_ = {[164:167]};
-            bins auto_168_171_ = {[168:171]};
-            bins auto_16_19_ = {[16:19]};
-            bins auto_172_175_ = {[172:175]};
-            bins auto_176_179_ = {[176:179]};
-            bins auto_180_183_ = {[180:183]};
-            bins auto_184_187_ = {[184:187]};
-            bins auto_188_191_ = {[188:191]};
-            bins auto_192_195_ = {[192:195]};
-            bins auto_196_199_ = {[196:199]};
-            bins auto_200_203_ = {[200:203]};
-            bins auto_204_207_ = {[204:207]};
-            bins auto_208_211_ = {[208:211]};
-            bins auto_20_23_ = {[20:23]};
-            bins auto_212_215_ = {[212:215]};
-            bins auto_216_219_ = {[216:219]};
-            bins auto_220_223_ = {[220:223]};
-            bins auto_224_227_ = {[224:227]};
-            bins auto_228_231_ = {[228:231]};
-            bins auto_232_235_ = {[232:235]};
-            bins auto_236_239_ = {[236:239]};
-            bins auto_240_243_ = {[240:243]};
-            bins auto_244_247_ = {[244:247]};
-            bins auto_248_251_ = {[248:251]};
-            bins auto_24_27_ = {[24:27]};
-            bins auto_252_255_ = {[252:255]};
-            bins auto_28_31_ = {[28:31]};
-            bins auto_32_35_ = {[32:35]};
-            bins auto_36_39_ = {[36:39]};
-            bins auto_40_43_ = {[40:43]};
-            bins auto_44_47_ = {[44:47]};
-            bins auto_48_51_ = {[48:51]};
-            bins auto_4_7_ = {[4:7]};
-            bins auto_52_55_ = {[52:55]};
-            bins auto_56_59_ = {[56:59]};
-            bins auto_60_63_ = {[60:63]};
-            bins auto_64_67_ = {[64:67]};
-            bins auto_68_71_ = {[68:71]};
-            bins auto_72_75_ = {[72:75]};
-            bins auto_76_79_ = {[76:79]};
-            bins auto_80_83_ = {[80:83]};
-            bins auto_84_87_ = {[84:87]};
-            bins auto_88_91_ = {[88:91]};
-            bins auto_8_11_ = {[8:11]};
-            bins auto_92_95_ = {[92:95]};
-            bins auto_96_99_ = {[96:99]};
-        }
-      endgroup
-
-      function new();
-        cg = new();
-      endfunction
-
-      function void sample(_svx__call_example_bus_if_master_write_Request item);
-        cg.sample(item);
-      endfunction
-
-      function real get_coverage();
-        return cg.get_coverage();
-      endfunction
-    endclass
 
     // SvTypes support: descriptors, plusargs, display, and wire codecs.
 
@@ -1102,7 +890,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::bit_field_operations#(logic [$bits(this.value)-1:0], svtypes_pkg::logic_packer#(logic [$bits(this.value)-1:0]))::apply(this.value, "value", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::bit_field_operations#(logic [$bits(this.value)-1:0], svtypes_pkg::logic_packer#(logic [$bits(this.value)-1:0]))::apply(this.value, "value", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -1219,7 +1007,7 @@ endclass
 endclass
 
   class _svx__call_example_bus_if_master_write_data_Request extends svtypes_pkg::sv_object;
-    rand logic [7:0] value;
+    logic [7:0] value;
 
     protected bit __svtypes_layered_randomize_active;
     protected int __svtypes_layered_randomize_priority;
@@ -1234,128 +1022,22 @@ endclass
       int __svtypes_ok;
       bit __svtypes_previous_layered_active;
       int __svtypes_previous_layered_priority;
-      int __svtypes_rand_value;
       __svtypes_ok = 1;
       __svtypes_previous_layered_active = __svtypes_layered_randomize_active;
       __svtypes_previous_layered_priority = __svtypes_layered_randomize_priority;
       __svtypes_layered_randomize_active = 1;
-      __svtypes_rand_value = value.rand_mode();
-      value.rand_mode(0);
       if (__svtypes_ok) begin
         __svtypes_layered_randomize_priority = 0;
-        value.rand_mode(1);
         if (!this.randomize()) begin
           __svtypes_ok = 0;
         end
         else begin
-          value.rand_mode(0);
         end
       end
-      value.rand_mode(__svtypes_rand_value);
       __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
       __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
       return __svtypes_ok;
     endfunction
-
-    class _svx__call_example_bus_if_master_write_data_Request__svtypes_coverage;
-      covergroup cg with function sample(_svx__call_example_bus_if_master_write_data_Request item);
-        option.at_least = 1;
-        option.auto_bin_max = 64;
-        option.comment = "";
-        option.cross_num_print_missing = 0;
-        option.detect_overlap = 0;
-        option.goal = 100;
-        option.per_instance = 0;
-        option.weight = 1;
-        type_option.comment = "";
-        type_option.goal = 100;
-        type_option.weight = 1;
-        value: coverpoint item.value {
-            option.at_least = 1;
-            option.auto_bin_max = 64;
-            option.comment = "";
-            option.detect_overlap = 0;
-            option.goal = 100;
-            option.weight = 1;
-            bins auto_0_3_ = {[0:3]};
-            bins auto_100_103_ = {[100:103]};
-            bins auto_104_107_ = {[104:107]};
-            bins auto_108_111_ = {[108:111]};
-            bins auto_112_115_ = {[112:115]};
-            bins auto_116_119_ = {[116:119]};
-            bins auto_120_123_ = {[120:123]};
-            bins auto_124_127_ = {[124:127]};
-            bins auto_128_131_ = {[128:131]};
-            bins auto_12_15_ = {[12:15]};
-            bins auto_132_135_ = {[132:135]};
-            bins auto_136_139_ = {[136:139]};
-            bins auto_140_143_ = {[140:143]};
-            bins auto_144_147_ = {[144:147]};
-            bins auto_148_151_ = {[148:151]};
-            bins auto_152_155_ = {[152:155]};
-            bins auto_156_159_ = {[156:159]};
-            bins auto_160_163_ = {[160:163]};
-            bins auto_164_167_ = {[164:167]};
-            bins auto_168_171_ = {[168:171]};
-            bins auto_16_19_ = {[16:19]};
-            bins auto_172_175_ = {[172:175]};
-            bins auto_176_179_ = {[176:179]};
-            bins auto_180_183_ = {[180:183]};
-            bins auto_184_187_ = {[184:187]};
-            bins auto_188_191_ = {[188:191]};
-            bins auto_192_195_ = {[192:195]};
-            bins auto_196_199_ = {[196:199]};
-            bins auto_200_203_ = {[200:203]};
-            bins auto_204_207_ = {[204:207]};
-            bins auto_208_211_ = {[208:211]};
-            bins auto_20_23_ = {[20:23]};
-            bins auto_212_215_ = {[212:215]};
-            bins auto_216_219_ = {[216:219]};
-            bins auto_220_223_ = {[220:223]};
-            bins auto_224_227_ = {[224:227]};
-            bins auto_228_231_ = {[228:231]};
-            bins auto_232_235_ = {[232:235]};
-            bins auto_236_239_ = {[236:239]};
-            bins auto_240_243_ = {[240:243]};
-            bins auto_244_247_ = {[244:247]};
-            bins auto_248_251_ = {[248:251]};
-            bins auto_24_27_ = {[24:27]};
-            bins auto_252_255_ = {[252:255]};
-            bins auto_28_31_ = {[28:31]};
-            bins auto_32_35_ = {[32:35]};
-            bins auto_36_39_ = {[36:39]};
-            bins auto_40_43_ = {[40:43]};
-            bins auto_44_47_ = {[44:47]};
-            bins auto_48_51_ = {[48:51]};
-            bins auto_4_7_ = {[4:7]};
-            bins auto_52_55_ = {[52:55]};
-            bins auto_56_59_ = {[56:59]};
-            bins auto_60_63_ = {[60:63]};
-            bins auto_64_67_ = {[64:67]};
-            bins auto_68_71_ = {[68:71]};
-            bins auto_72_75_ = {[72:75]};
-            bins auto_76_79_ = {[76:79]};
-            bins auto_80_83_ = {[80:83]};
-            bins auto_84_87_ = {[84:87]};
-            bins auto_88_91_ = {[88:91]};
-            bins auto_8_11_ = {[8:11]};
-            bins auto_92_95_ = {[92:95]};
-            bins auto_96_99_ = {[96:99]};
-        }
-      endgroup
-
-      function new();
-        cg = new();
-      endfunction
-
-      function void sample(_svx__call_example_bus_if_master_write_data_Request item);
-        cg.sample(item);
-      endfunction
-
-      function real get_coverage();
-        return cg.get_coverage();
-      endfunction
-    endclass
 
     // SvTypes support: descriptors, plusargs, display, and wire codecs.
 
@@ -1372,7 +1054,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::bit_field_operations#(logic [$bits(this.value)-1:0], svtypes_pkg::logic_packer#(logic [$bits(this.value)-1:0]))::apply(this.value, "value", 1'b0, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::bit_field_operations#(logic [$bits(this.value)-1:0], svtypes_pkg::logic_packer#(logic [$bits(this.value)-1:0]))::apply(this.value, "value", 1'b0, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 

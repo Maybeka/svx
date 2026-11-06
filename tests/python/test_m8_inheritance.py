@@ -222,8 +222,8 @@ def test_sv_owned_fields_bind_to_inherited_storage_without_shadowing():
     assert "int count;" not in sv_text
     assert 'type(this.count)' not in sv_text
     assert "int_packer::pack(this.count, bytes)" in sv_text
-    assert "int_packer::unpack(field_wire, bytes, field_offset)" in sv_text
-    assert '_svx__core_write_Base_count(field_wire);' in sv_text
+    assert '`SVX_FIELD_WRITE_PAYLOAD(' in sv_text
+    assert 'svtypes_pkg::int_packer, _svx__core_write_Base_count,' in sv_text
 
 
 @pytest.mark.parametrize("annotation,kind", [
@@ -756,8 +756,10 @@ def test_closed_parameterized_sv_class_emits_a_specialized_mirror(sv_type):
     )
     manifest = parse_manifest(data)
     text = emit_sv_mirrors(manifest)
-    assert "class BaseDriver extends tb_pkg::BaseDriver#(int, 16)" in text
-    assert "extends tb_pkg::BaseDriver#(int, 16)" in text
+    from svx.inheritance import _sv_specialization_value
+    literal = _sv_specialization_value(16, sv_type)
+    assert f'class BaseDriver extends tb_pkg::BaseDriver#(int, {literal})' in text
+    assert f'extends tb_pkg::BaseDriver#(int, {literal})' in text
 
     duplicate = manifest_data()
     duplicate["classes"][0]["specialization"] = base["specialization"]

@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 
 from .errors import SVXInheritanceError
+from .export_timing import measured
 
 
 def baseline_name(inventory):
     return inventory+'.sha256.json'
 
 
+@measured('Output snapshot hashing and serialization')
 def baseline_text(sources):
     return json.dumps({'schema': 'svx-generated-baseline/v1',
         'files': {str(path): hashlib.sha256(text.encode('utf-8')).hexdigest()
@@ -17,6 +19,7 @@ def baseline_text(sources):
         indent=2)+'\n'
 
 
+@measured('Manual-edit snapshot validation')
 def protect_baseline(output_dir, inventory, sources, obsolete, *, overwrite=False):
     path = Path(output_dir)/baseline_name(inventory)
     if not path.exists():
@@ -58,6 +61,7 @@ def protect_baseline(output_dir, inventory, sources, obsolete, *, overwrite=Fals
     protect_manual_edits(previous, path, [*expected, *obsolete], overwrite=overwrite, expected_sources=expected)
 
 
+@measured('Manual-edit content comparison')
 def protect_manual_edits(previous, manifest_path, managed_paths, *, overwrite=False, expected_sources=None):
     if overwrite or previous is None:
         return

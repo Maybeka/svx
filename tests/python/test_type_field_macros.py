@@ -28,12 +28,12 @@ def test_export_shares_concrete_type_macros_and_keeps_native_lvalues(tmp_path):
     assert len(definitions) == 2
     state = next(name for name in definitions if 'state_t' in name)
     compact = re.sub(r'\s+', '', core)
-    assert f'`{state}(_svx__field_first,this.first,' in compact
-    assert f'`{state}(_svx__field_second,this.second,' in compact
+    assert f'`{state}(first,this.first,' in compact
+    assert f'`{state}(second,this.second,' in compact
     assert all(f'`undef {name}' in core for name in definitions)
     assert 'MEMBER[operation.path_index' in support
     assert 'TYPE_OR_ACCESSOR' not in support
-    assert 'typedef fields::state_t NAME``_type [3];' in support
+    assert 'typedef fields::state_t _svx__type_``NAME [3];' in support
     operation = core.split('function void _svx__core_Driver_exchange(', 1)[1].split('endfunction', 1)[0]
     assert '::from_request(req)' in operation
     assert 'super.exchange(req.index, rsp.current, rsp.previous);' in operation

@@ -1216,7 +1216,7 @@ def _declared_class_reference(declaration) -> str:
     specialization = declaration.get("specialization")
     if isinstance(specialization, dict):
         arguments = [(_declared_sv_type(argument.get("type")) if argument["kind"] == "type"
-                      else _sv_specialization_value(argument["value"]))
+                      else _sv_specialization_value(argument["value"], argument.get('sv_type')))
                      for argument in specialization["arguments"]]
         if any(argument is None for argument in arguments):
             raise SVXInheritanceError(f"SV declaration {reference} lacks a closed specialization type")
@@ -1282,7 +1282,7 @@ def _canonical_sv_handle_type(actual) -> str:
                     arguments.append(str(target))
             elif member.kind.name == 'Parameter' and not member.isLocalParam:
                 if member.type.isIntegral and not member.value.hasUnknown():
-                    arguments.append(_sv_specialization_value(int(member.value.value)))
+                    arguments.append(_sv_specialization_value(int(member.value.value), str(member.type)))
                 elif member.type.isString:
                     arguments.append(_sv_specialization_value(str(member.value.value)))
                 else:
@@ -1670,7 +1670,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
                         raise SVXInheritanceError(f"SV declaration {symbol} lacks a closed specialization type")
                     arguments.append(expected)
                 else:
-                    arguments.append(_sv_specialization_value(argument["value"]))
+                    arguments.append(_sv_specialization_value(argument["value"], argument.get('sv_type')))
             reference += "#(" + ", ".join(arguments) + ")"
         package = "svx_signature_probe"
         while package in occupied:

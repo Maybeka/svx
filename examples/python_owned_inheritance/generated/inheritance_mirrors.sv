@@ -9,7 +9,7 @@ package svx_call_records_pkg;
   import svtypes_pkg::*;
 
   class _svx__call_base_monitor_BaseMonitor_Request extends svtypes_pkg::sv_object;
-    rand int seed;
+    int seed;
 
     protected bit __svtypes_layered_randomize_active;
     protected int __svtypes_layered_randomize_priority;
@@ -24,128 +24,22 @@ package svx_call_records_pkg;
       int __svtypes_ok;
       bit __svtypes_previous_layered_active;
       int __svtypes_previous_layered_priority;
-      int __svtypes_rand_seed;
       __svtypes_ok = 1;
       __svtypes_previous_layered_active = __svtypes_layered_randomize_active;
       __svtypes_previous_layered_priority = __svtypes_layered_randomize_priority;
       __svtypes_layered_randomize_active = 1;
-      __svtypes_rand_seed = seed.rand_mode();
-      seed.rand_mode(0);
       if (__svtypes_ok) begin
         __svtypes_layered_randomize_priority = 0;
-        seed.rand_mode(1);
         if (!this.randomize()) begin
           __svtypes_ok = 0;
         end
         else begin
-          seed.rand_mode(0);
         end
       end
-      seed.rand_mode(__svtypes_rand_seed);
       __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
       __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
       return __svtypes_ok;
     endfunction
-
-    class _svx__call_base_monitor_BaseMonitor_Request__svtypes_coverage;
-      covergroup cg with function sample(_svx__call_base_monitor_BaseMonitor_Request item);
-        option.at_least = 1;
-        option.auto_bin_max = 64;
-        option.comment = "";
-        option.cross_num_print_missing = 0;
-        option.detect_overlap = 0;
-        option.goal = 100;
-        option.per_instance = 0;
-        option.weight = 1;
-        type_option.comment = "";
-        type_option.goal = 100;
-        type_option.weight = 1;
-        seed: coverpoint item.seed {
-            option.at_least = 1;
-            option.auto_bin_max = 64;
-            option.comment = "";
-            option.detect_overlap = 0;
-            option.goal = 100;
-            option.weight = 1;
-            bins auto__1006632960__939524097_ = {[-1006632960:-939524097]};
-            bins auto__1073741824__1006632961_ = {[-1073741824:-1006632961]};
-            bins auto__1140850688__1073741825_ = {[-1140850688:-1073741825]};
-            bins auto__1207959552__1140850689_ = {[-1207959552:-1140850689]};
-            bins auto__1275068416__1207959553_ = {[-1275068416:-1207959553]};
-            bins auto__1342177280__1275068417_ = {[-1342177280:-1275068417]};
-            bins auto__134217728__67108865_ = {[-134217728:-67108865]};
-            bins auto__1409286144__1342177281_ = {[-1409286144:-1342177281]};
-            bins auto__1476395008__1409286145_ = {[-1476395008:-1409286145]};
-            bins auto__1543503872__1476395009_ = {[-1543503872:-1476395009]};
-            bins auto__1610612736__1543503873_ = {[-1610612736:-1543503873]};
-            bins auto__1677721600__1610612737_ = {[-1677721600:-1610612737]};
-            bins auto__1744830464__1677721601_ = {[-1744830464:-1677721601]};
-            bins auto__1811939328__1744830465_ = {[-1811939328:-1744830465]};
-            bins auto__1879048192__1811939329_ = {[-1879048192:-1811939329]};
-            bins auto__1946157056__1879048193_ = {[-1946157056:-1879048193]};
-            bins auto__2013265920__1946157057_ = {[-2013265920:-1946157057]};
-            bins auto__201326592__134217729_ = {[-201326592:-134217729]};
-            bins auto__2080374784__2013265921_ = {[-2080374784:-2013265921]};
-            bins auto__2147483648__2080374785_ = {[-2147483648:-2080374785]};
-            bins auto__268435456__201326593_ = {[-268435456:-201326593]};
-            bins auto__335544320__268435457_ = {[-335544320:-268435457]};
-            bins auto__402653184__335544321_ = {[-402653184:-335544321]};
-            bins auto__469762048__402653185_ = {[-469762048:-402653185]};
-            bins auto__536870912__469762049_ = {[-536870912:-469762049]};
-            bins auto__603979776__536870913_ = {[-603979776:-536870913]};
-            bins auto__671088640__603979777_ = {[-671088640:-603979777]};
-            bins auto__67108864__1_ = {[-67108864:-1]};
-            bins auto__738197504__671088641_ = {[-738197504:-671088641]};
-            bins auto__805306368__738197505_ = {[-805306368:-738197505]};
-            bins auto__872415232__805306369_ = {[-872415232:-805306369]};
-            bins auto__939524096__872415233_ = {[-939524096:-872415233]};
-            bins auto_0_67108863_ = {[0:67108863]};
-            bins auto_1006632960_1073741823_ = {[1006632960:1073741823]};
-            bins auto_1073741824_1140850687_ = {[1073741824:1140850687]};
-            bins auto_1140850688_1207959551_ = {[1140850688:1207959551]};
-            bins auto_1207959552_1275068415_ = {[1207959552:1275068415]};
-            bins auto_1275068416_1342177279_ = {[1275068416:1342177279]};
-            bins auto_1342177280_1409286143_ = {[1342177280:1409286143]};
-            bins auto_134217728_201326591_ = {[134217728:201326591]};
-            bins auto_1409286144_1476395007_ = {[1409286144:1476395007]};
-            bins auto_1476395008_1543503871_ = {[1476395008:1543503871]};
-            bins auto_1543503872_1610612735_ = {[1543503872:1610612735]};
-            bins auto_1610612736_1677721599_ = {[1610612736:1677721599]};
-            bins auto_1677721600_1744830463_ = {[1677721600:1744830463]};
-            bins auto_1744830464_1811939327_ = {[1744830464:1811939327]};
-            bins auto_1811939328_1879048191_ = {[1811939328:1879048191]};
-            bins auto_1879048192_1946157055_ = {[1879048192:1946157055]};
-            bins auto_1946157056_2013265919_ = {[1946157056:2013265919]};
-            bins auto_2013265920_2080374783_ = {[2013265920:2080374783]};
-            bins auto_201326592_268435455_ = {[201326592:268435455]};
-            bins auto_2080374784_2147483647_ = {[2080374784:2147483647]};
-            bins auto_268435456_335544319_ = {[268435456:335544319]};
-            bins auto_335544320_402653183_ = {[335544320:402653183]};
-            bins auto_402653184_469762047_ = {[402653184:469762047]};
-            bins auto_469762048_536870911_ = {[469762048:536870911]};
-            bins auto_536870912_603979775_ = {[536870912:603979775]};
-            bins auto_603979776_671088639_ = {[603979776:671088639]};
-            bins auto_671088640_738197503_ = {[671088640:738197503]};
-            bins auto_67108864_134217727_ = {[67108864:134217727]};
-            bins auto_738197504_805306367_ = {[738197504:805306367]};
-            bins auto_805306368_872415231_ = {[805306368:872415231]};
-            bins auto_872415232_939524095_ = {[872415232:939524095]};
-            bins auto_939524096_1006632959_ = {[939524096:1006632959]};
-        }
-      endgroup
-
-      function new();
-        cg = new();
-      endfunction
-
-      function void sample(_svx__call_base_monitor_BaseMonitor_Request item);
-        cg.sample(item);
-      endfunction
-
-      function real get_coverage();
-        return cg.get_coverage();
-      endfunction
-    endclass
 
     // SvTypes support: descriptors, plusargs, display, and wire codecs.
 
@@ -162,7 +56,7 @@ package svx_call_records_pkg;
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.seed, "seed", 1'b1, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.seed, "seed", 1'b1, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 
@@ -286,7 +180,7 @@ package svx_call_records_pkg;
 endclass
 
   class _svx__call_base_monitor_BaseMonitor_sample_Response extends svtypes_pkg::sv_object;
-    rand int svx_return_value;
+    int svx_return_value;
 
     protected bit __svtypes_layered_randomize_active;
     protected int __svtypes_layered_randomize_priority;
@@ -301,128 +195,22 @@ endclass
       int __svtypes_ok;
       bit __svtypes_previous_layered_active;
       int __svtypes_previous_layered_priority;
-      int __svtypes_rand_svx_return_value;
       __svtypes_ok = 1;
       __svtypes_previous_layered_active = __svtypes_layered_randomize_active;
       __svtypes_previous_layered_priority = __svtypes_layered_randomize_priority;
       __svtypes_layered_randomize_active = 1;
-      __svtypes_rand_svx_return_value = svx_return_value.rand_mode();
-      svx_return_value.rand_mode(0);
       if (__svtypes_ok) begin
         __svtypes_layered_randomize_priority = 0;
-        svx_return_value.rand_mode(1);
         if (!this.randomize()) begin
           __svtypes_ok = 0;
         end
         else begin
-          svx_return_value.rand_mode(0);
         end
       end
-      svx_return_value.rand_mode(__svtypes_rand_svx_return_value);
       __svtypes_layered_randomize_active = __svtypes_previous_layered_active;
       __svtypes_layered_randomize_priority = __svtypes_previous_layered_priority;
       return __svtypes_ok;
     endfunction
-
-    class _svx__call_base_monitor_BaseMonitor_sample_Response__svtypes_coverage;
-      covergroup cg with function sample(_svx__call_base_monitor_BaseMonitor_sample_Response item);
-        option.at_least = 1;
-        option.auto_bin_max = 64;
-        option.comment = "";
-        option.cross_num_print_missing = 0;
-        option.detect_overlap = 0;
-        option.goal = 100;
-        option.per_instance = 0;
-        option.weight = 1;
-        type_option.comment = "";
-        type_option.goal = 100;
-        type_option.weight = 1;
-        svx_return_value: coverpoint item.svx_return_value {
-            option.at_least = 1;
-            option.auto_bin_max = 64;
-            option.comment = "";
-            option.detect_overlap = 0;
-            option.goal = 100;
-            option.weight = 1;
-            bins auto__1006632960__939524097_ = {[-1006632960:-939524097]};
-            bins auto__1073741824__1006632961_ = {[-1073741824:-1006632961]};
-            bins auto__1140850688__1073741825_ = {[-1140850688:-1073741825]};
-            bins auto__1207959552__1140850689_ = {[-1207959552:-1140850689]};
-            bins auto__1275068416__1207959553_ = {[-1275068416:-1207959553]};
-            bins auto__1342177280__1275068417_ = {[-1342177280:-1275068417]};
-            bins auto__134217728__67108865_ = {[-134217728:-67108865]};
-            bins auto__1409286144__1342177281_ = {[-1409286144:-1342177281]};
-            bins auto__1476395008__1409286145_ = {[-1476395008:-1409286145]};
-            bins auto__1543503872__1476395009_ = {[-1543503872:-1476395009]};
-            bins auto__1610612736__1543503873_ = {[-1610612736:-1543503873]};
-            bins auto__1677721600__1610612737_ = {[-1677721600:-1610612737]};
-            bins auto__1744830464__1677721601_ = {[-1744830464:-1677721601]};
-            bins auto__1811939328__1744830465_ = {[-1811939328:-1744830465]};
-            bins auto__1879048192__1811939329_ = {[-1879048192:-1811939329]};
-            bins auto__1946157056__1879048193_ = {[-1946157056:-1879048193]};
-            bins auto__2013265920__1946157057_ = {[-2013265920:-1946157057]};
-            bins auto__201326592__134217729_ = {[-201326592:-134217729]};
-            bins auto__2080374784__2013265921_ = {[-2080374784:-2013265921]};
-            bins auto__2147483648__2080374785_ = {[-2147483648:-2080374785]};
-            bins auto__268435456__201326593_ = {[-268435456:-201326593]};
-            bins auto__335544320__268435457_ = {[-335544320:-268435457]};
-            bins auto__402653184__335544321_ = {[-402653184:-335544321]};
-            bins auto__469762048__402653185_ = {[-469762048:-402653185]};
-            bins auto__536870912__469762049_ = {[-536870912:-469762049]};
-            bins auto__603979776__536870913_ = {[-603979776:-536870913]};
-            bins auto__671088640__603979777_ = {[-671088640:-603979777]};
-            bins auto__67108864__1_ = {[-67108864:-1]};
-            bins auto__738197504__671088641_ = {[-738197504:-671088641]};
-            bins auto__805306368__738197505_ = {[-805306368:-738197505]};
-            bins auto__872415232__805306369_ = {[-872415232:-805306369]};
-            bins auto__939524096__872415233_ = {[-939524096:-872415233]};
-            bins auto_0_67108863_ = {[0:67108863]};
-            bins auto_1006632960_1073741823_ = {[1006632960:1073741823]};
-            bins auto_1073741824_1140850687_ = {[1073741824:1140850687]};
-            bins auto_1140850688_1207959551_ = {[1140850688:1207959551]};
-            bins auto_1207959552_1275068415_ = {[1207959552:1275068415]};
-            bins auto_1275068416_1342177279_ = {[1275068416:1342177279]};
-            bins auto_1342177280_1409286143_ = {[1342177280:1409286143]};
-            bins auto_134217728_201326591_ = {[134217728:201326591]};
-            bins auto_1409286144_1476395007_ = {[1409286144:1476395007]};
-            bins auto_1476395008_1543503871_ = {[1476395008:1543503871]};
-            bins auto_1543503872_1610612735_ = {[1543503872:1610612735]};
-            bins auto_1610612736_1677721599_ = {[1610612736:1677721599]};
-            bins auto_1677721600_1744830463_ = {[1677721600:1744830463]};
-            bins auto_1744830464_1811939327_ = {[1744830464:1811939327]};
-            bins auto_1811939328_1879048191_ = {[1811939328:1879048191]};
-            bins auto_1879048192_1946157055_ = {[1879048192:1946157055]};
-            bins auto_1946157056_2013265919_ = {[1946157056:2013265919]};
-            bins auto_2013265920_2080374783_ = {[2013265920:2080374783]};
-            bins auto_201326592_268435455_ = {[201326592:268435455]};
-            bins auto_2080374784_2147483647_ = {[2080374784:2147483647]};
-            bins auto_268435456_335544319_ = {[268435456:335544319]};
-            bins auto_335544320_402653183_ = {[335544320:402653183]};
-            bins auto_402653184_469762047_ = {[402653184:469762047]};
-            bins auto_469762048_536870911_ = {[469762048:536870911]};
-            bins auto_536870912_603979775_ = {[536870912:603979775]};
-            bins auto_603979776_671088639_ = {[603979776:671088639]};
-            bins auto_671088640_738197503_ = {[671088640:738197503]};
-            bins auto_67108864_134217727_ = {[67108864:134217727]};
-            bins auto_738197504_805306367_ = {[738197504:805306367]};
-            bins auto_805306368_872415231_ = {[805306368:872415231]};
-            bins auto_872415232_939524095_ = {[872415232:939524095]};
-            bins auto_939524096_1006632959_ = {[939524096:1006632959]};
-        }
-      endgroup
-
-      function new();
-        cg = new();
-      endfunction
-
-      function void sample(_svx__call_base_monitor_BaseMonitor_sample_Response item);
-        cg.sample(item);
-      endfunction
-
-      function real get_coverage();
-        return cg.get_coverage();
-      endfunction
-    endclass
 
     // SvTypes support: descriptors, plusargs, display, and wire codecs.
 
@@ -439,7 +227,7 @@ endclass
     // One ordered field list for wire operations, display and plusargs.
     function int __svtypes_apply_fields(input int action, ref byte unsigned bytes[$], ref int offset, ref string result, input string prefix = "");
       int count = 0;
-      svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.svx_return_value, "svx_return_value", 1'b1, 1'b1, 1'b1, 1'b1, action, bytes, offset, count, result, prefix);
+      svtypes_pkg::bit_field_operations#(int, svtypes_pkg::int_packer)::apply(this.svx_return_value, "svx_return_value", 1'b1, 1'b1, 1'b0, 1'b0, action, bytes, offset, count, result, prefix);
       return count;
     endfunction
 

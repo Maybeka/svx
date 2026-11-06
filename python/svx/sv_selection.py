@@ -38,8 +38,13 @@ def package_import_names(root):
     if cached is not None and cached[0] is root:
         return cached[1]
     imports = []
-    root.visit(lookup_table={SyntaxKind.PackageImportItem:
-                            lambda item: imports.append(str(item.package.valueText))})
+    visitor = {SyntaxKind.PackageImportItem:
+               lambda item: imports.append(str(item.package.valueText))}
+    for member in getattr(root, 'members', (root,)):
+        # A negative text guard avoids visiting large import-free method bodies.
+        # Positive candidates still use the parser's import nodes, not text parsing.
+        if 'import' in str(member):
+            member.visit(lookup_table=visitor)
     names = tuple(dict.fromkeys(imports))
     if state is not None:
         state.package_imports[id(root)] = (root, names)

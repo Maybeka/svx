@@ -95,3 +95,35 @@ endpackage
         result = declaration_inventory([source])
     assert names == ['Public']
     assert {item['symbol'] for item in result['declarations']} == {'p', 'p::Public', 'p::get', 'p::tick', 'p::Driver'}
+
+
+def test_import_guard_keeps_macro_and_local_imports_without_visiting_plain_classes(monkeypatch):
+    source = '''`define USE_DEP import dep::*;
+`define USE_LOCAL import local_dep::*;
+package p;
+  `USE_DEP
+  class Plain;
+    function int run(); return 42; endfunction
+  endclass
+  class WithLocal;
+    function int run(); `USE_LOCAL return 1; endfunction
+  endclass
+  function void text_only(); $display("import fake::*"); endfunction
+endpackage'''
+    tree = SyntaxTree.fromText(source)
+    original = SyntaxNode.visit
+    candidates = []
+    def observed(node, f=None, lookup_table=None):
+        if lookup_table is not None and set(lookup_table) == {SyntaxKind.PackageImportItem}:
+            candidates.append(str(node))
+        return original(node, f=f, lookup_table=lookup_table)
+    monkeypatch.setattr(SyntaxNode, 'visit', observed)
+    package = tree.root if tree.root.kind == SyntaxKind.PackageDeclaration else next(
+        node for node in tree.root.members if node.kind == SyntaxKind.PackageDeclaration)
+    with source_analysis():
+        assert package_import_names(package) == ('dep', 'local_dep')
+        visits = len(candidates)
+        assert package_import_names(package) == ('dep', 'local_dep')
+        assert len(candidates) == visits
+    assert not any('class Plain' in candidate for candidate in candidates)
+    assert any('text_only' in candidate for candidate in candidates)

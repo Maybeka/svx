@@ -26,8 +26,7 @@ def test_field_dispatch_qualifies_members_that_shadow_generated_locals(name):
     assert f'type(this.{name})' not in text
     assert f'int_packer::pack(this.{name}, bytes)' in text
     assert f'`SVX_FIELD_ACCESSORS(_svx__field_type_Base_{name}, _svx__core_read_Base_{name}, _svx__core_write_Base_{name}, this.{name})' in text
-    assert 'int_packer::unpack(field_wire, bytes, field_offset)' in text
-    assert f'_svx__core_write_Base_{name}(field_wire);' in text
+    assert f'`SVX_FIELD_WRITE_PAYLOAD(_svx__field_type_Base_{name}, svtypes_pkg::int_packer, _svx__core_write_Base_{name},' in text
     assert f'int_packer::unpack(this.{name}, operation.payload, field_offset)' in text
     assert f'pack({name}, bytes)' not in text
 
@@ -56,8 +55,8 @@ def test_addressed_sequence_dispatch_qualifies_every_member_access(name, kind):
     data['classes'][0]['fields'] = [{'name': name, 'type': binding}]
     text = emit_sv_mirrors(parse_manifest(data))
     assert f'type(this.{name})' not in text
-    assert f'field_read_value = _svx__core_read_Base_{name}();' in text
-    assert '::pack(field_read_value, bytes)' in text
+    assert f'`SVX_FIELD_READ_PAYLOAD(_svx__field_type_Base_{name},' in text
+    assert f', _svx__core_read_Base_{name}())' in text
     assert '::pack(_svx__core_read_' not in text
     if kind == 'assoc_array':
         assert f'int_packer::pack(this.{name}[field_key], bytes)' in text
