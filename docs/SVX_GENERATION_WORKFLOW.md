@@ -96,6 +96,10 @@ preparation and transport codec reuse are limited to intrinsic declarations
 within the current operation; actual member types and qualifiers are still
 compared for each source class. Named or custom Python type factories are not
 treated as immutable intrinsic cache entries.
+Named-type aliases are found by identifier lookup rather than scanning every
+exported alias for each member. Signature checks reuse one original-naming view
+per validation and pass their prepared codec to collection typedef rendering;
+later commands rebuild the view from their current inputs.
 
 The same flag works with `--incremental` and `--check`, does not change generated
 files or cache eligibility, and is disabled by default. Failed exports print

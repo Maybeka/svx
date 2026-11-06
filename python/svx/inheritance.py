@@ -2927,7 +2927,7 @@ def _emit_python_vif_views(manifest: Manifest) -> dict[PurePosixPath, str]:
     return emitted
 
 
-def _sv_collection_typedef(binding: TypeBinding) -> tuple[str, str] | None:
+def _sv_collection_typedef(binding: TypeBinding, *, codec=None) -> tuple[str, str] | None:
     if binding.svtypes_identity_json is not None:
         identity = json.loads(binding.svtypes_identity_json)
         if (identity.get('kind') in {'scalar', 'packed', 'remote_ref'}
@@ -2936,7 +2936,8 @@ def _sv_collection_typedef(binding: TypeBinding) -> tuple[str, str] | None:
             return None  # Public intrinsic identities cannot be collection codecs.
     import svtypes
 
-    codec = _codec_from_spec(binding.runtime_spec())
+    if codec is None:
+        codec = _codec_from_spec(binding.runtime_spec())
     if not isinstance(codec, (svtypes.Array, svtypes.DynArray, svtypes.AssocArray)):
         return None
     if binding.sv != svtypes.sv_type_expression(codec):

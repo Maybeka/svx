@@ -1570,7 +1570,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
         _intrinsic_type_identity,
     )
     import svtypes
-    from .value_exports import native_value_name, value_modules
+    from .value_exports import native_value_name, value_modules, original_value_expression
 
     syntax = _pyslang()
     compilation = Compilation()
@@ -1620,18 +1620,23 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             if (isinstance(raw_binding, dict) and handle is None
                     and ("svtypes" in raw_binding or "python" in raw_binding)):
                 binding = _type_binding(raw_binding, f"SV declaration {symbol} signature", allow_void=False)
-                native_expression = svtypes.sv_type_expression(_codec_from_spec(binding.runtime_spec()))
+                spec = binding.runtime_spec()
+                codec = _codec_from_spec(spec)
+                native_expression = svtypes.sv_type_expression(codec)
                 required_typedefs = {
-                    name: typedef for name, typedef in named_value_typedefs.items()
-                    if re.search(r'(?<![a-zA-Z0-9_$])' + re.escape(name) + r'(?![a-zA-Z0-9_$])', native_expression)
+                    name: named_value_typedefs[name]
+                    for name in dict.fromkeys(re.findall(r'[a-zA-Z0-9_$]+', native_expression))
+                    if name in named_value_typedefs
                 }
                 if required_typedefs:
-                    with value_modules(value_types, codegen=False):
-                        original_expression = svtypes.sv_type_expression(_codec_from_spec(binding.runtime_spec()))
+                    original_expression = original_value_expression(spec, codec)
+                    if original_expression is None:
+                        with value_modules(value_types, codegen=False):
+                            original_expression = svtypes.sv_type_expression(_codec_from_spec(spec))
                     if binding.sv == original_expression:
                         aliases.update(required_typedefs)
                         binding = replace(binding, sv=native_expression)
-                alias = _sv_collection_typedef(binding)
+                alias = _sv_collection_typedef(binding, codec=codec)
                 if alias is not None:
                     aliases[alias[0]] = alias[1]
                     return alias[0]
