@@ -215,11 +215,11 @@
     "svx_support": [
       {
         "path": "../../../sv/svx_accessors.svh",
-        "sha256": "f49d30f6a61be76967ca2b8717f4c1089b4169501243e8da08707792fc529de4"
+        "sha256": "121a688716817e1da77c91f9b2a2de89470f998d90bd9ca0ce5baca442242f02"
       },
       {
         "path": "../../../sv/svx_inheritance.sv",
-        "sha256": "919ce218868769525b48bc118434446c1f96cc3ae333699e905ec95cb5b2540f"
+        "sha256": "72fa7501db25b7941406ed490d5ccb1d0d35c55245b726bf53de1ad87f86aa59"
       }
     ]
   },

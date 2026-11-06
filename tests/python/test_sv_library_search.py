@@ -101,6 +101,67 @@ def test_shared_macros_are_available_to_selected_library(tmp_path):
     assert len(parse(config)) == 2
 
 
+@pytest.mark.parametrize('shared', [False, True])
+def test_library_chain_visits_only_new_trees_and_does_not_reload_previous_libraries(tmp_path, monkeypatch, shared):
+    from pyslang import driver
+    import svx.sv_library_search as search
+
+    count = 12
+    (tmp_path / 'top.sv').write_text('module top; l0 u(); endmodule')
+    for index in range(count):
+        (tmp_path / f'l{index}.sv').write_text(f'module l{index}; ' +
+            (f'l{index+1} u(); ' if index + 1 < count else '') + 'endmodule')
+    config = configuration(tmp_path, ('--single-unit ' if shared else '') + '-y . +libext+.sv\ntop.sv')
+    original_symbols, original_loader = search._symbols, driver.SourceLoader
+    sizes, roots, libraries = [], [], []
+
+    def symbols(trees):
+        sizes.append(len(trees))
+        return original_symbols(trees)
+
+    class Loader:
+        def __init__(self, manager):
+            self.native = original_loader(manager)
+
+        def addFiles(self, filename):
+            roots.append(filename)
+            return self.native.addFiles(filename)
+
+        def addLibraryFiles(self, name, filename):
+            libraries.append(filename)
+            return self.native.addLibraryFiles(name, filename)
+
+        def __getattr__(self, name):
+            return getattr(self.native, name)
+
+    monkeypatch.setattr(search, '_symbols', symbols)
+    monkeypatch.setattr(driver, 'SourceLoader', Loader)
+    trees = parse(config)
+    assert len(trees) == count + 1
+    assert sizes == [1] * (count + 1)
+    assert libraries == [str(tmp_path / f'l{i}.sv') for i in range(count)]
+    assert len(roots) == (count if shared else 0)
+
+
+def test_new_library_definitions_suppress_later_pending_lookups(tmp_path):
+    (tmp_path / 'top.sv').write_text('module top; alpha a(); beta b(); endmodule')
+    (tmp_path / 'alpha.sv').write_text('module alpha; endmodule module beta; endmodule')
+    (tmp_path / 'beta.sv').write_text('deliberately invalid unselected candidate')
+    config = configuration(tmp_path, '-y . +libext+.sv\ntop.sv')
+    assert len(parse(config)) == 2
+
+
+def test_shared_libraries_inherit_root_macros_but_not_previous_library_macros(tmp_path):
+    (tmp_path / 'top.sv').write_text('`define WIDTH 13\nmodule top; alpha a(); endmodule')
+    (tmp_path / 'alpha.sv').write_text('`define PRIVATE_MACRO\nmodule alpha; beta b(); endmodule')
+    (tmp_path / 'beta.sv').write_text('module beta;\n`ifdef PRIVATE_MACRO\ninvalid syntax !\n`endif\n'
+                                    'bit [`WIDTH-1:0] value; endmodule')
+    config = configuration(tmp_path, '--single-unit -y . +libext+.sv\ntop.sv')
+    trees = parse(config)
+    assert len(trees) == 3
+    assert 'bit [13-1:0]' in trees[-1][0]
+
+
 def test_class_export_check_detects_new_earlier_library_candidate(tmp_path):
     from tests.integration.sv_field_mirror_schema import manifest_data
     fixture(tmp_path)

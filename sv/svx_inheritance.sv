@@ -726,10 +726,19 @@ class svx_class_reference #(type T=svx_external_handle, parameter string TARGET=
 
   static function svtypes_pkg::remote_ref encode(T value);
     endpoint_type endpoint;
+    svx_dispatchable paired;
     svtypes_pkg::remote_ref reference;
     longint unsigned object_id;
     svx_external_handle_registry::register_resource(session_resource);
     if (value == null) begin reference=new(TARGET, 0); return reference; end
+    if ($cast(paired, value)) begin
+      foreach (svx_inheritance_registry::objects[id]) begin
+        if (svx_inheritance_registry::objects[id] == paired) begin
+          reference=new(TARGET, id);
+          return reference;
+        end
+      end
+    end
     foreach (endpoints[index]) begin
       if (endpoints[index].value == value) begin
         reference=new(TARGET, endpoints[index].object_id);
@@ -755,6 +764,11 @@ class svx_class_reference #(type T=svx_external_handle, parameter string TARGET=
       return 0;
     end
     if (reference == null || reference.object_number == 0) return 1;
+    if (svx_inheritance_registry::objects.exists(reference.object_number)) begin
+      if ($cast(value, svx_inheritance_registry::objects[reference.object_number])) return 1;
+      error="inheritance handle has an incompatible SV class type";
+      return 0;
+    end
     if (!svx_external_handle_registry::resolve(reference.object_number, TARGET, raw, error)) return 0;
     if (!$cast(endpoint, raw)) begin
       error="external handle registry returned an incompatible typed endpoint";

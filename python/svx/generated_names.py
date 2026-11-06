@@ -13,7 +13,7 @@ def sv_name_scope():
     if _names.get() is not None:
         yield
         return
-    token = _names.set(({}, set()))
+    token = _names.set(({}, set(), {}))
     try:
         yield
     finally:
@@ -35,14 +35,15 @@ def name_for(key, label):
     base = '_svx__' + readable(label)[:72].rstrip('_')
     if state is None:
         return base
-    assigned, occupied = state
+    assigned, occupied, suffixes = state
     if key not in assigned:
         candidate = base
-        index = 2
+        index = suffixes.get(base, 2)
         while candidate in occupied:
             candidate = f'{base}_{index}'
             index += 1
         occupied.add(candidate)
+        suffixes[base] = index
         assigned[key] = candidate
     return assigned[key]
 
@@ -70,7 +71,7 @@ def with_sv_names(function):
         occupied = {item.name for item in manifest.classes}
         occupied.update(member.name for item in manifest.classes
                         for member in (*item.methods, *item.fields))
-        token = _names.set(({}, occupied))
+        token = _names.set(({}, occupied, {}))
         try:
             return function(manifest, *args, **kwargs)
         finally:

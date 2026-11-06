@@ -24,6 +24,22 @@ Python initialization receives ordinary class RemoteRef values or generated VIF
 views, not private request records. A VIF view with no declared operations can
 be retained and passed onward but has no signal or method accessors.
 
+## Mapped SystemVerilog Class Arguments
+
+Python may pass an already bound SV mirror instance directly to a compatible
+class-handle formal of an instance method, static method, package function/task,
+or constructor. SVX normalizes it to `RemoteRef` for the formal's declared target;
+the same conversion applies inside supported handle collections and copy-out
+records. Users do not need to extract or construct private object IDs.
+
+The typed SV adapter resolves a paired ID through the inheritance registry and
+casts the actual object to the declared SV class. Returning that paired object
+reuses its ID rather than creating an independent opaque endpoint. Base-class
+formals therefore retain ordinary derived-object polymorphism. Null, type
+mismatch and stale-reference checks still apply; closing a pair invalidates its
+paired references. Returned class handles retain their public `RemoteRefValue`
+representation and can be passed onward to compatible formals.
+
 ## Unmapped SystemVerilog Class Handles
 
 An SV class used only as a method/constructor parameter or return value need not be a

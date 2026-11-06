@@ -2696,7 +2696,11 @@ def _emit_python_mirrors(manifest: Manifest, *, register_sv_subclasses: bool | f
             mirror_name = source.generated_name
             direct_receiver = (reserve_direct_receiver is True
                                or isinstance(reserve_direct_receiver, frozenset)
-                               and source.canonical_id in reserve_direct_receiver)
+                               and source.canonical_id in reserve_direct_receiver
+                               or source.constructor is not None
+                               and all(portion.language == 'sv' for portion in field_portions)
+                               and any(method.virtual and not method.is_static
+                                       for portion in portions for method in portion.methods))
             field_maps = projected_python_fields.get(source.canonical_id, {})
             # A constructorless standalone view wraps an existing endpoint;
             # its subclasses must not alter the SV construction selector.
@@ -4381,9 +4385,8 @@ def _emit_sv_deep_field_access_body(codec: Any, expression: str, field_id: str,
         child_lines = _emit_sv_deep_field_access(child, child_expression, field_id,
                                                 depth + 1, (*ancestors, identity))
         if isinstance(codec, AssocArray):
-            lines.extend([f"    if (operation.path_kind.size() == {depth + 1} && operation.code == 1 && operation.has_payload) begin",
-                          *["      " + line for line in child_lines],
-                          f"    end else if (!{expression}.exists(field_key_{depth})) begin",
+            lines.extend([f"    if (!(operation.path_kind.size() == {depth + 1} && operation.code == 1 && operation.has_payload) &&",
+                          f"        !{expression}.exists(field_key_{depth})) begin",
                           '      ok = 0; error = "missing associative field key";',
                           f"    end else if (operation.path_kind.size() == {depth + 1} && (operation.code == 3 || operation.code == 5)) begin",
                           f"      {expression}.delete(field_key_{depth});",
@@ -5066,6 +5069,9 @@ def _emit_sv_projection_class(
     natural_names: dict[str, str] = {}
     natural_helper = generated_name + "_constructor_arguments"
     reserve_natural_receiver = natural_constructor_base is not None and staged_python_root is not None
+    direct_receiver = (is_root_sv_mirror and not dynamic_sv_root and not transparent_construction
+                       and staged_sv_root is None and deferred_python_constructor is None
+                       and cls.constructor is not None and bool(dispatch_virtuals))
     if natural_constructor_base is not None:
         if (cls.language != "python" or natural_constructor_base.language != "sv"
                 or not reuse_base_object_id or not super_accepts_object_id
@@ -5089,7 +5095,7 @@ def _emit_sv_projection_class(
                             for method in owner.methods for parameter in method.parameters)
     context_type = _sv_generated_names(context_occupied, ('__svx_construction_context_type',))[
         '__svx_construction_context_type']
-    if transparent_construction or early_receiver_binding or reserve_natural_receiver:
+    if transparent_construction or early_receiver_binding or reserve_natural_receiver or direct_receiver:
         lines.append(f"    typedef svx_pkg::svx_construction_context {context_type};")
     if not reuse_base_object_id:
         lines.append("    longint unsigned __svx_remote_object_id;")
@@ -5112,7 +5118,8 @@ def _emit_sv_projection_class(
     elif staged_sv_root is not None or dynamic_sv_root:
         lines.extend(["", "    virtual function string __svx_python_constructor_target();",
                       f"      return {json.dumps(cls.canonical_id)};", "    endfunction"])
-    if transparent_construction and (is_root_sv_mirror and dynamic_sv_root or is_root_python_proxy):
+    if direct_receiver or transparent_construction and (is_root_sv_mirror and dynamic_sv_root or is_root_python_proxy):
+        selector = (json.dumps(cls.canonical_id) if direct_receiver else 'this.__svx_python_constructor_target()')
         lines.extend([
             "", "    function void __svx_reserve_early_receiver();",
             "      bit ok;", "      string error;", "      chandle request;",
@@ -5124,7 +5131,7 @@ def _emit_sv_projection_class(
             f"      {context_type}::bind_id(this, this.__svx_remote_object_id);",
             "      svx_inheritance_registry::register_object(this.__svx_remote_object_id, this);",
             '      request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");',
-            f"      ok = svx_inheritance_create_python_function({{{json.dumps(_PYTHON_RECEIVER_RESERVE_PREFIX)}, this.__svx_python_constructor_target()}}, this.__svx_remote_object_id, request, error);",
+            f"      ok = svx_inheritance_create_python_function({{{json.dumps(_PYTHON_RECEIVER_RESERVE_PREFIX)}, {selector}}}, this.__svx_remote_object_id, request, error);",
             "      svx_payload_destroy(request);",
             "      if (!ok) begin",
             "        svx_inheritance_registry::unbind(this.__svx_remote_object_id);",
@@ -5215,6 +5222,8 @@ def _emit_sv_projection_class(
           and staged_sv_root is None and deferred_python_constructor is None):
         signature = ', '.join(part for part in (constructor_parameters,
             f'input longint unsigned {object_id} = svx_constructor_ids::take({json.dumps(cls.canonical_id)})') if part)
+        if direct_receiver:
+            signature += f', input bit {scope_owned} = {context_type}::enter({object_id}, this)'
         lines.extend(['', f'    function new({signature});'])
         if base_type is not None:
             lines.append(f'      super.new({constructor_arguments});')
@@ -5237,8 +5246,12 @@ def _emit_sv_projection_class(
             payload = f'{adapter}::{encode_arguments}({constructor_arguments})'
         else:
             payload = 'null'
-        lines.extend([f'      `SVX_BIND_CONSTRUCTED_OBJECT({object_id}, {json.dumps(cls.canonical_id)}, {payload})',
-                      '    endfunction'])
+        if direct_receiver:
+            lines.extend([f'      `SVX_COMPLETE_CONSTRUCTED_RECEIVER({object_id}, {json.dumps(cls.canonical_id)}, {payload})',
+                          f'      {context_type}::leave(this, {scope_owned});', '    endfunction'])
+        else:
+            lines.extend([f'      `SVX_BIND_CONSTRUCTED_OBJECT({object_id}, {json.dumps(cls.canonical_id)}, {payload})',
+                          '    endfunction'])
     elif is_root_sv_mirror or is_root_python_proxy:
         lines.extend(
             [
@@ -5464,7 +5477,7 @@ def _emit_sv_projection_class(
                      python_base=is_root_python_proxy and not method.is_static,
                      python_static=is_root_python_proxy and method.is_static,
                      callback_boundary=callback_boundary,
-                     reserve_receiver=early_receiver_binding or (
+                     reserve_receiver=direct_receiver or early_receiver_binding or (
                          is_root_sv_mirror and dynamic_sv_root and transparent_construction)))
     if cls.language == 'python' and not is_root_python_proxy:
         for method in cls.methods:
@@ -6651,10 +6664,12 @@ def validate_generated_sources(sources: dict, output_dir: Path, inventory: str |
         validate_output_path(path)
     for relative in sources:
         path = output_dir / relative
-        if path.is_file() and not path.read_bytes().startswith((
-            b"# Generated by svx inheritance-gen.", b"// Generated by svx inheritance-gen."
-        )):
-            raise SVXInheritanceError(f"refusing to overwrite non-generated file {path}")
+        if path.is_file():
+            headers = (b"# Generated by svx inheritance-gen.", b"// Generated by svx inheritance-gen.")
+            with path.open('rb') as stream:
+                generated = stream.read(max(map(len, headers))).startswith(headers)
+            if not generated:
+                raise SVXInheritanceError(f"refusing to overwrite non-generated file {path}")
     if inventory is None:
         return []
     obsolete = obsolete_generated_sources(output_dir, sources, inventory)
@@ -7663,20 +7678,26 @@ def _remote_ref_validator(codec):
     if not contains_references(schema):
         return None
 
-    def visit(node: dict[str, Any], item: Any, seen: set[int]) -> None:
+    def visit(node: dict[str, Any], item: Any, seen: set[int]) -> Any:
         kind = node.get("kind")
         if kind == "remote_ref":
-            _validate_remote_ref_target(str(node["target_type_name"]), item)
-            return
+            target = str(node["target_type_name"])
+            from .declarations import SVMirror
+            if isinstance(item, SVMirror):
+                object_id = item._svx_remote_object_id
+                if object_id is None:
+                    raise SVXInheritanceError('cannot pass an unbound or retired SV mirror as a class handle')
+                item = svtypes.RemoteRefValue(target, object_id)
+            _validate_remote_ref_target(target, item)
+            return item
         if item is None:
-            return
+            return item
         if kind == "object_ref":
-            visit(svtypes.schema_descriptor(item).to_dict()["schema"], item, seen)
-            return
+            return visit(svtypes.schema_descriptor(item).to_dict()["schema"], item, seen)
         if kind in {"object", "struct"}:
             identity = id(item)
             if identity in seen:
-                return
+                return item
             seen.add(identity)
             for field in node.get("fields", []):
                 member = getattr(item, field["name"])
@@ -7685,17 +7706,15 @@ def _remote_ref_validator(codec):
                 except AttributeError:
                     field_value = member
                 visit(field["type"], field_value, seen)
-            return
+            return item
         if kind in {"array", "queue", "dyn_array"}:
             elements = item.value if hasattr(item, "value") else item
-            for element in elements:
-                visit(node["element"], element, seen)
-            return
+            return [visit(node["element"], element, seen) for element in elements]
         if kind == "assoc_array":
             elements = item.value if hasattr(item, "value") else item
-            for key, element in elements.items():
-                visit(node["key"], key, seen)
-                visit(node["value"], element, seen)
+            return {visit(node["key"], key, seen): visit(node["value"], element, seen)
+                    for key, element in elements.items()}
+        return item
 
     return lambda value: visit(schema, value, set())
 
@@ -7718,10 +7737,12 @@ def _record_value(schema: Any, fields: tuple[tuple[str, dict[str, Any]], ...], v
     }
     if prepared:
         for name, validator in schema.validators:
-            validator(normalized_values[name])
+            normalized_values[name] = validator(normalized_values[name])
     else:
         for name, spec in fields:
-            _validate_remote_refs(_svtypes_codec(spec), normalized_values[name])
+            validator = _remote_ref_validator(_svtypes_codec(spec))
+            if validator is not None:
+                normalized_values[name] = validator(normalized_values[name])
     try:
         return schema.value_type(**normalized_values)
     except (AttributeError, TypeError):
@@ -8173,6 +8194,7 @@ class _PendingPythonRoot:
     expected_object_id: int | None = None
     retired: bool = False
     direct_field_ids: dict[str, str] | None = None
+    initialize_direct_owner: bool = False
 
 
 _pending_python_root: ContextVar[_PendingPythonRoot | None] = ContextVar("svx_pending_python_root", default=None)
@@ -8474,10 +8496,13 @@ def _reserve_sv_origin_direct_receiver(class_id: str, object_id: int) -> None:
     from . import _native
     from .declarations import SVMirror
 
-    target = _python_subclasses.get(class_id)
-    fields = target.__dict__.get('__svx_direct_mirror_field_ids__') if target is not None else None
+    from .declarations import _source_mirror_implementations
+    mirror = _source_mirror_implementations.get(class_id) or _python_subclasses.get(class_id)
+    target = _python_subclasses.get(class_id) or mirror
+    fields = mirror.__dict__.get('__svx_direct_mirror_field_ids__') if mirror is not None else None
     if (not class_id.startswith('sv://') or not isinstance(fields, dict)
-            or target.__dict__.get('__svx_foreign_class_id__') != class_id):
+            or mirror.__dict__.get('__svx_foreign_class_id__') != class_id
+            or not isinstance(target, type) or not issubclass(target, mirror)):
         raise SVXInheritanceError('receiver reservation requires a generated constructor target')
     existing = _native.inheritance_get(object_id)
     if existing is not None:
@@ -8491,7 +8516,7 @@ def _reserve_sv_origin_direct_receiver(class_id: str, object_id: int) -> None:
         raise SVXInheritanceError('literal receiver reservation returned a different receiver type')
     SVMirror.__init__(instance)
     pending = _PendingPythonRoot(instance, class_id, expected_object_id=object_id,
-                                 direct_field_ids=dict(fields))
+                                 direct_field_ids=dict(fields), initialize_direct_owner=target is not mirror)
     try:
         _bind_pending_direct_receiver(pending, object_id)
         _reserved_python_receivers[object_id] = pending
@@ -8544,6 +8569,13 @@ def _initialize_pending_python_root(class_id: str, object_id: int, payload: byte
         if class_id != pending.root_class_id:
             raise SVXInheritanceError('direct mirror constructor selected a different SV base')
         _bind_pending_direct_receiver(pending, object_id)
+        if pending.initialize_direct_owner:
+            pending.initialize_direct_owner = False
+            try:
+                type(pending.instance).__init__(pending.instance, *_decode_constructor_arguments(class_id, payload))
+            except BaseException as error:
+                _rollback_natural_constructor(pending.instance, object_id, error)
+                raise
         pending.initialized = True
         return
     # A supplied ID without an active Python-origin factory retains the normal

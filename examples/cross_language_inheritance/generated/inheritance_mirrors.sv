@@ -18,11 +18,33 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
 
   // Generated AMirror for sv://example_driver_pkg/BaseDriver.
   class BaseDriver extends example_driver_pkg::BaseDriver implements svx_dispatchable, svx_function_dispatchable;
+    typedef svx_pkg::svx_construction_context __svx_construction_context_type;
     longint unsigned __svx_remote_object_id;
 
-    function new(input longint unsigned object_id = svx_constructor_ids::take("sv://example_driver_pkg/BaseDriver"));
+    function void __svx_reserve_early_receiver();
+      bit ok;
+      string error;
+      chandle request;
+      byte unsigned bytes[$];
+      if (this.__svx_remote_object_id != 0) return;
+      this.__svx_remote_object_id = __svx_construction_context_type::current_id(this);
+      if (this.__svx_remote_object_id == 0)
+        this.__svx_remote_object_id = svx_inheritance_registry::allocate_object_id();
+      __svx_construction_context_type::bind_id(this, this.__svx_remote_object_id);
+      svx_inheritance_registry::register_object(this.__svx_remote_object_id, this);
+      request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
+      ok = svx_inheritance_create_python_function({"svx-python-receiver-reserve:", "sv://example_driver_pkg/BaseDriver"}, this.__svx_remote_object_id, request, error);
+      svx_payload_destroy(request);
+      if (!ok) begin
+        svx_inheritance_registry::unbind(this.__svx_remote_object_id);
+        $fatal(2, "SVX early receiver reservation failed: %s", error);
+      end
+    endfunction
+
+    function new(input longint unsigned object_id = svx_constructor_ids::take("sv://example_driver_pkg/BaseDriver"), input bit scope_owned = __svx_construction_context_type::enter(object_id, this));
       super.new();
-      `SVX_BIND_CONSTRUCTED_OBJECT(object_id, "sv://example_driver_pkg/BaseDriver", null)
+      `SVX_COMPLETE_CONSTRUCTED_RECEIVER(object_id, "sv://example_driver_pkg/BaseDriver", null)
+      __svx_construction_context_type::leave(this, scope_owned);
     endfunction
 
     // Core operation: sv://example_driver_pkg/BaseDriver#drive
@@ -32,6 +54,7 @@ package svx_mirror_sv_example_driver_pkg_BaseDriver;
       chandle response;
       string error;
       byte unsigned bytes[$];
+      this.__svx_reserve_early_receiver();
       request = svx_payload_from_byte_queue(bytes, "svx-inheritance", "", "application/x-svx-inheritance");
       // Cross the language boundary using this method's canonical ID.
       svx_inheritance_call_python(this.__svx_remote_object_id, "sv://example_driver_pkg/BaseDriver#drive", request, ok, response, error);

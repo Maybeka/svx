@@ -6,6 +6,7 @@ import re
 def compact_field_bindings(source, header_name, native_aliases=None):
     """Emit one concrete-type template, with only instance binding parameters."""
     definitions, shapes = [], {}
+    used_names, suffixes = set(), {}
     native_aliases = native_aliases or {}
     pattern = re.compile(
         r'    typedef (?P<declaration>[^\n]+);\n'
@@ -48,11 +49,14 @@ def compact_field_bindings(source, header_name, native_aliases=None):
             readable_type = re.sub(r'[^A-Za-z0-9_]+', '_', type_name).strip('_')
             unit = header_name.removeprefix('support/').removesuffix('_fields.svh')
             prefix = unit.replace('_', '_u_').replace('/', '_p_').replace('.', '_d_').upper()
-            name = '_SVX_' + prefix + '_FIELD_' + readable_type
-            suffix = 2
-            while name in shapes.values():
-                name = '_SVX_' + prefix + '_FIELD_' + readable_type + '_' + str(suffix)
+            base = '_SVX_' + prefix + '_FIELD_' + readable_type
+            name = base
+            suffix = suffixes.get(base, 2)
+            while name in used_names:
+                name = base + '_' + str(suffix)
                 suffix += 1
+            used_names.add(name)
+            suffixes[base] = suffix
             shapes[key] = name
             definitions.append('`define ' + name + '(' + ', '.join(parameters) + ') \\\n' +
                                ' \\\n'.join(body.splitlines()) + '\n')

@@ -23,7 +23,7 @@ def test_private_direct_generator_selects_only_physical_sv_base_fields():
     assert ast.literal_eval(create.args[-1]) == {'count': 'sv://same_package_pkg/A.count'}
     public = inheritance.emit_python_mirrors(manifest, register_sv_subclasses=False,
                                               separate_package_layout=False)
-    assert '_create_sv_with_direct_mirror' not in public[PurePosixPath('svx_mirror/same_package_pkg.py')]
+    assert '_create_sv_with_direct_mirror' in public[PurePosixPath('svx_mirror/same_package_pkg.py')]
 
 
 def test_direct_generator_does_not_shadow_constructor_parameter():

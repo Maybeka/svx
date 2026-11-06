@@ -33,6 +33,11 @@ layout, call-record type construction, support layout and artifact metadata.
 children. It includes that stage's own work and work without a finer timer; it
 is not extra time to add to the parent and is not necessarily parsing time.
 The report remains a phase summary, not a complete function-level profiler.
+Class value member inventory and registration have separate rows. Member
+inventory includes lazy semantic queries for class-local typedefs and inherited
+members; this work is not necessarily included in the initial parsing row.
+Repeated aliases reuse native member facts within one export, without dropping
+their distinct public names or reusing ASTs across changed source compilations.
 Native signature validation separates expected-type preparation, probe parsing,
 semantic binding and member comparisons. Python generation separates declaration
 emission from contract layout; SV generation separately reports call-record
@@ -70,6 +75,20 @@ SV projection generation builds shared ancestry prefixes once, indexes generated
 children for membership checks, and formats an internal record label only when
 that name is first allocated. These changes preserve target selection, collision
 avoidance and the generated file contents; they do not cache simulator objects.
+
+Source-method checks index the nearest declaring ancestor once per class rather
+than searching its method list for every exported method. Demand-driven library
+search retains its original candidate order while scanning only newly loaded
+library trees. Separate-unit libraries do not reparse explicit roots; shared-unit
+libraries still reconstruct the root macro environment, but do not reparse earlier
+libraries. Nested associative-field access emits each child operation subtree
+once, retaining missing-key checks, terminal insertion and deletion behavior.
+Value discovery limits typedef enumeration to packages eligible for the current
+selectors; all original parse inputs remain present, and referenced types from
+other packages are still discovered on demand. Private name allocation retains
+the next unused suffix per prefix, preserving existing collision results without
+restarting suffix searches. Output ownership preflight reads only the generated
+header prefix; complete content comparisons and manual-edit protection still run.
 
 Contract relocation indexes each Python lexical scope once instead of rescanning
 its imports and assignments for every generated call. SV support extraction
@@ -237,6 +256,12 @@ uses `SVX_BIND_CONSTRUCTED_OBJECT` for common registration/companion rollback.
 Its request expression calls a constructor-record `encode_arguments` interface;
 record allocation, field assignment and encoding do not appear in new(). The
 macro evaluates this expression only for SV-initiated creation (identity zero).
+Mirrors with virtual callbacks instead use `SVX_COMPLETE_CONSTRUCTED_RECEIVER`:
+a private constructor context permits the existing receiver-reservation path to
+bind the same Python instance before a virtual call inside the original SV
+constructor, following the [constructor contract](CROSS_LANGUAGE_INHERITANCE_LINEAGE.md).
+These mirrors still encode constructor arguments only when the caller did not
+supply a paired identity.
 For native-handle constructor parameters, a typed constructor-request adapter
 performs native-to-wire conversion in the same factory support file; new() still
 passes only its original arguments. No encoding is performed on the already

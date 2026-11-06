@@ -167,6 +167,14 @@ Python initializer. Failure unwinds suspended portions and retires partial paire
 bindings and constructor caches. A later Python initializer failing after its
 factory returned also closes a newly created pair; reinitializing an already-bound
 receiver does not allocate a second SV object or silently transfer ownership.
+An original SV constructor may call an exposed virtual method. Ordinary mirrors
+establish a constructor context before `super.new(...)`; the first such call
+reserves and binds the same Python receiver without running its initializer
+early. Virtual dispatch then uses that receiver's Python override, including a
+normal `super()` call back to the SV implementation. Python-origin construction
+continues its existing initializer; SV-origin construction initializes the Python
+subclass once after the original SV constructor returns. State assigned only by
+the later Python initializer is not made available early by replaying it.
 Callbacks attempted before their relevant binding completes fail, rather than
 calling an arbitrary base or manufacturing another companion.
 

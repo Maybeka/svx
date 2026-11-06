@@ -347,6 +347,21 @@ def _is_static(item: object) -> bool:
     )
 
 
+def _method_flags(member):
+    from pyslang.ast import MethodFlags
+    try:
+        flags = member.flags
+    except ValueError:
+        # Some bindings omit Slang's randomization-hook flag from the Python enum.
+        syntax = member.syntax
+        qualifiers = set()
+        while syntax is not None and syntax.kind.name != 'ClassDeclaration':
+            qualifiers.update(_token_text(token) for token in getattr(syntax, 'qualifiers', ()))
+            syntax = syntax.parent
+        return 'static' in qualifiers, 'pure' in qualifiers
+    return bool(flags & MethodFlags.Static), bool(flags & MethodFlags.Pure)
+
+
 def _declarator_type(sv_type: str, declarator: object) -> str:
     dimensions = "".join(str(item).strip() for item in getattr(declarator, "dimensions", ()))
     return sv_type + (" " + dimensions if dimensions else "")
@@ -1026,12 +1041,13 @@ def discover_sv_class_declarations(
                            else attempt(value_type, member.returnType, f"{symbol}.{method.name} return"))
             if result_type is None:
                 continue
+            is_static, is_pure = _method_flags(member)
             entry = {"canonical_id": f"{class_id}#{method.name}",
                             "name": method.name, "parameters": method_parameters,
                             "return_type": result_type["type"], "timing": method.kind,
                             "virtual": member.isVirtual,
-                            "static": bool(member.flags & MethodFlags.Static),
-                            "pure_virtual": bool(member.flags & MethodFlags.Pure)}
+                            "static": is_static,
+                            "pure_virtual": is_pure}
             if "handle" in result_type:
                 entry["return_handle"] = result_type["handle"]
             methods.append(entry)
@@ -1106,6 +1122,7 @@ def validate_sv_declarations(
         prepare_instance_analysis(paths, parse_options=parse_options, compilation_unit=compilation_unit, patterns=patterns)
     facts = scan_sv_sources(paths, allow_no_packages=True, parse_options=parse_options,
                             compilation_unit=compilation_unit, proxy_context=proxy_context)
+    member_indexes = {}
     for declaration in declarations:
         symbol = declaration.get("symbol")
         if not isinstance(symbol, str):
@@ -1116,6 +1133,16 @@ def validate_sv_declarations(
                 f"SV declaration {symbol} was not found in scanned sources"
             )
         source_lineage = _source_lineage(fact, facts)
+        indexed = member_indexes.get(fact.symbol)
+        if indexed is None:
+            source_methods, virtual_methods = {}, set()
+            for ancestor in source_lineage:
+                virtual_methods.update(ancestor.virtual_methods)
+                for member in ancestor.methods:
+                    source_methods.setdefault(member.name, (ancestor, member))
+            indexed = source_methods, virtual_methods
+            member_indexes[fact.symbol] = indexed
+        source_methods, virtual_methods = indexed
         specialization = declaration.get("specialization")
         if isinstance(specialization, dict):
             arguments = specialization.get("arguments", [])
@@ -1147,15 +1174,13 @@ def validate_sv_declarations(
             if not isinstance(method, dict):
                 continue
             name = method.get("name")
-            if method.get("virtual", False) and not any(
-                name in ancestor.virtual_methods for ancestor in source_lineage
-            ):
+            if method.get("virtual", False) and name not in virtual_methods:
                 raise SVXInheritanceError(
                     f"SV declaration {symbol}.{name} is virtual in the manifest "
                     "but not in source"
                 )
-            declaring_fact = next((ancestor for ancestor in source_lineage
-                                   if any(item.name == name for item in ancestor.methods)), None)
+            declaring_fact, source_method = (source_methods.get(name, (None, None))
+                                            if isinstance(name, str) else (None, None))
             if method.get("static", False) and (
                 declaring_fact is None or name not in declaring_fact.static_methods
             ):
@@ -1163,8 +1188,6 @@ def validate_sv_declarations(
                     f"SV declaration {symbol}.{name} is static in the manifest "
                     "but not in source"
                 )
-            source_method = next((item for ancestor in source_lineage for item in ancestor.methods
-                                  if item.name == name), None)
             if source_method is None:
                 raise SVXInheritanceError(
                     f"SV declaration {symbol}.{name} was not found in scanned source lineage"
@@ -1815,10 +1838,11 @@ def _compare_signature_probes(compilation, probes):
                 raise SVXInheritanceError(f"cannot resolve SV signature {symbol}.{name} in supplied sources")
             if member.visibility.name == 'Local':
                 raise SVXInheritanceError(f"SV declaration {symbol}.{name} cannot expose a local member")
+            is_static, is_pure = _method_flags(member)
             qualifiers = {
                 'virtual': member.isVirtual,
-                'static': bool(member.flags & MethodFlags.Static),
-                'pure_virtual': bool(member.flags & MethodFlags.Pure),
+                'static': is_static,
+                'pure_virtual': is_pure,
             }
             for qualifier, actual in qualifiers.items():
                 # Partial source-fact consumers can omit virtual; complete

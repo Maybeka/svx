@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -81,39 +82,35 @@ def load_libraries(trees, paths, source_manager, parse_options, compilation_unit
     from .sv_scan import _check_source_diagnostics
     from .source_selection import record_library_query, record_source_trees
 
-    selected, attempted = [], set()
-    owners = (source_manager,)
+    selected, attempted = set(), set()
     explicit = {Path(path).resolve() for path in paths}
-    while True:
-        known, references = _symbols(trees)
-        candidate = None
-        requested = None
-        for name in references:
-            if name in known or name in attempted:
-                continue
-            attempted.add(name)
-            # Design-unit identifiers cannot be interpreted as paths or globs.
-            if not name.isascii() or not name.isidentifier():
-                continue
-            candidate = resolve_library_file(name, directories, extensions)
-            record_library_query(name, candidate)
-            if candidate:
-                requested = name
-                break
+    trees = list(trees)
+    known, references = _symbols(trees)
+    referenced = set(references)
+    pending = deque(references)
+    while pending:
+        requested = pending.popleft()
+        if requested in known or requested in attempted:
+            continue
+        attempted.add(requested)
+        # Design-unit identifiers cannot be interpreted as paths or globs.
+        if not requested.isascii() or not requested.isidentifier():
+            continue
+        candidate = resolve_library_file(requested, directories, extensions)
+        record_library_query(requested, candidate)
         if candidate is None:
-            # Driver-produced trees borrow parser/macro storage. Keep it alive
-            # for all semantic passes in this scoped discovery/generation call.
-            search.owners.append(owners)
-            return trees
+            continue
         if candidate in explicit or candidate in selected:
             raise SVXInheritanceError(f'library file {candidate} does not declare requested unit {requested}')
-        selected.append(candidate)
-        # Load only selected files, with no native -y search or implicit suffixes.
+        selected.add(candidate)
+        # Each library is an independent unit. In shared mode Slang gives every
+        # library the root unit's macros, not the preceding library's macros.
+        # Rebuild that macro environment without reparsing previous libraries.
         loader = SourceLoader(source_manager)
-        for path in paths:
-            loader.addFiles(str(path))
-        for path in selected:
-            loader.addLibraryFiles('', str(path))
+        if compilation_unit:
+            for path in paths:
+                loader.addFiles(str(path))
+        loader.addLibraryFiles('', str(candidate))
         driver = Driver()
         driver.addStandardArgs()
         flags = 'slang --single-unit --libraries-inherit-macros' if compilation_unit else 'slang'
@@ -126,20 +123,26 @@ def load_libraries(trees, paths, source_manager, parse_options, compilation_unit
                 if value is not None:
                     setattr(options, name, value)
         loaded = loader.loadAndParseSources(options)
-        owners = (source_manager, loader, driver, options, loaded)
+        # Library trees borrow native library and inherited-macro storage.
+        search.owners.append((source_manager, loader, driver, options, loaded))
         if loader.errors:
             raise SVXInheritanceError('cannot load selected source library: ' + '; '.join(loader.errors))
-        trees = []
+        additions = []
         for tree in loaded:
             _check_source_diagnostics(tree, candidate)
-            buffers = tree.sourceManager.getAllBuffers()
-            filename = next((tree.sourceManager.getRawFileName(buffer) for buffer in buffers
-                             if tree.sourceManager.getRawFileName(buffer)), str(paths[0]))
-            trees.append((Path(filename), tree))
-        record_source_trees(trees)
-        found, _ = _symbols(trees)
+            if tree.isLibraryUnit:
+                additions.append((candidate, tree))
+        found, references = _symbols(additions)
         if requested not in found:
             raise SVXInheritanceError(f'library file {candidate} does not declare requested unit {requested}')
+        trees.extend(additions)
+        record_source_trees(additions)
+        known.update(found)
+        for name in references:
+            if name not in referenced:
+                referenced.add(name)
+                pending.append(name)
+    return trees
 
 
 def resolve_library_file(name, directories, extensions):

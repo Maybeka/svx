@@ -135,6 +135,7 @@ assert inheritance._python_subclasses.get('sv://base_pkg/Base') in (None, Base)
 allocations = []
 def create(class_id, payload):
     allocations.append((class_id, payload))
+    inheritance.create_python_instance(inheritance._PYTHON_ROOT_INIT_PREFIX + class_id, 817, b'')
     return 817
 _native.inheritance_create_sv = create
 _native.inheritance_bind = lambda object_id, instance: None

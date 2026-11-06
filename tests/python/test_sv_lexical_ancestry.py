@@ -60,6 +60,7 @@ assert inheritance._python_subclasses.get('sv://unit/0/SharedBase') in (None, Sh
 allocations = []
 def create(class_id, payload):
     allocations.append(class_id)
+    inheritance.create_python_instance(inheritance._PYTHON_ROOT_INIT_PREFIX + class_id, 817, b'')
     return 817
 _native.inheritance_create_sv = create
 _native.inheritance_bind = lambda *args: None

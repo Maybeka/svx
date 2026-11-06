@@ -22,6 +22,7 @@ class BaseDriver(SVMirror):
     """Executable Python base view of example_driver_pkg::BaseDriver."""
     __svx_foreign_class_id__ = 'sv://example_driver_pkg/BaseDriver'
     __svx_guard_descendant_initializers__ = True
+    __svx_direct_mirror_field_ids__ = {}
     __svx_base_field_ids__ = {}
     __svx_projected_fields_by_class_id__ = {}
 
@@ -39,8 +40,8 @@ class BaseDriver(SVMirror):
             return
         SVMirror.__init__(self)
         # Allocate the complete paired SV target for Python-initiated construction.
-        object_id = _native.inheritance_create_sv('sv://example_driver_pkg/BaseDriver', encode_constructor('sv://example_driver_pkg/BaseDriver', {}))
-        self._svx_finish_created_object(object_id, {})
+        from svx.inheritance import _create_sv_with_direct_mirror as _create_sv_with_direct_mirror
+        _create_sv_with_direct_mirror(self, 'sv://example_driver_pkg/BaseDriver', encode_constructor('sv://example_driver_pkg/BaseDriver', {}), {})
 
     def drive(self):
         return invoke_sv(self._svx_remote_object_id, 'sv://example_driver_pkg/BaseDriver#drive', {})

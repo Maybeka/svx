@@ -69,4 +69,22 @@
     end \
   end
 
+`define SVX_COMPLETE_CONSTRUCTED_RECEIVER(ID, CLASS_ID, REQUEST) \
+  begin \
+    bit _svx__ok; \
+    string _svx__error; \
+    chandle _svx__request; \
+    byte unsigned _svx__empty[$]; \
+    this.__svx_reserve_early_receiver(); \
+    _svx__request = (ID == 0) ? REQUEST : null; \
+    if (_svx__request == null) \
+      _svx__request = svx_payload_from_byte_queue(_svx__empty, "svx-inheritance", "", "application/x-svx-inheritance"); \
+    _svx__ok = svx_inheritance_create_python_function({"svx-python-root-init:", CLASS_ID}, this.__svx_remote_object_id, _svx__request, _svx__error); \
+    svx_payload_destroy(_svx__request); \
+    if (!_svx__ok) begin \
+      svx_inheritance_registry::unbind(this.__svx_remote_object_id); \
+      $fatal(2, "SVX construction %s failed: %s", CLASS_ID, _svx__error); \
+    end \
+  end
+
 `endif

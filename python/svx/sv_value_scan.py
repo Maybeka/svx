@@ -11,6 +11,7 @@ import svtypes
 
 from .errors import SVXInheritanceError
 from .export_diagnostics import attempt
+from .export_timing import measured, phase
 from .value_exports import parse_constant_exports, parse_value_exports, value_modules, _schema_annotation, value_key, native_value_reference
 
 
@@ -49,6 +50,8 @@ class SourceValues:
         self.named_value_origins = {}
         self.default_class_owners = set()
         self.class_lookup = None
+        self.class_value_entries = {}
+        self.generic_value_owners = {}
 
     def _default_owners(self, symbol):
         return sorted(owner for owner in self.default_class_owners if symbol.startswith(owner + '::'))
@@ -72,6 +75,33 @@ class SourceValues:
         for native, prefix in pending:
             self.register_class_values(native, prefix)
 
+    def _class_value_entries(self, native):
+        """Resolve each native class once, retaining every public alias path."""
+        if native not in self.class_value_entries:
+            with phase('Class value member inventory'):
+                entries = []
+                for entry in native:
+                    forwarded = entry.kind.name == 'TransparentMember'
+                    member = native.lookupName(entry.name) if forwarded else entry
+                    if member is None or getattr(getattr(member, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
+                        continue
+                    kind = member.kind.name
+                    if kind not in {'ClassType', 'TypeAlias', 'Parameter', 'TypeParameter'}:
+                        continue
+                    alias = member.typeAlias if kind == 'TypeParameter' else member
+                    canonical = alias.canonicalType if kind in {'TypeAlias', 'TypeParameter'} else None
+                    child = (member if kind == 'ClassType' else canonical
+                             if canonical is not None and canonical.isClass else None)
+                    entries.append((entry.name, member, kind, forwarded, alias, canonical, child))
+                self.class_value_entries[native] = tuple(entries)
+        return self.class_value_entries[native]
+
+    def _is_generic_value(self, actual):
+        if actual not in self.generic_value_owners:
+            self.generic_value_owners[actual] = self._generic_value_owner(actual)
+        return self.generic_value_owners[actual]
+
+    @measured('SV class value registration')
     def register_class_values(self, native, prefix, *, defer=False):
         """Anchor template-owned values to a concrete, usable package class name."""
         key = (native, prefix)
@@ -95,25 +125,21 @@ class SourceValues:
             if owner in seen:
                 return
             seen.add(owner)
-            for entry in owner:
-                member = owner.lookupName(entry.name) if entry.kind.name == 'TransparentMember' else entry
-                if member is None or getattr(getattr(member, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
-                    continue
-                symbol = path + '::' + entry.name
-                kind = member.kind.name
+            for name, member, kind, _, alias, canonical, child in self._class_value_entries(owner):
+                symbol = path + '::' + name
                 if kind == 'ClassType':
-                    collect(member, symbol)
+                    collect(child, symbol)
                     continue
-                if kind == 'TypeAlias' and member.canonicalType.isClass:
-                    collect(member.canonicalType, symbol)
+                if kind == 'TypeAlias' and child is not None:
+                    collect(child, symbol)
                     continue
                 if kind not in {'TypeAlias', 'Parameter', 'TypeParameter'}:
                     continue
-                generic = self._generic_value_owner(member)
+                generic = self._is_generic_value(member)
                 if kind == 'TypeParameter':
-                    member = member.typeAlias
+                    member = alias
                     kind = member.kind.name
-                if kind not in {'TypeAlias', 'Parameter'} or not (generic or self._generic_value_owner(member)):
+                if kind not in {'TypeAlias', 'Parameter'} or not (generic or self._is_generic_value(member)):
                     continue
                 if kind == 'TypeAlias' and member.canonicalType.isClass:
                     continue
@@ -420,6 +446,10 @@ class SourceValues:
 
         package_imports = source_packages(paths, parse_options=parse_options, compilation_unit=compilation_unit)
         owned = select_package_names(package_imports, packages, recursive)
+        candidate_packages = set(owned)
+        for pattern in (*types, *constants, *callables):
+            candidate_packages.update(package for package in package_imports
+                if '::' not in pattern or fnmatchcase(package, pattern.split('::')[0]))
         compilation = Compilation()
         names = []
 
@@ -441,7 +471,9 @@ class SourceValues:
             roots = (tree.root,) if tree.root.kind == SyntaxKind.PackageDeclaration else getattr(tree.root, 'members', ())
             for root in roots:
                 if root.kind == SyntaxKind.PackageDeclaration:
-                    typedefs(root.header.name.valueText, root.members)
+                    package = root.header.name.valueText
+                    if package in candidate_packages:
+                        typedefs(package, root.members)
         from .sv_frontend import compile_source_trees
         compilation = compile_source_trees(compilation.getSyntaxTrees())
         self.class_lookup = lambda name: _lookup_sv_symbol(compilation, name)
@@ -450,38 +482,29 @@ class SourceValues:
             actual = _lookup_sv_symbol(compilation, name)
             if actual is not None and not actual.canonicalType.isClass:
                 candidates[name] = actual
-        candidate_packages = set(owned)
-        for pattern in (*types, *constants, *callables):
-            candidate_packages.update(package for package in package_imports
-                if '::' not in pattern or fnmatchcase(package, pattern.split('::')[0]))
         class_constants, class_contexts, inherited_constants, inherited_types = {}, {}, set(), set()
         callable_class_roots = []
         def class_members(native, prefix, owner=None, inherited=False, visiting=()):
             if native in visiting:
                 return
             owner = owner or (native, prefix)
-            for entry in native:
-                forwarded = entry.kind.name == 'TransparentMember'
-                member = native.lookupName(entry.name) if forwarded else entry
-                if member is None or getattr(getattr(member, 'visibility', None), 'name', '') in {'Local', 'Protected'}:
-                    continue
-                name = prefix + '::' + entry.name
-                if member.kind.name == 'TypeParameter':
-                    member = member.typeAlias
-                if member.kind.name == 'Parameter':
+            for entry_name, member, kind, forwarded, alias, canonical, child in self._class_value_entries(native):
+                name = prefix + '::' + entry_name
+                if kind == 'TypeParameter':
+                    member = alias
+                    kind = 'TypeAlias'
+                if kind == 'Parameter':
                     class_constants[name] = member
                     class_contexts[name] = owner
                     if inherited or forwarded:
                         inherited_constants.add(name)
-                elif member.kind.name == 'TypeAlias' and not member.canonicalType.isClass:
+                elif kind == 'TypeAlias' and child is None:
                     candidates[name] = member
                     class_contexts[name] = owner
                     if inherited or forwarded:
                         inherited_types.add(name)
-                elif member.kind.name == 'ClassType':
-                    class_members(member, name, owner, inherited or forwarded, (*visiting, native))
-                elif member.kind.name == 'TypeAlias' and member.canonicalType.isClass:
-                    class_members(member.canonicalType, name, owner, inherited or forwarded, (*visiting, native))
+                elif child is not None:
+                    class_members(child, name, owner, inherited or forwarded, (*visiting, native))
         for package in sorted(candidate_packages):
             native_package = compilation.getPackage(package)
             if native_package is not None:

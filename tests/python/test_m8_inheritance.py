@@ -484,7 +484,7 @@ def test_python_initiated_sv_base_without_cross_language_lineage_has_no_sv_proxy
         path for path in emit_python_mirrors(manifest) if str(path) == "svx_mirror/tb_pkg.py"
     )]
     assert "def __init__(self, seed):" in python_text
-    assert "_native.inheritance_create_sv('sv://tb_pkg/BaseDriver'" in python_text
+    assert "_create_sv_with_direct_mirror(self, 'sv://tb_pkg/BaseDriver'" in python_text
     assert "encode_constructor('sv://tb_pkg/BaseDriver', {'seed': seed})" in python_text
 
     sv_text = emit_sv_mirrors(manifest)
