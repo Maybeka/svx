@@ -521,7 +521,7 @@ def _reuse_intrinsic_binding(function):
             if key is not None and key in cache:
                 return cache[key]
         binding = function(value, where, allow_void=allow_void)
-        if key is not None and binding is not None and len(cache) < 512:
+        if key is not None and binding is not None:
             cache[key] = binding
         return binding
     return bind
@@ -634,7 +634,7 @@ def _remote_ref_target(binding: TypeBinding, where: str) -> str:
         raise _error(where, f"must use a concrete SvTypes RemoteRef type: {error}") from error
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=None)
 def _sv_type_syntax_error(sv_type: str, declaration: str | None = None) -> str | None:
     # Names need no optional parser; complex types use the SV grammar. Name
     # resolution still belongs to semantic validation with the project inputs.
@@ -1301,7 +1301,7 @@ def projection_plans(manifest: Manifest) -> tuple[ProjectionPlan, ...]:
 
 def _manifest_lineage_contexts(manifest: Manifest) -> dict[str, tuple[ForeignClass, ...]]:
     declarations = {source.canonical_id: source for source in _all_manifest_classes(manifest)}
-    contexts: dict[str, tuple[ForeignClass, ...]] = {}
+    parents: dict[str, str | None] = {}
     origins: dict[str, str] = {}
     for target in manifest.classes:
         lineage = (*target.base_lineage, target)
@@ -1310,16 +1310,24 @@ def _manifest_lineage_contexts(manifest: Manifest) -> dict[str, tuple[ForeignCla
             # positions and explicit target lineages are complete graph evidence.
             if index == len(lineage) - 1 and not target.base_lineage:
                 continue
-            prefix = tuple(declarations[ancestor.canonical_id] for ancestor in lineage[:index])
-            previous = contexts.setdefault(source.canonical_id, prefix)
+            parent = lineage[index-1].canonical_id if index else None
             origin = origins.setdefault(source.canonical_id, target.canonical_id)
-            if previous != prefix:
-                previous_names = " -> ".join(ancestor.canonical_id for ancestor in previous) or "<root>"
-                current_names = " -> ".join(ancestor.canonical_id for ancestor in prefix) or "<root>"
+            if source.canonical_id in parents and parents[source.canonical_id] != parent:
+                previous = []
+                ancestor = parents[source.canonical_id]
+                while ancestor is not None:
+                    previous.append(ancestor)
+                    ancestor = parents[ancestor]
+                previous_names = " -> ".join(reversed(previous)) or "<root>"
+                current_names = " -> ".join(ancestor.canonical_id for ancestor in lineage[:index]) or "<root>"
                 raise SVXInheritanceError(
                     f"conflicting lineage ancestry for {source.canonical_id}: target {origin} "
                     f"has {previous_names}; target {target.canonical_id} has {current_names}"
                 )
+            parents.setdefault(source.canonical_id, parent)
+    contexts: dict[str, tuple[ForeignClass, ...]] = {}
+    for class_id, parent in parents.items():
+        contexts[class_id] = (*contexts[parent], declarations[parent]) if parent is not None else ()
     return contexts
 
 
@@ -5802,6 +5810,9 @@ def _emit_sv_projection_helpers(
         ):
             mirrors.setdefault(cls.canonical_id, (cls, cls))
 
+    proxy_children = {child.canonical_id for _source, _mirror, child in proxies.values()}
+    deferred_mirrors = {mirror.canonical_id for _source, mirror, _child in proxies.values()}
+
     packages: dict[str, list[str]] = {}
     dependencies: dict[str, set[str]] = {}
     for source, _child in mirrors.values():
@@ -5873,10 +5884,7 @@ def _emit_sv_projection_helpers(
             if class_id in mirrors:
                 source, _child = mirrors[class_id]
                 ancestors = _unbridged_sv_ancestors(lineage_contexts.get(class_id, source.base_lineage))
-                super_accepts_object_id = any(
-                    child.canonical_id == source.canonical_id
-                    for _proxy_source, _mirror_source, child in proxies.values()
-                )
+                super_accepts_object_id = source.canonical_id in proxy_children
                 lines.extend(
                     _emit_sv_projection_class(
                         source.generated_name,
@@ -5889,9 +5897,8 @@ def _emit_sv_projection_helpers(
                         super_accepts_object_id=super_accepts_object_id,
                         reuse_base_object_id=super_accepts_object_id,
                         is_root_sv_mirror=not super_accepts_object_id,
-                        deferred_python_constructor=source if not super_accepts_object_id and any(
-                            mirror_source.canonical_id == source.canonical_id
-                            for _proxy_source, mirror_source, _child in proxies.values()) else None,
+                        deferred_python_constructor=source if not super_accepts_object_id
+                            and source.canonical_id in deferred_mirrors else None,
                     )
                 )
                 static_methods = tuple(method for method in source.methods if method.is_static)
@@ -5920,9 +5927,7 @@ def _emit_sv_projection_helpers(
                     )
                 lines.extend(_emit_sv_projection_factory(source, source.generated_name,
                     register_startup=register_startup,
-                    implicit_id=not super_accepts_object_id and not any(
-                        mirror_source.canonical_id == source.canonical_id
-                        for _proxy_source, mirror_source, _child in proxies.values())))
+                    implicit_id=not super_accepts_object_id and source.canonical_id not in deferred_mirrors))
             if class_id in proxies:
                 source, mirror_source, _child = proxies[class_id]
                 lines.extend(
@@ -7433,9 +7438,11 @@ def _call_record_type_id(method_id: str, kind: str) -> str:
 
 def _call_record_class_name(method_id: str, kind: str) -> str:
     # Artifact-local labels are not wire identities; retain the source member.
-    label = method_id.removeprefix('sv://').removeprefix('svpkg://')
-    label = readable('/'.join(label.split('/')[-2:]))[:52]
-    return name_for(('record', method_id, kind), 'call_' + label + '_' + kind.title())
+    def label():
+        source = method_id.removeprefix('sv://').removeprefix('svpkg://')
+        source = readable('/'.join(source.split('/')[-2:]))[:52]
+        return 'call_' + source + '_' + kind.title()
+    return name_for(('record', method_id, kind), label)
 
 
 def _call_record_schema(

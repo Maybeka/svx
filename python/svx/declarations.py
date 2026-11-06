@@ -38,6 +38,7 @@ from .sv_scan import SVVirtualInterfaceFact, discover_sv_class_declarations, nor
 import svtypes
 
 _source_bindings = ContextVar('svx_source_primitive_bindings', default=None)
+_source_conversions = ContextVar('svx_source_type_conversions', default=None)
 _primitive_declarations = frozenset((svtypes.Int, svtypes.LongInt, svtypes.String,
                                    svtypes.Real, svtypes.ShortReal, svtypes.RealTime))
 
@@ -46,21 +47,30 @@ def _with_source_bindings(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
         token = _source_bindings.set({})
+        conversions = _source_conversions.set({})
         try:
             return function(*args, **kwargs)
         finally:
             _source_bindings.reset(token)
+            _source_conversions.reset(conversions)
     return wrapped
 
 
-def _source_binding(annotation, *, where):
+def _source_binding(annotation, *, where, source_owned=False):
     cache = _source_bindings.get()
-    eligible = cache is not None and isinstance(annotation, type) and annotation in _primitive_declarations
-    if eligible and annotation in cache:
-        return copy.deepcopy(cache[annotation])
+    key = None
+    if cache is not None and (source_owned or isinstance(annotation, type) and annotation in _primitive_declarations):
+        try:
+            hash(annotation)
+        except TypeError:
+            pass
+        else:
+            key = ('source', annotation) if source_owned else ('primitive', annotation)
+    if key is not None and key in cache:
+        return copy.deepcopy(cache[key])
     result = _svtypes_binding(annotation, where=where)
-    if eligible:
-        cache[annotation] = copy.deepcopy(result)
+    if key is not None:
+        cache[key] = copy.deepcopy(result)
     return result
 from svtypes import SvObject
 
@@ -1304,6 +1314,15 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
         return source
 
     actual = assigned_type(actual)
+    conversions = _source_conversions.get()
+    # These native kinds have no owner registration or alias-publication effects.
+    leaf = actual
+    while leaf.kind.name == 'PackedArrayType':
+        leaf = leaf.elementType
+    reusable = conversions is not None and leaf.kind.name in {
+        'ScalarType', 'PredefinedIntegerType', 'FloatingType', 'StringType'}
+    if reusable and actual in conversions:
+        return copy.deepcopy(conversions[actual])
     def annotation(source):
         source = assigned_type(source)
         original = source
@@ -1374,7 +1393,7 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
         return svtypes.type_spec_from_identity(binding["svtypes"], location=where)
 
     selected_annotation = annotation(actual)
-    result = _source_binding(selected_annotation, where=where)
+    result = _source_binding(selected_annotation, where=where, source_owned=value_exports is not None)
     if actual.canonicalType.kind.name in {"ScalarType", "PredefinedIntegerType", "FloatingType"}:
         result["sv"] = str(actual.canonicalType)
     elif actual.kind.name == "TypeAlias" and actual.canonicalType.kind.name in {
@@ -1397,6 +1416,8 @@ def _source_semantic_type_declaration(actual: Any, *, where: str,
             if value_key(symbol, scope) not in value_exports.declarations:
                 value_exports._add(symbol, selected_annotation, scope)
             result['sv'] = symbol
+    if reusable:
+        conversions[actual] = copy.deepcopy(result)
     return result
 
 

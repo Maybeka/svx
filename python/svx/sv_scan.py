@@ -1567,7 +1567,6 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
     from .inheritance import (
         _sv_specialization_value, _type_binding, _sv_collection_typedef,
         _handle_binding, _handle_adapter_name, _sv_native_handle_collection_typedefs, _codec_from_spec,
-        _intrinsic_type_identity,
     )
     import svtypes
     from .value_exports import native_value_name, value_modules, original_value_expression
@@ -1591,6 +1590,21 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
     probe_sequence = 0
     unit_probes = {}
     signature_types = {}
+    named_identities = {json.dumps(value.as_dict()['svtypes'], sort_keys=True, separators=(',', ':'))
+                        for value in value_types}
+
+    def cacheable_identity(value):
+        if isinstance(value, dict):
+            if value.get('kind') in {'scalar', 'packed', 'specialization', 'signedness', 'collection', 'remote_ref'}:
+                return all(cacheable_identity(item) for item in value.values())
+            try:
+                return json.dumps(value, sort_keys=True, separators=(',', ':')) in named_identities
+            except (TypeError, ValueError):
+                return False
+        if isinstance(value, list):
+            return all(cacheable_identity(item) for item in value)
+        return value is None or isinstance(value, (str, int, float, bool))
+
     named_value_typedefs = {}
     for value in value_types:
         data = value.as_dict()
@@ -1646,7 +1660,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
         def expected_type(raw_binding, handle):
             key = None
             if (isinstance(raw_binding, dict) and isinstance(raw_binding.get('svtypes'), dict)
-                    and _intrinsic_type_identity(raw_binding['svtypes'])):
+                    and cacheable_identity(raw_binding['svtypes'])):
                 try:
                     key = json.dumps((raw_binding, handle), sort_keys=True, separators=(',', ':'))
                 except (TypeError, ValueError):
@@ -1658,7 +1672,7 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
             aliases = {}
             expected = build_expected_type(raw_binding, handle, aliases)
             value_typedefs.update(aliases)
-            if key is not None and len(signature_types) < 512:
+            if key is not None:
                 signature_types[key] = expected, aliases
             return expected
 
@@ -1771,6 +1785,8 @@ def _validate_member_types(declarations, paths, facts, *, parse_options=None, co
 def _compare_signature_probes(compilation, probes):
     from pyslang.ast import MethodFlags
 
+    matching_types = set()
+    directions = {"In": "input", "Out": "output", "InOut": "inout", "Ref": "ref"}
     for symbol, package, checks, constructor, methods in probes:
         probe = _lookup_sv_symbol(compilation, package)
         if probe is None:
@@ -1778,10 +1794,24 @@ def _compare_signature_probes(compilation, probes):
         source = probe.baseClass
         if source is None:
             raise SVXInheritanceError(f"cannot resolve SV class {symbol} in supplied sources")
+        members = {}
+        method_arguments = {}
+        expected_types = {}
+
+        def member_named(name):
+            if name not in members:
+                members[name] = source.lookupName(name)
+            return members[name]
+
+        def arguments_of(name, member):
+            if name not in method_arguments:
+                method_arguments[name] = getattr(member, 'arguments', None)
+            return method_arguments[name]
+
         for method in methods:
             name = method['name']
-            member = source.lookupName(name)
-            if member is None or not hasattr(member, 'arguments'):
+            member = member_named(name)
+            if member is None or arguments_of(name, member) is None:
                 raise SVXInheritanceError(f"cannot resolve SV signature {symbol}.{name} in supplied sources")
             if member.visibility.name == 'Local':
                 raise SVXInheritanceError(f"SV declaration {symbol}.{name} cannot expose a local member")
@@ -1801,14 +1831,14 @@ def _compare_signature_probes(compilation, probes):
                         f"SV declaration {symbol}.{name} {qualifier} is {declared}, "
                         f"but source is {actual}"
                     )
+        source_constructor = source.constructor if isinstance(constructor, dict) else None
         if isinstance(constructor, dict):
-            arguments = source.constructor.arguments if source.constructor is not None else ()
+            arguments = arguments_of('new', source_constructor) if source_constructor is not None else ()
             parameters = constructor.get("parameters", [])
             if len(parameters) != len(arguments):
                 raise SVXInheritanceError(
                     f"SV declaration {symbol}.new requires {len(arguments)} ordered source parameters"
                 )
-            directions = {"In": "input", "Out": "output", "InOut": "inout", "Ref": "ref"}
             for index, (parameter, argument) in enumerate(zip(parameters, arguments)):
                 direction = directions[argument.direction.name]
                 if (parameter.get("name") != argument.name
@@ -1816,25 +1846,39 @@ def _compare_signature_probes(compilation, probes):
                     raise SVXInheritanceError(
                         f"SV declaration {symbol}.new parameter {index} expects {direction} {argument.name}"
                     )
-        for index, (kind, name, argument_index, _, location) in enumerate(checks):
-            member = source.constructor if kind == "constructor" else source.lookupName(name)
-            expected_method = probe.lookupName(f"check_{index}")
-            if member is None or not hasattr(member, "type" if kind == "field" else "arguments"):
+        for index, (kind, name, argument_index, spelling, location) in enumerate(checks):
+            member = source_constructor if kind == "constructor" else member_named(name)
+            actual_field = getattr(member, 'type', None) if kind == 'field' else None
+            arguments = arguments_of(name, member) if kind != 'field' else None
+            if member is None or (actual_field is None if kind == 'field' else arguments is None):
                 raise SVXInheritanceError(f"cannot resolve SV signature {symbol}.{name} in supplied sources")
             if kind == 'field' and member.visibility.name == 'Local':
                 raise SVXInheritanceError(f"SV declaration {symbol}.{name} cannot expose a local member")
-            actual = (member.type if kind == "field" else member.returnType if argument_index is None
-                      else member.arguments[argument_index].type)
-            expected = (expected_method.returnType if argument_index is None
-                        else expected_method.arguments[0].type)
+            actual = (actual_field if kind == "field" else member.returnType if argument_index is None
+                      else arguments[argument_index].type)
+            # Closed names resolve identically within this probe's class scope.
+            # Keep return/formal contexts separate, and leave expressions uncached.
+            expected_key = ((spelling, argument_index is None) if re.fullmatch(
+                r'[$A-Za-z_][A-Za-z0-9_$]*(?:::[$A-Za-z_][A-Za-z0-9_$]*)*', spelling) else None)
+            expected = expected_types.get(expected_key) if expected_key is not None else None
+            if expected is None:
+                expected_method = probe.lookupName(f"check_{index}")
+                expected = (expected_method.returnType if argument_index is None
+                            else expected_method.arguments[0].type)
+                if expected_key is not None:
+                    expected_types[expected_key] = expected
             if actual.isError or expected.isError:
                 type_location = location if location.endswith('type') else f'{location} type'
                 raise SVXInheritanceError(
                     f"cannot resolve SV declaration {symbol}.{name} {type_location}; "
                     "supply its type dependencies in the scanned sources"
                 )
+            pair = (actual.canonicalType, expected.canonicalType)
+            if pair in matching_types:
+                continue
             if not actual.isMatching(expected):
                 raise SVXInheritanceError(
                     f"SV declaration {symbol}.{name} {location} {expected} "
                     f"does not match source type {actual}"
                 )
+            matching_types.add(pair)

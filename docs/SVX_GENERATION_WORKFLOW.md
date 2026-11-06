@@ -61,6 +61,16 @@ Record reuse distinguishes native bindings, concrete codec classes, allocated
 names and type-reference mode. These caches neither reuse changed semantic ASTs
 nor change the persistent incremental-export contract or generated wire format.
 
+Source discovery also reuses successful intrinsic semantic conversions and
+SvTypes metadata created from source-owned declarations within one command.
+Returned metadata is copied so per-member spelling changes remain independent.
+Named enum/struct resolution, owner registration and alias publication still run
+in the current scope; arbitrary mutable Python declarations are not memoized.
+SV projection generation builds shared ancestry prefixes once, indexes generated
+children for membership checks, and formats an internal record label only when
+that name is first allocated. These changes preserve target selection, collision
+avoidance and the generated file contents; they do not cache simulator objects.
+
 Contract relocation indexes each Python lexical scope once instead of rescanning
 its imports and assignments for every generated call. SV support extraction
 assembles nonoverlapping edits in one pass rather than copying the whole source
@@ -92,14 +102,23 @@ published Python files retain the same readable contract format. Ordinary native
 signature probes are parsed as one batch; source-unit and owner-local probes
 remain in their original semantic owners. A failed probe parse falls back to
 individual parsing to preserve declaration-specific diagnostics. Expected-type
-preparation and transport codec reuse are limited to intrinsic declarations
-within the current operation; actual member types and qualifiers are still
-compared for each source class. Named or custom Python type factories are not
-treated as immutable intrinsic cache entries.
+preparation reuses intrinsic declarations and the fixed named value declarations
+published by the current SV export, including their containers. Arbitrary Python
+factories and mutable, undeclared named types are not assumed immutable. Transport
+codec prototype reuse remains intrinsic and operation-local.
 Named-type aliases are found by identifier lookup rather than scanning every
 exported alias for each member. Signature checks reuse one original-naming view
 per validation and pass their prepared codec to collection typedef rendering;
 later commands rebuild the view from their current inputs.
+Member validation reads each method's formal list once, reuses resolved closed
+type names within the same probe scope, and reuses successful canonical type-pair
+comparisons within one compilation. Each actual member and its qualifiers are
+still checked; expressions and return/formal resolution contexts stay distinct.
+The member-comparison timer includes Slang's lazy member/type resolution, not
+only `isMatching` calls; compare the enclosing signature-validation time as well.
+Signature/type-binding caches have no entry-count cap and are released with the
+operation. The separate process-local syntax-string cache also has no entry cap;
+it stores only grammar results, not semantic ASTs or simulator state.
 
 The same flag works with `--incremental` and `--check`, does not change generated
 files or cache eligibility, and is disabled by default. Failed exports print
