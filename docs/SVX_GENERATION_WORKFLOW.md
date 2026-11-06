@@ -33,6 +33,12 @@ layout, call-record type construction, support layout and artifact metadata.
 children. It includes that stage's own work and work without a finer timer; it
 is not extra time to add to the parent and is not necessarily parsing time.
 The report remains a phase summary, not a complete function-level profiler.
+Output handling is further split into path/ownership preflight, input overwrite
+protection, obsolete-file inventory scanning, manual-edit snapshot/content checks,
+inventory/hash serialization, directory preparation, existing-content comparison,
+staging and atomic replacement. Publication nests its own repeated preflight;
+do not add that nested check twice. Unchanged output has comparison costs but no
+staging/replacement rows. These clocks are disabled unless `--timings` is enabled.
 
 Ordinary export passes its discovered manifest directly to the generator in
 memory. It does not reload that manifest, repeat source enrichment, audit Python
@@ -48,6 +54,31 @@ checked; mutable user type declarations are not treated as primitive-cache hits.
 Record reuse distinguishes native bindings, concrete codec classes, allocated
 names and type-reference mode. These caches neither reuse changed semantic ASTs
 nor change the persistent incremental-export contract or generated wire format.
+
+Contract relocation indexes each Python lexical scope once instead of rescanning
+its imports and assignments for every generated call. SV support extraction
+assembles nonoverlapping edits in one pass rather than copying the whole source
+for each extracted declaration. Package-import collection skips import-free
+declarations using a negative text guard, then uses parser nodes for candidates;
+macro-expanded and subroutine-local imports still contribute dependencies.
+These optimizations apply to direct and audited exports and leave emitted code,
+declaration order, naming, shadowing decisions and wire contracts unchanged.
+
+Input overwrite protection indexes existing input file identities once per
+generation call, preserving symbolic-link and hard-link protection without
+probing every input for every output. When all outputs are new, canonical path
+checks do not require input identity probes. Direct-export startup registrations
+are collected while emitting factory and dispatcher declarations, rather than
+parsing the entire generated bridge again to find their initializers. The
+generated startup entry and registration order are unchanged; support layout
+still parses and checks generated SV before publication.
+
+Within an ordinary export, discovery and generation use the same resolved
+filelists, defines and include configuration. A later export command rereads
+the project inputs; this is not persistent configuration caching. Python contract
+layout indexes lexical scopes and registration statements in one traversal and
+does not revisit operands already verified as literal data. Nonliteral calls,
+shadowing and generated-name collision protection retain their existing behavior.
 
 The same flag works with `--incremental` and `--check`, does not change generated
 files or cache eligibility, and is disabled by default. Failed exports print
@@ -75,6 +106,13 @@ registration calls remain beside their owning declarations, without numbered
 registration trampolines. Shared SV call records live under `support/` beside
 the generated SV roots. Keep these required data/codec files when building;
 they are not optional diagnostic sidecars.
+
+Private Request/Response envelopes explicitly disable field randomization,
+coverage, plusargs and dump participation. Their SvTypes encoding descriptors,
+pack/unpack implementation and object-graph protocol remain unchanged. This
+policy does not disable features on user-declared SvTypes objects or exported
+native design classes. Standard SvTypes support methods may still be emitted;
+SVX does not rewrite or strip the dependency's protocol implementation.
 Python contract literals use fixed four-space nesting rather than aligning
 under long method IDs or constant names. Parameter names and directions stay
 beside their type records, and constructor metadata uses the same formatting.
@@ -169,6 +207,10 @@ compatibility with existing manually derived bridge code; normal callers need
 not provide it. Special alternating-lineage constructors retain their explicit
 ordering and binding paths. SV constructor defaults are not evaluated as Python
 expressions: Python callers still supply the generated constructor arguments.
+Closed source class parameters retain resolved integer width and signedness in
+generated references: for example, an unsigned `'hffff` default becomes
+`32'd65535`, not the signed decimal expression `65535`. The same spelling policy
+is used for base classes, native handle adapters and signature validation.
 For SV-initiated bridge construction, load the generated Python modules first.
 An explicitly registered Python-derived class remains preferred; if none is
 registered, the loaded source Mirror binds the existing SV instance without
@@ -181,6 +223,12 @@ concrete native type, accessor functions and whole/deep operation implementation
 it expands inside the owning class and directly accesses that original member.
 Fields with identical concrete-type operation bodies share one definition;
 different nominal enum types remain separate even when their layouts match.
+Field helper roles use distinct private prefixes (`_svx__field_`, `_svx__type_`,
+`_svx__read_`, `_svx__write_`), rather than adding `_type`/`_read`/`_write` to a
+function name. Thus ordinary fields such as data/data_type/data_read/data_write
+cannot collide with each other's generated helpers. Repeated root payload
+read/write plumbing lives in `SVX_FIELD_READ_PAYLOAD`/`SVX_FIELD_WRITE_PAYLOAD`;
+type-specific operations and addressed local mutations remain in the field macro.
 Macros are undefined after their generated root. Handle adapters and optional
 type-reference kernels retain explicit specialized paths where applicable.
 This shares repeated generated operations; it does not create secondary storage
@@ -221,6 +269,15 @@ To explicitly audit registered snapshots against the current Python codecs, call
 `svx.validate_generated_contracts()`. It reports affected members, but cannot
 prove that manually edited SV code has the same layout. Explicit artifact checks
 and SvTypes checked decoding remain distinct operations.
+
+For generated cross-language calls, SVX prepares codec calling conventions and
+reference-traversal plans once when each request/response schema is first used.
+Steady-state calls do not repeatedly inspect pack/unpack signatures or recreate
+field codecs for reference checks. Plain scalar and statically reference-free
+container fields need no reference traversal. Live reference targets and object
+liveness, argument directions, payload size and complete decoding remain checked
+on each relevant call. Plans belong to their registered contract, not a global
+cache of live values or simulator handles.
 
 Explicit generation `--check` still reports differences from generator output.
 When a previous generation baseline or artifact snapshot is available, regeneration refuses to replace
